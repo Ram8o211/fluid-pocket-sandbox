@@ -2,7 +2,7 @@ import { rgbToHex } from '../simulation/math.mjs';
 import { sanitizeMaterial } from './MaterialDefinition.mjs';
 
 const PARTICLE_TO_MATERIAL = Object.freeze({
-  opacity: 'opacity', density: 'baseDensity', viscosity: 'viscosity', cohesion: 'cohesion', miscibility: 'miscibility',
+  opacity: 'opacity', density: 'baseDensity', viscosity: 'viscosity', cohesion: 'cohesion', miscibility: 'miscibility', particleRadius: 'particleRadius',
   heatCapacity: 'heatCapacity', thermalConductivity: 'thermalConductivity', meltingTemperature: 'meltingTemperature',
   boilingTemperature: 'boilingTemperature', phaseTransitionHysteresis: 'phaseHysteresis', volatility: 'volatility',
   reactionPotential: 'reactionPotential', reactionHeat: 'reactionHeat', compressibility: 'compressibility',

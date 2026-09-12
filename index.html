@@ -36,15 +36,17 @@
           <div class="thermal-thresholds"><span id="meltReadout">Melt —</span><span id="boilReadout">Boil —</span><span id="burnReadout">Burn —</span></div>
           <div class="grid2">
             <label>Color<input id="color" type="color"></label><label>Opacity<input id="opacity" type="range" min="0.08" max="1" step="0.01"></label>
-            <label>Density<input id="density" type="range" min="0.35" max="1.65" step="0.01"></label><label>Viscosity<input id="viscosity" type="range" min="0.02" max="1" step="0.01"></label>
-            <label>Miscibility<input id="miscibility" type="range" min="0" max="1" step="0.01"></label><label>Surface tension<input id="cohesion" type="range" min="0" max="1" step="0.01"></label>
-            <label>Heat capacity<input id="heatCapacity" type="range" min="0.15" max="1" step="0.01"></label><label>Thermal conductivity<input id="thermalConductivity" type="range" min="0.02" max="1" step="0.01"></label>
-            <label>Melting point<input id="meltingTemperature" type="range" min="0.05" max="0.75" step="0.01"></label><label>Boiling point<input id="boilingTemperature" type="range" min="0.35" max="1.05" step="0.01"></label>
-            <label>Volatility<input id="volatility" type="range" min="0" max="1" step="0.01"></label><label>Crystallinity<input id="crystallinity" type="range" min="0" max="1" step="0.01"></label>
-            <label>Solid subdivision<input id="solidSubdivision" type="range" min="0" max="1" step="0.01"></label><label>Electrical conductivity<input id="electricalConductivity" type="range" min="0" max="1" step="0.01"></label>
-            <label>Electric potential<input id="electricPotential" type="range" min="-1" max="1" step="0.01"></label><label>Combustion threshold<input id="combustionTemperature" type="range" min="0" max="1.4" step="0.01"></label>
-            <label>Reaction potential<input id="reactionPotential" type="range" min="-1" max="1" step="0.01"></label><label>Reaction heat<input id="reactionHeat" type="range" min="-1" max="1" step="0.01"></label><label>Volume<input id="volume" type="range" min="4" max="80" step="1" value="24"></label>
+            <label>Density<input id="density" type="range" min="0.35" max="1.65" step="0.01"></label><label>Particle volume radius<input id="particleRadius" type="range" min="0.065" max="0.20" step="0.005"></label>
+            <label>Viscosity<input id="viscosity" type="range" min="0.02" max="1" step="0.01"></label><label>Miscibility<input id="miscibility" type="range" min="0" max="1" step="0.01"></label>
+            <label>Surface tension<input id="cohesion" type="range" min="0" max="1" step="0.01"></label><label>Heat capacity<input id="heatCapacity" type="range" min="0.15" max="1" step="0.01"></label>
+            <label>Thermal conductivity<input id="thermalConductivity" type="range" min="0.02" max="1" step="0.01"></label><label>Melting point<input id="meltingTemperature" type="range" min="0.05" max="0.75" step="0.01"></label>
+            <label>Boiling point<input id="boilingTemperature" type="range" min="0.35" max="1.05" step="0.01"></label><label>Volatility<input id="volatility" type="range" min="0" max="1" step="0.01"></label>
+            <label>Crystallinity<input id="crystallinity" type="range" min="0" max="1" step="0.01"></label><label>Solid subdivision<input id="solidSubdivision" type="range" min="0" max="1" step="0.01"></label>
+            <label>Electrical conductivity<input id="electricalConductivity" type="range" min="0" max="1" step="0.01"></label><label>Electric potential<input id="electricPotential" type="range" min="-1" max="1" step="0.01"></label>
+            <label>Combustion threshold<input id="combustionTemperature" type="range" min="0" max="1.4" step="0.01"></label><label>Reaction potential<input id="reactionPotential" type="range" min="-1" max="1" step="0.01"></label>
+            <label>Reaction heat<input id="reactionHeat" type="range" min="-1" max="1" step="0.01"></label><label>Volume<input id="volume" type="range" min="4" max="80" step="1" value="24"></label>
           </div>
+          <p class="hint">Particle volume radius controls the excluded/packing radius: smaller values allow more interpenetration and compact the same mass; larger values make the same mass occupy more volume. Density remains a separate property used for buoyancy and stratification.</p>
           <p class="hint solid-hint">Crystallinity controls lattice ordering/faceting. Solid subdivision controls whether the solid behaves as one coherent body or as separate grains/sand.</p>
           <div class="row action-row"><button id="pourModeBtn" class="primary">Brush</button><button id="heatModeBtn">Heat</button><button id="coolModeBtn">Cool</button></div><p class="hint gesture-hint">One finger uses the selected tool. Two fingers always control the camera; pinch to zoom.</p>
           <div class="row presets"><button data-preset="mixing">Mixing</button><button data-preset="layers">Layers</button><button data-preset="rain">Rain</button><button data-preset="freeze">Freeze</button><button data-preset="shock">Shock</button></div>

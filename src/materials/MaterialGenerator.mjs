@@ -23,6 +23,8 @@ export function generateMaterial(seed = 1, id = 1) {
     id, seed, name: `Matter-${(seed>>>0).toString(36).slice(-4).toUpperCase()}`,
     color: colorFrom(rng), opacity: pick(rng,0.35,0.92), density: pick(rng,0.65,1.55),
     viscosity: pick(rng,0.04,0.9), cohesion: pick(rng,0.15,0.9), miscibility: rng(),
+    // Mesoscopic excluded-volume radius. Larger values make the same mass occupy more space.
+    particleRadius: pick(rng,0.085,0.18),
     heatCapacity: pick(rng,0.25,0.95), thermalConductivity: pick(rng,0.08,0.85),
     meltingTemperature: melting, boilingTemperature: boiling,
     phaseTransitionHysteresis: pick(rng,0.015,0.045), volatility: pick(rng,0.05,0.9),
