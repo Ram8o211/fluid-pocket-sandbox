@@ -1,5 +1,5 @@
 export class SpatialGrid {
-  constructor(capacity, maxExtent=12, cellSize=0.58) {
+  constructor(capacity, maxExtent=32, cellSize=0.58) {
     this.capacity=capacity; this.cellSize=cellSize; this.maxExtent=maxExtent;
     this.maxAxis=Math.ceil(maxExtent/cellSize)+3; this.head=new Int32Array(this.maxAxis**3); this.next=new Int32Array(capacity);
     this.nx=this.ny=this.nz=1; this.minX=this.minY=this.minZ=0; this.cellCount=1; this.dimensionMode='3D';

@@ -17,16 +17,19 @@ function colorFrom(rng) {
 }
 export function generateMaterial(seed = 1, id = 1) {
   const rng = mulberry32(seed);
-  const melting = pick(rng, 0.08, 0.42);
-  const boiling = pick(rng, Math.max(0.52, melting+0.16), 0.9);
+  const melting = pick(rng, 0.08, 0.58);
+  const boiling = pick(rng, Math.max(0.5, melting+0.16), 0.98);
   return sanitizeMaterial({
     id, seed, name: `Matter-${(seed>>>0).toString(36).slice(-4).toUpperCase()}`,
     color: colorFrom(rng), opacity: pick(rng,0.35,0.92), density: pick(rng,0.65,1.55),
     viscosity: pick(rng,0.04,0.9), cohesion: pick(rng,0.15,0.9), miscibility: rng(),
-    temperature: pick(rng,0.22,0.68), heatCapacity: pick(rng,0.25,0.95),
-    thermalConductivity: pick(rng,0.08,0.85), meltingTemperature: melting, boilingTemperature: boiling,
+    heatCapacity: pick(rng,0.25,0.95), thermalConductivity: pick(rng,0.08,0.85),
+    meltingTemperature: melting, boilingTemperature: boiling,
     phaseTransitionHysteresis: pick(rng,0.015,0.045), volatility: pick(rng,0.05,0.9),
-    reactionPotential: pick(rng,-1,1), compressibility: pick(rng,0.25,0.9)
+    reactionPotential: pick(rng,-1,1), reactionHeat: pick(rng,-1,1), compressibility: pick(rng,0.25,0.9),
+    crystallinity: rng(), solidSubdivision: rng(), electricalConductivity: Math.pow(rng(),1.4), electricPotential: pick(rng,-1,1),
+    // Combustion is independent of phase boundaries: this may fall below melting, between melting/boiling, or above boiling.
+    combustionTemperature: pick(rng,.12,1.18)
   });
 }
 export { mulberry32 };

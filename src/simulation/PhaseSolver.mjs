@@ -10,10 +10,12 @@ export function targetPhase(phase,temp,m){
 }
 export function targetPhaseAt(ps,i){ return targetPhase(ps.phase[i],ps.temperature[i],{meltingTemperature:ps.meltingTemperature[i],boilingTemperature:ps.boilingTemperature[i],phaseTransitionHysteresis:ps.phaseHysteresis[i]}); }
 export function updatePhaseParticle(ps,i,dt){
-  const desired=targetPhaseAt(ps,i); if(desired===ps.phase[i]){ps.phaseProgress[i]=Math.max(0,ps.phaseProgress[i]-dt*2);return false;}
+  const from=ps.phase[i],desired=targetPhaseAt(ps,i);if(desired===from){ps.phaseProgress[i]=Math.max(0,ps.phaseProgress[i]-dt*2);return false;}
   const speed=.65+ps.volatility[i]*1.4; ps.phaseProgress[i]=clamp(ps.phaseProgress[i]+dt*speed,0,1);
   if(ps.phaseProgress[i]>=1){
-    if(desired===Phase.SOLID){ps.vx[i]*=.18;ps.vy[i]*=.18;ps.vz[i]*=.18;}
-    ps.setPhase(i,desired);return true;
+    // Do not destroy gravitational momentum when a body freezes. Rigid/granular
+    // stabilization is contact-based and handled by SolidSolver instead.
+    if(desired===Phase.SOLID){ps.vx[i]*=.88;ps.vy[i]*=.88;ps.vz[i]*=.88;}
+    ps.setPhase(i,desired);return {from,to:desired,index:i};
   }return false;
 }

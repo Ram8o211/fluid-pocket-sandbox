@@ -2,29 +2,21 @@ import { rgbToHex } from '../simulation/math.mjs';
 import { sanitizeMaterial } from './MaterialDefinition.mjs';
 
 const PARTICLE_TO_MATERIAL = Object.freeze({
-  opacity: 'opacity',
-  density: 'baseDensity',
-  viscosity: 'viscosity',
-  cohesion: 'cohesion',
-  miscibility: 'miscibility',
-  temperature: 'temperature',
-  heatCapacity: 'heatCapacity',
-  thermalConductivity: 'thermalConductivity',
-  meltingTemperature: 'meltingTemperature',
-  boilingTemperature: 'boilingTemperature',
-  phaseTransitionHysteresis: 'phaseHysteresis',
-  volatility: 'volatility',
-  reactionPotential: 'reactionPotential',
-  compressibility: 'compressibility'
+  opacity: 'opacity', density: 'baseDensity', viscosity: 'viscosity', cohesion: 'cohesion', miscibility: 'miscibility',
+  heatCapacity: 'heatCapacity', thermalConductivity: 'thermalConductivity', meltingTemperature: 'meltingTemperature',
+  boilingTemperature: 'boilingTemperature', phaseTransitionHysteresis: 'phaseHysteresis', volatility: 'volatility',
+  reactionPotential: 'reactionPotential', reactionHeat: 'reactionHeat', compressibility: 'compressibility',
+  crystallinity: 'crystallinity', solidSubdivision: 'solidSubdivision', electricalConductivity: 'electricalConductivity',
+  electricPotential: 'electricPotential', combustionTemperature: 'combustionTemperature'
 });
 
 function weightedParticleMaterial(ps, weightedIndices, id, name, metadata={}) {
-  let totalWeight=0,r=0,g=0,b=0;
+  let totalWeight=0,r=0,g=0,b=0,temperature=0;
   const sums=Object.fromEntries(Object.keys(PARTICLE_TO_MATERIAL).map(k=>[k,0]));
   const sourceMass=new Map();
   for(const {index,weight} of weightedIndices){
     const w=Math.max(0,weight)*(ps.mass[index]||1);if(w<=0)continue;totalWeight+=w;
-    r+=ps.r[index]*w;g+=ps.g[index]*w;b+=ps.b[index]*w;
+    r+=ps.r[index]*w;g+=ps.g[index]*w;b+=ps.b[index]*w;temperature+=ps.temperature[index]*w;
     for(const [key,arrayName] of Object.entries(PARTICLE_TO_MATERIAL))sums[key]+=ps[arrayName][index]*w;
     sourceMass.set(ps.materialId[index],(sourceMass.get(ps.materialId[index])||0)+w);
   }
@@ -34,10 +26,9 @@ function weightedParticleMaterial(ps, weightedIndices, id, name, metadata={}) {
     id,name,seed:Math.abs(sourceMaterialIds.reduce((s,v)=>((s*1664525)^v)>>>0,2166136261)),
     color:rgbToHex(r/totalWeight,g/totalWeight,b/totalWeight),
     ...Object.fromEntries(Object.keys(PARTICLE_TO_MATERIAL).map(key=>[key,sums[key]/totalWeight])),
-    sourceMaterialIds,
-    ...metadata
+    sourceMaterialIds,...metadata
   };
-  return {material:sanitizeMaterial(material),sourceMaterialIds,totalWeight,dominantMaterialId:sourceMaterialIds[0]??null};
+  return {material:sanitizeMaterial(material),temperature:temperature/totalWeight,sourceMaterialIds,totalWeight,dominantMaterialId:sourceMaterialIds[0]??null};
 }
 
 export function materialFromParticlePair(ps,i,j,id,name,metadata={}){
