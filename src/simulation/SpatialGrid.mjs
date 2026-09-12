@@ -15,15 +15,39 @@ export class SpatialGrid {
     const iz=this.dimensionMode==='2D'?0:Math.max(0,Math.min(this.nz-1,Math.floor((z-this.minZ)/this.cellSize)));
     return ix + this.nx*(iy+this.ny*iz);
   }
-  coordsFromIndex(c){ const iz=Math.floor(c/(this.nx*this.ny)); const rem=c-iz*this.nx*this.ny; const iy=Math.floor(rem/this.nx); return [rem-iy*this.nx,iy,iz]; }
-  rebuild(ps,box){ this.configure(box); this.head.fill(-1,0,this.cellCount); for(let i=0;i<ps.count;i++){ const c=this.indexFromPosition(ps.x[i],ps.y[i],ps.z[i]); this.next[i]=this.head[c]; this.head[c]=i; ps.cell[i]=c; } }
+  coordsFromIndex(c){const nxy=this.nx*this.ny,iz=Math.floor(c/nxy),rem=c-iz*nxy,iy=Math.floor(rem/this.nx);return [rem-iy*this.nx,iy,iz];}
+  rebuild(ps,box){
+    this.configure(box);this.head.fill(-1,0,this.cellCount);
+    const head=this.head,next=this.next,x=ps.x,y=ps.y,z=ps.z,cell=ps.cell;
+    for(let i=0;i<ps.count;i++){const c=this.indexFromPosition(x[i],y[i],z[i]);next[i]=head[c];head[c]=i;cell[i]=c;}
+  }
   forEachNeighbor(ps,index,radius,callback){
-    const [cx,cy,cz]=this.coordsFromIndex(ps.cell[index]); const reach=Math.max(1,Math.ceil(radius/this.cellSize));
-    const zReach=this.dimensionMode==='2D'?0:reach;
-    for(let dz=-zReach;dz<=zReach;dz++)for(let dy=-reach;dy<=reach;dy++)for(let dx=-reach;dx<=reach;dx++){
-      const x=cx+dx,y=cy+dy,z=cz+dz; if(x<0||y<0||z<0||x>=this.nx||y>=this.ny||z>=this.nz)continue;
-      let j=this.head[x+this.nx*(y+this.ny*z)]; while(j!==-1){ if(j!==index)callback(j); j=this.next[j]; }
+    const nx=this.nx,ny=this.ny,nxy=nx*ny,c=ps.cell[index],cz=Math.floor(c/nxy),rem=c-cz*nxy,cy=Math.floor(rem/nx),cx=rem-cy*nx;
+    const reach=Math.max(1,Math.ceil(radius/this.cellSize)),zReach=this.dimensionMode==='2D'?0:reach,head=this.head,next=this.next;
+    for(let dz=-zReach;dz<=zReach;dz++){
+      const zz=cz+dz;if(zz<0||zz>=this.nz)continue;
+      for(let dy=-reach;dy<=reach;dy++){
+        const yy=cy+dy;if(yy<0||yy>=ny)continue;
+        for(let dx=-reach;dx<=reach;dx++){
+          const xx=cx+dx;if(xx<0||xx>=nx)continue;
+          let j=head[xx+nx*(yy+ny*zz)];while(j!==-1){if(j!==index)callback(j);j=next[j];}
+        }
+      }
     }
   }
-  neighborsArray(ps,index,radius,out=[]){ out.length=0; this.forEachNeighbor(ps,index,radius,j=>out.push(j)); return out; }
+  forEachPair(ps,radius,callback){
+    const nx=this.nx,ny=this.ny,nz=this.nz,nxy=nx*ny,head=this.head,next=this.next;
+    const reach=Math.max(1,Math.ceil(radius/this.cellSize)),zReach=this.dimensionMode==='2D'?0:reach;
+    for(let cz=0;cz<nz;cz++)for(let cy=0;cy<ny;cy++)for(let cx=0;cx<nx;cx++){
+      const c=cx+nx*(cy+ny*cz),first=head[c];if(first===-1)continue;
+      for(let i=first;i!==-1;i=next[i])for(let j=next[i];j!==-1;j=next[j])callback(i,j);
+      for(let dz=-zReach;dz<=zReach;dz++)for(let dy=-reach;dy<=reach;dy++)for(let dx=-reach;dx<=reach;dx++){
+        if(dz<0||(dz===0&&dy<0)||(dz===0&&dy===0&&dx<=0))continue;
+        const xx=cx+dx,yy=cy+dy,zz=cz+dz;if(xx<0||yy<0||zz<0||xx>=nx||yy>=ny||zz>=nz)continue;
+        const other=xx+nx*(yy+ny*zz),second=head[other];if(second===-1)continue;
+        for(let i=first;i!==-1;i=next[i])for(let j=second;j!==-1;j=next[j])callback(i,j);
+      }
+    }
+  }
+  neighborsArray(ps,index,radius,out=[]){out.length=0;this.forEachNeighbor(ps,index,radius,j=>out.push(j));return out;}
 }
