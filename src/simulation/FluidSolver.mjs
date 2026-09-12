@@ -12,9 +12,9 @@ export function particlePairRestDistance(ps,i,j,planar=false){
 }
 
 export class FluidSolver {
-  constructor(){this.neighborRadius=.62;this.restDistance=.26;this.reverseSweep=false;}
+  constructor(){this.neighborRadius=.48;this.restDistance=.26;this.reverseSweep=false;}
   solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar){
-    const rest=particlePairRestDistance(ps,i,j,planar),supportRadius=Math.min(this.neighborRadius,Math.max(.32,rest*1.5)),mi=Math.max(.001,ps.mass[i]||1),mj=Math.max(.001,ps.mass[j]||1),sum=mi+mj,wi=mj/sum,wj=mi/sum;
+    const rest=particlePairRestDistance(ps,i,j,planar),supportRadius=Math.min(this.neighborRadius,Math.max(.30,rest*1.35)),mi=Math.max(.001,ps.mass[i]||1),mj=Math.max(.001,ps.mass[j]||1),sum=mi+mj,wi=mj/sum,wj=mi/sum;
     const fi=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0,fj=ps.temperature[j]<ps.meltingTemperature[j]-ps.phaseHysteresis[j]?clamp(ps.phaseProgress[j],0,1):0,mobility=(1-fi*.86)*(1-fj*.86);
     const viscosity=clamp((ps.viscosity[i]+ps.viscosity[j])*.5,0,1),kernel=clamp(1-d/supportRadius,0,1),viscous=clamp(viscosity*kernel*dt*4.5*mobility,0,.18);
     if(viscous>0){const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];ps.vx[i]+=dvx*viscous*wi;ps.vy[i]+=dvy*viscous*wi;if(!planar)ps.vz[i]+=dvz*viscous*wi;ps.vx[j]-=dvx*viscous*wj;ps.vy[j]-=dvy*viscous*wj;if(!planar)ps.vz[j]-=dvz*viscous*wj;}
@@ -35,9 +35,9 @@ export class FluidSolver {
     }
     this.collideBox(ps,env.box,planar);
     for(let it=0;it<iterations;it++){
-      grid.rebuild(ps,env.box);const reverse=this.reverseSweep!==Boolean(it&1);
+      grid.rebuild(ps,env.box);const reverse=this.reverseSweep!==Boolean(it&1),searchRadius=this.neighborRadius;
       for(let s=0;s<ps.count;s++){
-        const i=reverse?ps.count-1-s:s;let gasCount=0,ri=effectiveParticleRadius(ps,i,planar),searchRadius=clamp((ri+MAX_PARTICLE_RADIUS)*1.5,.48,this.neighborRadius);
+        const i=reverse?ps.count-1-s:s;let gasCount=0;
         grid.forEachNeighbor(ps,i,searchRadius,(j)=>{
           const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=planar?Math.hypot(dx,dy):Math.hypot(dx,dy,dz);if(d<=1e-6||d>searchRadius)return;
           if(ps.phase[i]===Phase.GAS&&ps.phase[j]===Phase.GAS)gasCount++;
