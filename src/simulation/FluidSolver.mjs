@@ -11,7 +11,7 @@ export class FluidSolver {
       if(ps.phase[i]!==Phase.GAS){ps.vx[i]+=gravity.x*dt;ps.vy[i]+=gravity.y*dt;if(!planar)ps.vz[i]+=gravity.z*dt;}else if(planar)ps.vz[i]=0;
       const freezing=ps.phase[i]===Phase.LIQUID&&ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
       let damping;
-      if(ps.phase[i]===Phase.LIQUID)damping=Math.exp(-ps.viscosity[i]*dt*3.5-dt*freezing*5);
+      if(ps.phase[i]===Phase.LIQUID)damping=Math.exp(-ps.viscosity[i]*dt*3.5-dt*freezing*9);
       else if(ps.phase[i]===Phase.SOLID)damping=Math.exp(-dt*(.18+1.1*ps.solidSubdivision[i]));
       else damping=Math.exp(-dt*.15);
       ps.vx[i]*=damping;ps.vy[i]*=damping;ps.vz[i]*=damping;
@@ -36,10 +36,6 @@ export class FluidSolver {
             const sameRigidBody=coherentPair&&ps.solidBodyId[i]>0&&ps.solidBodyId[i]===ps.solidBodyId[j];
             const sameCoherentMaterial=coherentPair&&ps.materialId[i]===ps.materialId[j];
             if(sameRigidBody||sameCoherentMaterial)return;
-            // Granular matter is intentionally much more densely packable than the
-            // liquid kernel. Using the liquid rest spacing here made a frozen bed
-            // explosively dilate and climb side walls. Friction, not artificial
-            // expansion, is what gives sand its angle-of-repose behavior.
             const target=granularI?this.restDistance*(.48+.08*(1-ps.solidSubdivision[i])):this.restDistance*.88;
             if(d<target){
               const q=(target-d)/target;
@@ -55,9 +51,9 @@ export class FluidSolver {
 
           if(ps.phase[j]!==Phase.GAS){
             const freezing=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
-            const mobility=1-freezing*.62,target=this.restDistance;
+            const mobility=1-freezing*.86,target=this.restDistance;
             const freezingOntoSameSolid=freezing>0&&ps.phase[j]===Phase.SOLID&&ps.materialId[i]===ps.materialId[j];
-            const interfaceMobility=freezingOntoSameSolid?.06:1;
+            const interfaceMobility=freezingOntoSameSolid?.04:1;
             if(d<target){const q=(target-d)/target,rep=q*q*(.018+.03*(1-ps.viscosity[i]))*mobility*interfaceMobility;ps.x[i]-=nx*rep;ps.y[i]-=ny*rep;ps.z[i]-=nz*rep;}
             else if(d<target*1.6&&ps.phase[j]===Phase.LIQUID){const pull=(d-target)/(target*.6)*ps.cohesion[i]*.0025*mobility;ps.x[i]+=nx*pull;ps.y[i]+=ny*pull;ps.z[i]+=nz*pull;}
             if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=rules.miscibilityThreshold){const imp=stratificationImpulse(ps.density[i],ps.density[j],gravity,.0015*mobility);ps.x[i]+=imp.x;ps.y[i]+=imp.y;ps.z[i]+=imp.z;}
@@ -72,7 +68,10 @@ export class FluidSolver {
       if(ps.phase[i]===Phase.SOLID){if(planar)ps.vz[i]=0;}
       else{
         const freezing=ps.phase[i]===Phase.LIQUID&&ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
-        const physicalShare=freezing*.7;ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;
+        const physicalShare=freezing*.94;
+        ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;
+        ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;
+        ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;
       }
     }
   }
