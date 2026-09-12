@@ -20,10 +20,10 @@ Open `http://localhost:4173`. The runtime itself has no npm/browser framework de
 ## Core architecture
 
 - `src/simulation/`: SoA particle storage, dense spatial grid, fluid/solid/gas motion, thermal exchange, buoyancy, phase transitions.
-- `src/materials/`: material definitions, deterministic seeded generation, demo presets.
+- `src/materials/`: material definitions, deterministic seeded generation, local material sampling/inspection, demo presets.
 - `src/reactions/`: contact-gated mixing, property-distance intensity, reaction-potential and thermal-shock responses.
 - `src/sensors/`: manual, device-orientation, and test gravity providers.
-- `src/rendering/`: one WebGL `POINTS` draw path plus transparent box, gravity arrow, and pooled reaction flashes.
+- `src/rendering/`: lightweight WebGL particle rendering plus optional coarse density-cloud aggregation, transparent box, gravity arrow, and pooled reaction flashes.
 - `src/performance/`: adaptive quality controller.
 - `src/app/`: orchestration, save/export/import, touch tools.
 
@@ -41,7 +41,7 @@ Solids use strongly damped, cohesive particle clusters. Melting progressively re
 
 All values use abstract simulation units. Each material has color, opacity, base density, viscosity, cohesion/surface tension, miscibility, temperature, heat capacity, conductivity, melting and boiling thresholds, hysteresis, volatility, reaction potential, and gas compressibility.
 
-Particles copy those properties locally when emitted. This matters: mixing changes only particles that actually touch instead of mutating a global material definition and causing remote transformations.
+Particles copy those properties locally when emitted. This matters: mixing changes only particles that actually touch instead of mutating a global material definition and causing remote transformations. Once two miscible identities converge past the canonical fusion threshold, the contacted matter receives a new emergent material ID rather than inheriting either parent identity.
 
 ## Mixing and reactions
 
@@ -49,9 +49,11 @@ For two touching particles:
 
 - `ΔM = |miscibilityA - miscibilityB|` gates mixing.
 - Compatibility increases as `ΔM → 0`.
-- Reaction rate is `baseMixingRate * compatibility^p * contactFactor`.
+- Reaction rate is `baseRate * compatibility^p * contactFactor`.
 - Visual/impulse intensity also depends on normalized property distance.
 - Local particle properties converge toward a mass-weighted mean.
+- Completed fusion creates a new emergent material identity keyed by its ingredient lineage, avoiding both parent-ID reuse and uncontrolled identity explosion.
+- The Inspector can sample that locally created substance and save a reusable snapshot into the material palette.
 - Strongly opposite abstract reaction potentials dissipate into heat and impulse.
 - Large temperature differences generate thermal-shock turbulence.
 
@@ -74,9 +76,10 @@ The `RAIN CYCLE` preset is configured to demonstrate boiling, buoyancy, gas accu
 - `BOX`: resize the container from 3–12 simulation units on each axis.
 - `RULES`: tune mixing, condensation and thermal coupling.
 - `ENV`: tune environment density, ambient temperature, gravity and sensor sensitivity; enable/calibrate motion controls or drag the manual gravity pad.
-- `DEBUG`: live phase/reaction/grid statistics, visual debug modes, quality override, setup export/import.
+- `GRAPHICS`: choose Eco/Balanced/Detail or manually control representation, render resolution, visual particle sampling, density-cloud coarseness and reaction FX.
+- `DEBUG`: live phase/reaction/grid statistics, visual debug modes, physics-quality override, setup export/import.
 
-Touch the viewport in Pour/Heat/Cool modes. Camera mode uses one-finger orbit. `Camera` resets the view.
+The compact bottom toolbar stays visible while the detailed control drawer can be hidden. Select a fluid, then choose `Brush`, `Eraser`, `Inspect`, or `Camera`; S/M/L/XL size presets are kept independently for brush and eraser. One finger uses the selected tool, so painting never moves the camera. Two simultaneous fingers always temporarily control the camera from any tool: drag their midpoint to orbit and pinch to zoom. In Inspector mode, tap a local region to inspect its current averaged properties and dominant material identity; emergent mixtures can be named and saved into the reusable palette. In Camera mode, one finger also orbits. `Reset view` restores the default camera.
 
 ## Device orientation
 
@@ -84,17 +87,17 @@ Touch the viewport in Pour/Heat/Cool modes. Camera mode uses one-finger orbit. `
 
 ## Performance
 
-The simulation runs at a fixed 40 Hz while rendering follows `requestAnimationFrame`. LOW/MEDIUM/HIGH alter solver iterations/effect budgets; automatic quality drops the solver to LOW when sustained frame time is high. The default demonstration uses roughly 420–450 particles. HIGH allows up to the 1,800-particle storage budget but is not expected to be suitable for every phone.
+The simulation runs at a fixed 40 Hz while rendering follows `requestAnimationFrame`. Physics LOW/MEDIUM/HIGH controls solver iterations independently from manual graphics settings. The default Balanced graphics path is intentionally lighter than the first MVP: no WebGL antialiasing, reduced render resolution, partial visual sampling, smaller reaction-effect budget and uploads only for actually rendered points. Eco mode goes further by aggregating nearby particles into coarse density clouds, reducing visual point count while leaving the underlying particle physics untouched. The default demonstration uses roughly 420–450 simulated particles; the storage budget remains 1,800.
 
 Run `npm run benchmark` for non-gating CPU metrics. Node benchmark numbers are useful for regressions, not direct mobile FPS predictions.
 
 ## PWA and persistence
 
-A minimal manifest and service worker cache the application shell and subsequently fetched static/module assets. Setup definitions, rules and box/environment settings are saved locally. JSON export/import supports sharing setups. Full live-particle state persistence is not part of this MVP.
+A minimal manifest and service worker cache the application shell with network-first refresh for code assets, preventing stale branch previews during iteration. Reusable material definitions (including Inspector captures), rules, graphics settings and box/environment settings are saved locally. JSON export/import supports sharing setups. Full live-particle state persistence is not part of this MVP.
 
 ## Tests
 
-The Node test suite covers deterministic generation, miscibility gating, rate monotonicity, mass-weighted means, visual intensity, hysteresis and all four main phase changes, buoyancy direction, condensation cooling, stratification, grid neighbors, box clamp, finite-value stress behavior, and the boil → gas → buoyancy → cooling → condensation causal chain.
+The Node test suite covers deterministic generation, miscibility gating, rate monotonicity, mass-weighted means, emergent fusion identities and lineage reuse, local Inspector sampling, graphics-setting clamping/presets, visual intensity, hysteresis and all four main phase changes, buoyancy direction, condensation cooling, stratification, grid neighbors, box clamp, finite-value stress behavior, the boil → gas → buoyancy → cooling → condensation causal chain, local erasing, and pinch-camera gesture math/bounds.
 
 `npm run e2e` is a dependency-free app-shell smoke test. `e2e/mobile.spec.mjs` documents the Playwright mobile flow intended for a browser-enabled CI/QA environment.
 

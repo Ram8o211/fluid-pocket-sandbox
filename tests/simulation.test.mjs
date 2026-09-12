@@ -33,3 +33,35 @@ test('eraser removes only particles inside its local sphere',()=>{
   const removed=sim.erase({x:0,y:0,z:0},.4);
   assert.equal(removed,2);assert.equal(sim.ps.count,1);assert.ok(Math.abs(sim.ps.x[0]-2)<1e-6);
 });
+
+test('completed miscible fusion creates a new emergent material identity',()=>{
+  const sim=new SimulationEngine(12),a=generateMaterial(901,1),b=generateMaterial(902,2);Object.assign(a,{miscibility:.5,density:1,viscosity:.5,color:'#ff0000'});Object.assign(b,{miscibility:.51,density:1.01,viscosity:.51,color:'#fe0100'});sim.registerMaterial(a);sim.registerMaterial(b);sim.rules.canonicalizationDistance=1;
+  const i=sim.ps.add({x:0,y:0,z:0},a),j=sim.ps.add({x:.1,y:0,z:0},b);sim.grid.rebuild(sim.ps,sim.env.box);sim.reactions.step(sim.ps,sim.grid,sim.rules,1/30,(ps,pi,pj,ai,bi)=>sim.resolveFusion(ps,pi,pj,ai,bi));
+  assert.equal(sim.ps.materialId[i],sim.ps.materialId[j]);assert.notEqual(sim.ps.materialId[i],1);assert.notEqual(sim.ps.materialId[i],2);const mixed=sim.materials.get(sim.ps.materialId[i]);assert.equal(mixed.emergent,true);assert.equal(mixed.reusable,false);assert.deepEqual(mixed.sourceMaterialIds,[1,2]);
+});
+
+test('same ingredient lineage reuses emergent identity instead of exploding material count',()=>{
+  const sim=new SimulationEngine(12),a=generateMaterial(903,1),b=generateMaterial(904,2);sim.registerMaterial(a);sim.registerMaterial(b);const i=sim.ps.add({x:0,y:0,z:0},a),j=sim.ps.add({x:.1,y:0,z:0},b),k=sim.ps.add({x:.2,y:0,z:0},a);const ab=sim.resolveFusion(sim.ps,i,j,1,2);sim.ps.materialId[i]=ab;const again=sim.resolveFusion(sim.ps,i,k,ab,1);assert.equal(again,ab);assert.equal(sim.stats.generatedMaterials,1);
+});
+
+test('freezing beside a wall cannot pump a solid cluster upward',()=>{
+  const sim=new SimulationEngine(220),m=generateMaterial(990,1);
+  Object.assign(m,{density:1.1,temperature:.5,meltingTemperature:.3,boilingTemperature:.9,phaseTransitionHysteresis:.01,volatility:.2,cohesion:.9,viscosity:.2});
+  sim.registerMaterial(m);
+  sim.emit(1,{x:sim.env.box.width/2-.15,y:0,z:0},80,.5,1.5);
+  for(let k=0;k<60;k++)sim.step(1/40);
+  let startCom=0;for(let i=0;i<sim.ps.count;i++){startCom+=sim.ps.y[i];sim.ps.temperature[i]=.05;}startCom/=sim.ps.count;
+  let maxCom=-Infinity;
+  for(let k=0;k<160;k++){sim.step(1/40);let com=0;for(let i=0;i<sim.ps.count;i++)com+=sim.ps.y[i];com/=sim.ps.count;maxCom=Math.max(maxCom,com);}
+  assert.equal(sim.ps.phaseCounts()[Phase.SOLID],sim.ps.count,'cluster completes freezing');
+  assert.ok(maxCom<startCom+.55,`solid wall contact must not ratchet upward: start=${startCom}, max=${maxCom}`);
+});
+
+test('heat and cool tools change only local particle temperature and report affected particles',()=>{
+  const sim=new SimulationEngine(12),m=generateMaterial(991,1);sim.registerMaterial(m);
+  const near=sim.ps.add({x:0,y:0,z:0,temperature:.5},m),far=sim.ps.add({x:2.5,y:0,z:0,temperature:.5},m);
+  const heated=sim.applyHeat({x:0,y:0,z:0},.8,.2);
+  assert.equal(heated.affected,1);assert.ok(heated.totalDelta>0);assert.ok(sim.ps.temperature[near]>.5);assert.ok(Math.abs(sim.ps.temperature[far]-.5)<1e-6);
+  const before=sim.ps.temperature[near],cooled=sim.applyHeat({x:0,y:0,z:0},.8,-.25);
+  assert.equal(cooled.affected,1);assert.ok(cooled.totalDelta<0);assert.ok(sim.ps.temperature[near]<before);assert.ok(Math.abs(sim.ps.temperature[far]-.5)<1e-6);
+});
