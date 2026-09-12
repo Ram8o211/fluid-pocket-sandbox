@@ -46,7 +46,7 @@ test('same ingredient lineage reuses emergent identity instead of exploding mate
 
 test('freezing beside a wall cannot pump a solid cluster upward',()=>{
   const sim=new SimulationEngine(220),m=generateMaterial(990,1);
-  Object.assign(m,{density:1.1,temperature:.5,meltingTemperature:.3,boilingTemperature:.9,phaseTransitionHysteresis:.01,volatility:.2,cohesion:.9,viscosity:.2});
+  Object.assign(m,{density:1.1,temperature:.5,meltingTemperature:.3,boilingTemperature:.9,combustionTemperature:1.2,phaseTransitionHysteresis:.01,volatility:.2,cohesion:.9,viscosity:.2});
   sim.registerMaterial(m);
   sim.emit(1,{x:sim.env.box.width/2-.15,y:0,z:0},80,.5,1.5);
   for(let k=0;k<60;k++)sim.step(1/40);
