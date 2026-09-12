@@ -31,13 +31,23 @@ export class FluidSolver {
 
           if(ps.phase[i]===Phase.SOLID){
             if(ps.phase[j]===Phase.GAS)return;
-            const target=this.restDistance*(ps.solidSubdivision[i]>.55?.92:.88);
+            const granularI=ps.solidSubdivision[i]>=.55;
+            const coherentPair=!granularI&&ps.phase[j]===Phase.SOLID&&ps.solidSubdivision[j]<.55;
+            const sameRigidBody=coherentPair&&ps.solidBodyId[i]>0&&ps.solidBodyId[i]===ps.solidBodyId[j];
+            const sameCoherentMaterial=coherentPair&&ps.materialId[i]===ps.materialId[j];
+            // Coherent solids are shape-matched by SolidSolver. Applying fluid-style
+            // particle separation inside the same rigid material expands the cluster;
+            // against a wall/floor that expansion becomes a one-way upward ratchet.
+            if(sameRigidBody||sameCoherentMaterial)return;
+            const target=this.restDistance*(granularI?.92:.88);
             if(d<target){
-              const q=(target-d)/target,rep=q*q*(.022+.024*ps.solidSubdivision[i]);ps.x[i]-=nx*rep;ps.y[i]-=ny*rep;if(!planar)ps.z[i]-=nz*rep;
+              const q=(target-d)/target;
+              const rep=q*q*(granularI?(.022+.024*ps.solidSubdivision[i]):.006);
+              ps.x[i]-=nx*rep;ps.y[i]-=ny*rep;if(!planar)ps.z[i]-=nz*rep;
             }
             // Granular solids dissipate relative tangential motion only while in contact.
             // There is deliberately no attractive solid-wall/solid-solid cohesion term.
-            if(ps.phase[j]===Phase.SOLID&&ps.solidSubdivision[i]>.45&&d<target*1.18){
+            if(ps.phase[j]===Phase.SOLID&&granularI&&d<target*1.18){
               const friction=clamp((.02+.1*ps.solidSubdivision[i])*(1-d/(target*1.18)),0,.12);
               ps.vx[i]+=(ps.vx[j]-ps.vx[i])*friction;ps.vy[i]+=(ps.vy[j]-ps.vy[i])*friction;if(!planar)ps.vz[i]+=(ps.vz[j]-ps.vz[i])*friction;
             }
@@ -47,7 +57,12 @@ export class FluidSolver {
           if(ps.phase[j]!==Phase.GAS){
             const freezing=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
             const mobility=1-freezing*.62,target=this.restDistance;
-            if(d<target){const q=(target-d)/target,rep=q*q*(.018+.03*(1-ps.viscosity[i]))*mobility;ps.x[i]-=nx*rep;ps.y[i]-=ny*rep;ps.z[i]-=nz*rep;}
+            const freezingOntoSameSolid=freezing>0&&ps.phase[j]===Phase.SOLID&&ps.materialId[i]===ps.materialId[j];
+            // During solidification, already-frozen particles are the growing solid,
+            // not a fresh obstacle. Strong one-sided repulsion here lifted the remaining
+            // liquid away from floors and side walls before it froze.
+            const interfaceMobility=freezingOntoSameSolid?.06:1;
+            if(d<target){const q=(target-d)/target,rep=q*q*(.018+.03*(1-ps.viscosity[i]))*mobility*interfaceMobility;ps.x[i]-=nx*rep;ps.y[i]-=ny*rep;ps.z[i]-=nz*rep;}
             else if(d<target*1.6&&ps.phase[j]===Phase.LIQUID){const pull=(d-target)/(target*.6)*ps.cohesion[i]*.0025*mobility;ps.x[i]+=nx*pull;ps.y[i]+=ny*pull;ps.z[i]+=nz*pull;}
             if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=rules.miscibilityThreshold){const imp=stratificationImpulse(ps.density[i],ps.density[j],gravity,.0015*mobility);ps.x[i]+=imp.x;ps.y[i]+=imp.y;ps.z[i]+=imp.z;}
           }
@@ -59,10 +74,11 @@ export class FluidSolver {
     for(let i=0;i<ps.count;i++){
       const rx=(ps.x[i]-ps.px[i])/dt,ry=(ps.y[i]-ps.py[i])/dt,rz=planar?0:(ps.z[i]-ps.pz[i])/dt;
       if(ps.phase[i]===Phase.SOLID){
-        // Keep integrated gravity/inertia dominant. Constraint corrections should never
-        // become a source of upward or wall-tangential momentum.
-        const share=.04+.04*(1-ps.solidSubdivision[i]);
-        ps.vx[i]=ps.vx[i]*(1-share)+rx*share;ps.vy[i]=ps.vy[i]*(1-share)+ry*share;ps.vz[i]=planar?0:ps.vz[i]*(1-share)+rz*share;
+        // Solid separation/shape matching is a positional constraint. Converting those
+        // corrections back into velocity injects energy, especially after wall clipping.
+        // Keep the integrated gravity/inertia velocity and let SolidSolver synchronize
+        // coherent-body velocities explicitly.
+        if(planar)ps.vz[i]=0;
       }else{
         const freezing=ps.phase[i]===Phase.LIQUID&&ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
         const physicalShare=freezing*.7;ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;
@@ -72,7 +88,7 @@ export class FluidSolver {
   collideBox(ps,box,planar=false){
     const pad=.08,hx=box.width/2-pad,hy=box.height/2-pad,hz=box.depth/2-pad;
     for(let i=0;i<ps.count;i++){
-      const solid=ps.phase[i]===Phase.SOLID,granular=solid&&ps.solidSubdivision[i]>.45,restitution=solid?(granular?.025:.04):.08,tangent=solid?(granular?.48:.76):.92;
+      const solid=ps.phase[i]===Phase.SOLID,granular=solid&&ps.solidSubdivision[i]>.45,restitution=solid?0:.08,tangent=solid?(granular?.48:.72):.92;
       let hitX=false,hitY=false,hitZ=false;
       if(ps.x[i]<-hx){ps.x[i]=-hx;if(ps.vx[i]<0)ps.vx[i]=-ps.vx[i]*restitution;hitX=true;}else if(ps.x[i]>hx){ps.x[i]=hx;if(ps.vx[i]>0)ps.vx[i]=-ps.vx[i]*restitution;hitX=true;}
       if(ps.y[i]<-hy){ps.y[i]=-hy;if(ps.vy[i]<0)ps.vy[i]=-ps.vy[i]*restitution;hitY=true;}else if(ps.y[i]>hy){ps.y[i]=hy;if(ps.vy[i]>0)ps.vy[i]=-ps.vy[i]*restitution;hitY=true;}
