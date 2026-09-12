@@ -26,3 +26,10 @@ test('causal chain reaches locally dense gas before condensation',()=>{
   assert.ok(maxLocal>sim.rules.condensationDensityThreshold,`local gas density ${maxLocal} crossed threshold`);
   assert.ok(condensationCooling(maxLocal,sim.rules.condensationDensityThreshold,sim.rules.condensationCoolingCoefficient)>0);
 });
+
+test('eraser removes only particles inside its local sphere',()=>{
+  const sim=new SimulationEngine(12),m=generateMaterial(888,1);sim.registerMaterial(m);
+  sim.ps.add({x:0,y:0,z:0},m);sim.ps.add({x:.2,y:0,z:0},m);sim.ps.add({x:2,y:0,z:0},m);
+  const removed=sim.erase({x:0,y:0,z:0},.4);
+  assert.equal(removed,2);assert.equal(sim.ps.count,1);assert.ok(Math.abs(sim.ps.x[0]-2)<1e-6);
+});

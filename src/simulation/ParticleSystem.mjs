@@ -1,5 +1,6 @@
 import { Phase } from './Phase.mjs';
 import { clamp, hexToRgb } from './math.mjs';
+const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','compressibility','materialId','phase','cell'];
 export class ParticleSystem {
   constructor(capacity=1800){
     this.capacity=capacity; this.count=0;
@@ -27,6 +28,17 @@ export class ParticleSystem {
   effectiveDensityAt(i,phase=this.phase[i]){ const base=this.baseDensity[i]; if(phase===Phase.GAS)return Math.max(.08,base*(.18+.16*(1-this.compressibility[i]))); if(phase===Phase.SOLID)return base*1.08; return base; }
   setPhase(i,phase){ this.phase[i]=phase;this.phaseProgress[i]=0;this.density[i]=this.effectiveDensityAt(i,phase); }
   clampToBox(box,padding=0.09){ const hx=box.width/2-padding,hy=box.height/2-padding,hz=box.depth/2-padding; for(let i=0;i<this.count;i++){this.x[i]=clamp(this.x[i],-hx,hx);this.y[i]=clamp(this.y[i],-hy,hy);this.z[i]=clamp(this.z[i],-hz,hz);} }
+  removeAt(index){
+    if(index<0||index>=this.count)return false;
+    const last=this.count-1;
+    if(index!==last)for(const key of PARTICLE_ARRAYS)this[key][index]=this[key][last];
+    this.count=last;return true;
+  }
+  removeInSphere(point,radius){
+    const r2=radius*radius;let removed=0;
+    for(let i=this.count-1;i>=0;i--){const dx=this.x[i]-point.x,dy=this.y[i]-point.y,dz=this.z[i]-point.z;if(dx*dx+dy*dy+dz*dz<=r2){this.removeAt(i);removed++;}}
+    return removed;
+  }
   clear(){this.count=0;}
   totalMass(){let m=0;for(let i=0;i<this.count;i++)m+=this.mass[i];return m;}
   phaseCounts(){const c=[0,0,0];for(let i=0;i<this.count;i++)c[this.phase[i]]++;return c;}

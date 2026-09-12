@@ -15,17 +15,27 @@
     <canvas id="scene" aria-label="3D matter sandbox"></canvas>
     <header class="topbar">
       <div><span class="brand">FLUID POCKET</span><span id="status" class="pill">MEDIUM</span></div>
-      <div class="top-actions"><button id="pauseBtn">Pause</button><button id="resetBtn">Reset</button><button id="cameraBtn">Camera</button></div>
+      <div class="top-actions"><button id="pauseBtn">Pause</button><button id="resetBtn">Reset</button><button id="resetViewBtn">Reset view</button></div>
     </header>
     <div id="gravityHud" class="gravity-hud">g 0.00 −1.00 0.00</div>
     <div id="toast" class="toast" aria-live="polite"></div>
-    <section id="sheet" class="sheet">
+    <section class="tool-dock" aria-label="Primary tools">
+      <select id="materialSelect" class="fluid-picker" aria-label="Fluid"></select>
+      <div class="tool-group" role="group" aria-label="Interaction mode">
+        <button id="brushToolBtn" class="tool-btn primary" aria-label="Brush">Brush</button>
+        <button id="eraserToolBtn" class="tool-btn" aria-label="Eraser">Eraser</button>
+        <button id="cameraToolBtn" class="tool-btn" aria-label="Camera">Camera</button>
+      </div>
+      <select id="toolSize" class="size-picker" aria-label="Tool size"><option value="S">S</option><option value="M" selected>M</option><option value="L">L</option><option value="XL">XL</option></select>
+      <button id="sheetToggleBtn" class="controls-toggle" aria-controls="sheet" aria-expanded="false">Controls</button>
+    </section>
+    <section id="sheet" class="sheet collapsed">
       <nav class="tabs" aria-label="Sandbox controls">
         <button data-tab="material" class="active">MATERIAL</button><button data-tab="box">BOX</button><button data-tab="rules">RULES</button><button data-tab="env">ENV</button><button data-tab="debug">DEBUG</button>
       </nav>
       <div class="sheet-content">
         <section data-panel="material" class="panel active">
-          <div class="row material-head"><select id="materialSelect"></select><button id="addMaterialBtn">Add</button><button id="randomizeBtn">Randomize All</button></div><div class="row"><button id="randomColorBtn">Randomize Color</button><button id="randomPhysicsBtn">Randomize Physics</button><label class="seed-label">Seed <input id="seedInput" type="number" value="1337"></label></div>
+          <div class="row material-head"><button id="addMaterialBtn">Add fluid</button><button id="randomizeBtn">Randomize All</button></div><div class="row"><button id="randomColorBtn">Randomize Color</button><button id="randomPhysicsBtn">Randomize Physics</button><label class="seed-label">Seed <input id="seedInput" type="number" value="1337"></label></div>
           <div id="materialPreview" class="material-preview"><span></span><div><strong id="matName"></strong><small id="matPhaseHint"></small></div></div>
           <div class="grid2">
             <label>Color<input id="color" type="color"></label><label>Opacity<input id="opacity" type="range" min="0.08" max="1" step="0.01"></label>
@@ -36,7 +46,7 @@
             <label>Boiling point<input id="boilingTemperature" type="range" min="0.45" max="0.95" step="0.01"></label><label>Volatility<input id="volatility" type="range" min="0" max="1" step="0.01"></label>
             <label>Reaction potential<input id="reactionPotential" type="range" min="-1" max="1" step="0.01"></label><label>Volume<input id="volume" type="range" min="4" max="80" step="1" value="24"></label>
           </div>
-          <div class="row action-row"><button id="pourModeBtn" class="primary">Pour mode</button><button id="heatModeBtn">Heat</button><button id="coolModeBtn">Cool</button></div>
+          <div class="row action-row"><button id="pourModeBtn" class="primary">Brush</button><button id="heatModeBtn">Heat</button><button id="coolModeBtn">Cool</button></div><p class="hint gesture-hint">One finger uses the selected tool. Two fingers always control the camera; pinch to zoom.</p>
           <div class="row presets"><button data-preset="mixing">Mixing</button><button data-preset="layers">Layers</button><button data-preset="rain">Rain</button><button data-preset="freeze">Freeze</button><button data-preset="shock">Shock</button></div>
         </section>
         <section data-panel="box" class="panel"><div class="grid2"><label>Width<input id="boxWidth" type="range" min="3" max="12" step="0.1"></label><label>Height<input id="boxHeight" type="range" min="3" max="12" step="0.1"></label><label>Depth<input id="boxDepth" type="range" min="3" max="12" step="0.1"></label></div><p class="hint">Resize clamps all matter safely inside the new bounds.</p></section>
