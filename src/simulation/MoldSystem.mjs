@@ -1,29 +1,50 @@
 import { clamp } from './math.mjs';
 
 const SIZE={S:{w:1.5,h:1.15},M:{w:2.35,h:1.7},L:{w:3.5,h:2.35},XL:{w:4.8,h:3.05}};
+const BRUSH_RADIUS={S:.16,M:.27,L:.42,XL:.62};
 
 export class MoldSystem{
-  constructor(){this.molds=[];this.nextId=1;}
-  clear(){this.molds.length=0;this.nextId=1;}
+  constructor(){this.molds=[];this.nextId=1;this.barrierCellSize=.22;this.barriers=new Map();this.maxBarrierCells=14000;}
+  clear(){this.molds.length=0;this.barriers.clear();this.nextId=1;}
   add(point,size='M',box={width:5,height:7}){
     const d=SIZE[size]||SIZE.M,t=.14,w=Math.min(d.w,box.width*.82),h=Math.min(d.h,box.height*.6),margin=.18;
     const x=clamp(point.x,-box.width/2+w/2+margin,box.width/2-w/2-margin),y=clamp(point.y,-box.height/2+h/2+margin,box.height/2-h/2-margin);
     const mold={id:this.nextId++,type:'U',x,y,width:w,height:h,thickness:t};this.molds.push(mold);return mold;
   }
-  restore(list=[]){this.molds=(list||[]).filter(Boolean).map(m=>({...m,id:Number(m.id)||this.nextId++}));this.nextId=this.molds.reduce((v,m)=>Math.max(v,m.id+1),1);}
-  walls(m){const t=m.thickness,w=m.width,h=m.height;return[
-    {x:m.x-w/2,y:m.y,width:t,height:h},
-    {x:m.x+w/2,y:m.y,width:t,height:h},
-    {x:m.x,y:m.y-h/2,width:w+t,height:t}
-  ];}
-  collide(ps,planar=false){
-    if(!this.molds.length)return;const radius=.105;
-    for(let i=0;i<ps.count;i++)for(const m of this.molds)for(const wall of this.walls(m)){
-      const dx=ps.x[i]-wall.x,dy=ps.y[i]-wall.y,hx=wall.width/2+radius,hy=wall.height/2+radius;
-      if(Math.abs(dx)>=hx||Math.abs(dy)>=hy)continue;
-      const penX=hx-Math.abs(dx),penY=hy-Math.abs(dy);
-      if(penX<penY){const s=dx===0?1:Math.sign(dx);ps.x[i]+=s*penX;if(ps.vx[i]*s<0)ps.vx[i]*=-.04;ps.vy[i]*=.72;if(!planar)ps.vz[i]*=.78;}
-      else{const s=dy===0?1:Math.sign(dy);ps.y[i]+=s*penY;if(ps.vy[i]*s<0)ps.vy[i]*=-.04;ps.vx[i]*=.66;if(!planar)ps.vz[i]*=.78;}
+  barrierKey(ix,iy,iz){return `${ix}:${iy}:${iz}`;}
+  addBarrier(point,size='M',box={width:5,height:7,depth:4},planar=false){
+    const cell=this.barrierCellSize,r=BRUSH_RADIUS[size]||BRUSH_RADIUS.M,reach=Math.ceil((r+cell*.4)/cell),cx=Math.round(point.x/cell),cy=Math.round(point.y/cell),cz=planar?0:Math.round(point.z/cell),hx=box.width/2-.12,hy=box.height/2-.12,hz=box.depth/2-.12;let added=0;
+    for(let dz=planar?0:-reach;dz<=(planar?0:reach);dz++)for(let dy=-reach;dy<=reach;dy++)for(let dx=-reach;dx<=reach;dx++){
+      if(this.barriers.size>=this.maxBarrierCells)return added;const ix=cx+dx,iy=cy+dy,iz=planar?0:cz+dz,x=ix*cell,y=iy*cell,z=planar?0:iz*cell;
+      if(Math.abs(x)>hx||Math.abs(y)>hy||(!planar&&Math.abs(z)>hz))continue;const ddx=x-point.x,ddy=y-point.y,ddz=planar?0:z-point.z;if(ddx*ddx+ddy*ddy+ddz*ddz>(r+cell*.45)**2)continue;
+      const key=this.barrierKey(ix,iy,iz);if(this.barriers.has(key))continue;this.barriers.set(key,{key,ix,iy,iz,x,y,z,size:cell,planar});added++;
     }
+    if(added){const last=this.molds.length?this.molds[this.molds.length-1]:null,minStep=Math.max(cell*.7,r*.35),far=!last||last.type!=='barrier'||Math.hypot(last.x-point.x,last.y-point.y,planar?0:(last.z||0)-point.z)>minStep;if(far)this.molds.push({id:this.nextId++,type:'barrier',x:point.x,y:point.y,z:planar?0:point.z,width:r*2,height:r*2,thickness:r*2});}
+    return added;
+  }
+  eraseBarrier(point,radius=.6,planar=false){
+    const cell=this.barrierCellSize,reach=Math.ceil((radius+cell)/cell),cx=Math.round(point.x/cell),cy=Math.round(point.y/cell),cz=planar?0:Math.round(point.z/cell),limit2=(radius+cell*.8)**2;let removed=0;
+    for(let dz=planar?0:-reach;dz<=(planar?0:reach);dz++)for(let dy=-reach;dy<=reach;dy++)for(let dx=-reach;dx<=reach;dx++){
+      const key=this.barrierKey(cx+dx,cy+dy,planar?0:cz+dz),b=this.barriers.get(key);if(!b)continue;const ddx=b.x-point.x,ddy=b.y-point.y,ddz=planar?0:b.z-point.z;if(ddx*ddx+ddy*ddy+ddz*ddz<=limit2){this.barriers.delete(key);removed++;}
+    }
+    if(removed)this.molds=this.molds.filter(m=>m.type!=='barrier'||((m.x-point.x)**2+(m.y-point.y)**2+(planar?0:((m.z||0)-point.z)**2)>limit2));return removed;
+  }
+  serialize(){return {molds:this.molds.map(m=>({...m})),barriers:[...this.barriers.values()].map(b=>({...b}))};}
+  restore(data=[]){
+    const moldList=Array.isArray(data)?data:(data?.molds||[]),barrierList=Array.isArray(data)?[]:(data?.barriers||[]);this.molds=moldList.filter(Boolean).map(m=>({...m,id:Number(m.id)||this.nextId++}));this.nextId=this.molds.reduce((v,m)=>Math.max(v,m.id+1),1);this.barriers.clear();for(const raw of barrierList){if(!raw)continue;const ix=Number.isFinite(raw.ix)?raw.ix:Math.round((raw.x||0)/this.barrierCellSize),iy=Number.isFinite(raw.iy)?raw.iy:Math.round((raw.y||0)/this.barrierCellSize),iz=Number.isFinite(raw.iz)?raw.iz:Math.round((raw.z||0)/this.barrierCellSize),key=this.barrierKey(ix,iy,iz);this.barriers.set(key,{...raw,key,ix,iy,iz,x:ix*this.barrierCellSize,y:iy*this.barrierCellSize,z:iz*this.barrierCellSize,size:this.barrierCellSize});}
+  }
+  walls(m){if(m.type!=='U')return [];const t=m.thickness,w=m.width,h=m.height;return[{x:m.x-w/2,y:m.y,width:t,height:h},{x:m.x+w/2,y:m.y,width:t,height:h},{x:m.x,y:m.y-h/2,width:w+t,height:t}];}
+  collideRect(ps,i,wall,planar=false){
+    const radius=.105,dx=ps.x[i]-wall.x,dy=ps.y[i]-wall.y,hx=wall.width/2+radius,hy=wall.height/2+radius;if(Math.abs(dx)>=hx||Math.abs(dy)>=hy)return false;const penX=hx-Math.abs(dx),penY=hy-Math.abs(dy);
+    if(penX<penY){const s=dx===0?(ps.vx[i]<=0?-1:1):Math.sign(dx);ps.x[i]+=s*penX;if(ps.vx[i]*s<0)ps.vx[i]=0;ps.vy[i]*=.78;if(!planar)ps.vz[i]*=.84;}else{const s=dy===0?(ps.vy[i]<=0?-1:1):Math.sign(dy);ps.y[i]+=s*penY;if(ps.vy[i]*s<0)ps.vy[i]=0;ps.vx[i]*=.78;if(!planar)ps.vz[i]*=.84;}return true;
+  }
+  collideBarrier(ps,i,planar=false){
+    if(!this.barriers.size)return false;const cell=this.barrierCellSize,cx=Math.round(ps.x[i]/cell),cy=Math.round(ps.y[i]/cell),cz=planar?0:Math.round(ps.z[i]/cell),r=.105,half=cell/2+r;let hit=false;
+    for(let dz=planar?0:-1;dz<=(planar?0:1);dz++)for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      const b=this.barriers.get(this.barrierKey(cx+dx,cy+dy,planar?0:cz+dz));if(!b)continue;const ox=ps.x[i]-b.x,oy=ps.y[i]-b.y,oz=planar?0:ps.z[i]-b.z;if(Math.abs(ox)>=half||Math.abs(oy)>=half||(!planar&&Math.abs(oz)>=half))continue;const px=half-Math.abs(ox),py=half-Math.abs(oy),pz=planar?Infinity:half-Math.abs(oz);if(px<=py&&px<=pz){const s=ox===0?(ps.vx[i]<=0?-1:1):Math.sign(ox);ps.x[i]+=s*px;if(ps.vx[i]*s<0)ps.vx[i]=0;ps.vy[i]*=.82;if(!planar)ps.vz[i]*=.82;}else if(py<=pz){const s=oy===0?(ps.vy[i]<=0?-1:1):Math.sign(oy);ps.y[i]+=s*py;if(ps.vy[i]*s<0)ps.vy[i]=0;ps.vx[i]*=.82;if(!planar)ps.vz[i]*=.82;}else{const s=oz===0?(ps.vz[i]<=0?-1:1):Math.sign(oz);ps.z[i]+=s*pz;if(ps.vz[i]*s<0)ps.vz[i]=0;ps.vx[i]*=.82;ps.vy[i]*=.82;}hit=true;
+    }return hit;
+  }
+  collide(ps,planar=false){
+    if(!this.molds.length&&!this.barriers.size)return;const physicalMolds=this.molds.filter(m=>m.type==='U');for(let i=0;i<ps.count;i++){for(const m of physicalMolds)for(const wall of this.walls(m))this.collideRect(ps,i,wall,planar);this.collideBarrier(ps,i,planar);}
   }
 }
