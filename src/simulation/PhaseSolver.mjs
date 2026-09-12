@@ -13,9 +13,8 @@ export function updatePhaseParticle(ps,i,dt){
   const from=ps.phase[i],desired=targetPhaseAt(ps,i);if(desired===from){ps.phaseProgress[i]=Math.max(0,ps.phaseProgress[i]-dt*2);return false;}
   const speed=.65+ps.volatility[i]*1.4; ps.phaseProgress[i]=clamp(ps.phaseProgress[i]+dt*speed,0,1);
   if(ps.phaseProgress[i]>=1){
-    // Do not destroy gravitational momentum when a body freezes. Rigid/granular
-    // stabilization is contact-based and handled by SolidSolver instead.
-    if(desired===Phase.SOLID){ps.vx[i]*=.88;ps.vy[i]*=.88;ps.vz[i]*=.88;}
+    // Phase changes preserve bulk momentum. Crystallinity, viscosity and solid
+    // subdivision affect internal/contact dynamics, never gravitational fall speed.
     ps.setPhase(i,desired);return {from,to:desired,index:i};
   }return false;
 }

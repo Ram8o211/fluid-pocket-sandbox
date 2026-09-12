@@ -4,23 +4,36 @@ import { stratificationImpulse } from './DensityStratification.mjs';
 
 export class FluidSolver {
   constructor(){this.neighborRadius=.48;this.restDistance=.26;this.reverseSweep=false;}
+  applyLiquidPairForces(ps,grid,rules,dt,planar){
+    const radius=this.neighborRadius,rest=this.restDistance;
+    grid.forEachPair(ps,radius,(i,j)=>{
+      if(ps.phase[i]!==Phase.LIQUID||ps.phase[j]!==Phase.LIQUID)return;
+      const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=planar?Math.hypot(dx,dy):Math.hypot(dx,dy,dz);if(d<=1e-6||d>radius)return;
+      const nx=dx/d,ny=dy/d,nz=planar?0:dz/d,mi=Math.max(.001,ps.mass[i]||1),mj=Math.max(.001,ps.mass[j]||1),sum=mi+mj,wi=mj/sum,wj=mi/sum;
+      const fi=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0,fj=ps.temperature[j]<ps.meltingTemperature[j]-ps.phaseHysteresis[j]?clamp(ps.phaseProgress[j],0,1):0,mobility=(1-fi*.86)*(1-fj*.86);
+      const viscosity=clamp((ps.viscosity[i]+ps.viscosity[j])*.5,0,1),kernel=clamp(1-d/radius,0,1),viscous=clamp(viscosity*kernel*dt*4.5*mobility,0,.18);
+      if(viscous>0){const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];ps.vx[i]+=dvx*viscous*wi;ps.vy[i]+=dvy*viscous*wi;if(!planar)ps.vz[i]+=dvz*viscous*wi;ps.vx[j]-=dvx*viscous*wj;ps.vy[j]-=dvy*viscous*wj;if(!planar)ps.vz[j]-=dvz*viscous*wj;}
+      if(d<rest){const q=(rest-d)/rest,perParticle=q*q*(.018+.03*(1-viscosity))*mobility,total=perParticle*2;ps.x[i]-=nx*total*wi;ps.y[i]-=ny*total*wi;if(!planar)ps.z[i]-=nz*total*wi;ps.x[j]+=nx*total*wj;ps.y[j]+=ny*total*wj;if(!planar)ps.z[j]+=nz*total*wj;return;}
+      if(d>=rest*1.6)return;
+      const sameMaterial=ps.materialId[i]===ps.materialId[j],delta=Math.abs(ps.miscibility[i]-ps.miscibility[j]),threshold=Math.max(.01,rules.miscibilityThreshold),compatibility=sameMaterial?1:clamp(1-delta/threshold,0,1);if(compatibility<=0)return;
+      const cohesion=clamp((ps.cohesion[i]+ps.cohesion[j])*.5,0,1),perParticle=(d-rest)/(rest*.6)*cohesion*compatibility*.0025*mobility,total=perParticle*2;
+      ps.x[i]+=nx*total*wi;ps.y[i]+=ny*total*wi;if(!planar)ps.z[i]+=nz*total*wi;ps.x[j]-=nx*total*wj;ps.y[j]-=ny*total*wj;if(!planar)ps.z[j]-=nz*total*wj;
+    });
+  }
   step(ps,grid,gravity,env,rules,dt,iterations=2){
     const maxV=env.maxVelocity,planar=env.dimensionMode==='2D';this.reverseSweep=!this.reverseSweep;
     for(let i=0;i<ps.count;i++){
       ps.px[i]=ps.x[i];ps.py[i]=ps.y[i];ps.pz[i]=ps.z[i];
       if(ps.phase[i]!==Phase.GAS){ps.vx[i]+=gravity.x*dt;ps.vy[i]+=gravity.y*dt;if(!planar)ps.vz[i]+=gravity.z*dt;}else if(planar)ps.vz[i]=0;
-      const freezing=ps.phase[i]===Phase.LIQUID&&ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
-      let damping;
-      if(ps.phase[i]===Phase.LIQUID)damping=Math.exp(-ps.viscosity[i]*dt*3.5-dt*freezing*9);
-      else if(ps.phase[i]===Phase.SOLID)damping=Math.exp(-dt*.025); // free solids keep essentially the same gravitational acceleration
-      else damping=Math.exp(-dt*.15);
-      ps.vx[i]*=damping;ps.vy[i]*=damping;ps.vz[i]*=damping;
+      // Free-fall drag is material-independent. Viscosity and subdivision act only
+      // through relative/contact motion, so they cannot change bulk gravity.
+      const damping=Math.exp(-dt*(ps.phase[i]===Phase.GAS?.15:.025));ps.vx[i]*=damping;ps.vy[i]*=damping;ps.vz[i]*=damping;
       const speed=planar?Math.hypot(ps.vx[i],ps.vy[i]):Math.hypot(ps.vx[i],ps.vy[i],ps.vz[i]);if(speed>maxV){const k=maxV/speed;ps.vx[i]*=k;ps.vy[i]*=k;if(!planar)ps.vz[i]*=k;}
       ps.x[i]+=ps.vx[i]*dt;ps.y[i]+=ps.vy[i]*dt;if(planar){ps.z[i]=0;ps.vz[i]=0;}else ps.z[i]+=ps.vz[i]*dt;
     }
     this.collideBox(ps,env.box,planar);
     for(let it=0;it<iterations;it++){
-      grid.rebuild(ps,env.box);const reverse=this.reverseSweep!==Boolean(it&1);
+      grid.rebuild(ps,env.box);this.applyLiquidPairForces(ps,grid,rules,dt,planar);const reverse=this.reverseSweep!==Boolean(it&1);
       for(let s=0;s<ps.count;s++){
         const i=reverse?ps.count-1-s:s;let gasCount=0;
         grid.forEachNeighbor(ps,i,this.neighborRadius,(j)=>{
@@ -38,9 +51,10 @@ export class FluidSolver {
             return;
           }
           if(ps.phase[j]!==Phase.GAS){
-            const freezing=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0,mobility=1-freezing*.86,target=this.restDistance,freezingOntoSameSolid=freezing>0&&ps.phase[j]===Phase.SOLID&&ps.materialId[i]===ps.materialId[j],interfaceMobility=freezingOntoSameSolid?.04:1;
-            if(d<target){const q=(target-d)/target,rep=q*q*(.018+.03*(1-ps.viscosity[i]))*mobility*interfaceMobility;ps.x[i]-=nx*rep;ps.y[i]-=ny*rep;if(!planar)ps.z[i]-=nz*rep;}
-            else if(d<target*1.6&&ps.phase[j]===Phase.LIQUID){const pull=(d-target)/(target*.6)*ps.cohesion[i]*.0025*mobility;ps.x[i]+=nx*pull;ps.y[i]+=ny*pull;if(!planar)ps.z[i]+=nz*pull;}
+            const freezing=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0,mobility=1-freezing*.86;
+            // Liquid/liquid repulsion, cohesion and viscosity are solved once per pair
+            // above, with equal-and-opposite corrections. Here only solid interfaces remain.
+            if(ps.phase[j]!==Phase.LIQUID){const target=this.restDistance,freezingOntoSameSolid=freezing>0&&ps.phase[j]===Phase.SOLID&&ps.materialId[i]===ps.materialId[j],interfaceMobility=freezingOntoSameSolid?.04:1;if(d<target){const q=(target-d)/target,rep=q*q*(.018+.03*(1-ps.viscosity[i]))*mobility*interfaceMobility;ps.x[i]-=nx*rep;ps.y[i]-=ny*rep;if(!planar)ps.z[i]-=nz*rep;}}
             if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=rules.miscibilityThreshold){const imp=stratificationImpulse(ps.density[i],ps.density[j],gravity,.0015*mobility);ps.x[i]+=imp.x;ps.y[i]+=imp.y;if(!planar)ps.z[i]+=imp.z;}
           }
         });
