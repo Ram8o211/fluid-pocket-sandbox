@@ -1,5 +1,5 @@
-const CACHE='fluid-pocket-v6';
-const CORE=['/','/index.html','/styles.css','/base.css','/desktop.css','/src/app/main.mjs','/manifest.webmanifest','/icons/icon.svg'];
+const CACHE='fluid-pocket-v7';
+const CORE=['/','/index.html','/styles.css','/base.css','/desktop.css','/fixes.css','/src/app/main.mjs','/manifest.webmanifest','/icons/icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const url=new URL(e.request.url);if(url.origin!==location.origin)return;const freshFirst=e.request.mode==='navigate'||/\.(?:mjs|js|css|html)$/.test(url.pathname);if(freshFirst){e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy)).catch(()=>{});return r;}).catch(()=>caches.match(e.request)));return;}e.respondWith(caches.match(e.request).then(hit=>hit||fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy)).catch(()=>{});return r;})));});
