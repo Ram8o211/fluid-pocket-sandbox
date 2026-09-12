@@ -57,6 +57,7 @@ test('freezing beside a wall cannot pump a solid cluster upward',()=>{
   assert.ok(maxCom<startCom+.55,`solid wall contact must not ratchet upward: start=${startCom}, max=${maxCom}`);
 });
 
+
 test('heat and cool tools change only local particle temperature and report affected particles',()=>{
   const sim=new SimulationEngine(12),m=generateMaterial(991,1);sim.registerMaterial(m);
   const near=sim.ps.add({x:0,y:0,z:0,temperature:.5},m),far=sim.ps.add({x:2.5,y:0,z:0,temperature:.5},m);
@@ -64,4 +65,19 @@ test('heat and cool tools change only local particle temperature and report affe
   assert.equal(heated.affected,1);assert.ok(heated.totalDelta>0);assert.ok(sim.ps.temperature[near]>.5);assert.ok(Math.abs(sim.ps.temperature[far]-.5)<1e-6);
   const before=sim.ps.temperature[near],cooled=sim.applyHeat({x:0,y:0,z:0},.8,-.25);
   assert.equal(cooled.affected,1);assert.ok(cooled.totalDelta<0);assert.ok(sim.ps.temperature[near]<before);assert.ok(Math.abs(sim.ps.temperature[far]-.5)<1e-6);
+});
+
+test('2D mode flattens particles, gravity and spatial grid to one plane',()=>{
+  const sim=new SimulationEngine(64),m=generateMaterial(1201,1);sim.registerMaterial(m);sim.setDimensionMode('2D');
+  sim.setGravity(.4,-.8,.7);assert.equal(sim.gravity.z,0);assert.equal(sim.grid.dimensionMode,'2D');
+  sim.emit(1,{x:0,y:.8,z:2},30,.5,1.2);assert.equal(sim.grid.nz,1);
+  let distinctY=false;for(let i=0;i<sim.ps.count;i++){assert.equal(sim.ps.z[i],0);if(Math.abs(sim.ps.y[i]-.8)>.05)distinctY=true;}
+  assert.ok(distinctY,'2D emitter spreads matter across the visible plane');
+  for(let k=0;k<25;k++)sim.step(1/40);
+  for(let i=0;i<sim.ps.count;i++){assert.equal(sim.ps.z[i],0);assert.equal(sim.ps.vz[i],0);}
+  assert.equal(sim.grid.nz,1,'2D neighbor grid keeps a single z layer');
+});
+
+test('switching from 3D to 2D removes existing depth momentum deterministically',()=>{
+  const sim=new SimulationEngine(8),m=generateMaterial(1202,1);sim.registerMaterial(m);const i=sim.ps.add({x:0,y:0,z:1.7,vz:3},m);sim.setDimensionMode('2D');assert.equal(sim.ps.z[i],0);assert.equal(sim.ps.pz[i],0);assert.equal(sim.ps.vz[i],0);sim.setDimensionMode('3D');assert.equal(sim.env.dimensionMode,'3D');assert.equal(sim.grid.dimensionMode,'3D');
 });

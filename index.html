@@ -12,23 +12,27 @@
 </head>
 <body>
   <main id="app">
-    <canvas id="scene" aria-label="3D matter sandbox"></canvas>
+    <canvas id="scene" class="scene-canvas" aria-label="3D matter sandbox"></canvas>
+    <canvas id="scene2d" class="scene-canvas" aria-label="2D matter sandbox" hidden></canvas>
     <header class="topbar">
-      <div><span class="brand">FLUID POCKET</span><span id="status" class="pill">MEDIUM</span></div>
-      <div class="top-actions"><button id="pauseBtn">Pause</button><button id="resetBtn">Reset</button><button id="resetViewBtn">Reset view</button></div>
+      <div class="brand-lockup"><span class="brand-mark"></span><span class="brand">Fluid Pocket</span><span id="status" class="pill">3D</span></div>
+      <div class="top-actions">
+        <div class="view-switch" role="group" aria-label="Simulation dimension"><button id="view2dBtn">2D</button><button id="view3dBtn" class="active">3D</button></div>
+        <button id="pauseBtn" class="quiet-btn">Pause</button><button id="resetBtn" class="quiet-btn">Reset</button><button id="resetViewBtn" class="icon-btn" aria-label="Reset view">↺</button>
+      </div>
     </header>
     <div id="gravityHud" class="gravity-hud">g 0.00 −1.00 0.00</div>
     <div id="toast" class="toast" aria-live="polite"></div>
     <section class="tool-dock" aria-label="Primary tools">
-      <select id="materialSelect" class="fluid-picker" aria-label="Fluid"></select>
+      <select id="materialSelect" class="fluid-picker" aria-label="Material"></select>
       <div class="tool-group" role="group" aria-label="Interaction mode">
-        <button id="brushToolBtn" class="tool-btn primary" aria-label="Brush">Brush</button>
-        <button id="eraserToolBtn" class="tool-btn" aria-label="Eraser">Eraser</button>
-        <button id="inspectToolBtn" class="tool-btn" aria-label="Inspect material">Inspect</button>
-        <button id="cameraToolBtn" class="tool-btn" aria-label="Camera">Camera</button>
+        <button id="brushToolBtn" class="tool-btn primary" aria-label="Draw"><span>＋</span><small>Draw</small></button>
+        <button id="eraserToolBtn" class="tool-btn" aria-label="Erase"><span>−</span><small>Erase</small></button>
+        <button id="inspectToolBtn" class="tool-btn" aria-label="Inspect"><span>⌖</span><small>Inspect</small></button>
+        <button id="cameraToolBtn" class="tool-btn" aria-label="Move view"><span>↔</span><small>View</small></button>
       </div>
       <select id="toolSize" class="size-picker" aria-label="Tool size"><option value="S">S</option><option value="M" selected>M</option><option value="L">L</option><option value="XL">XL</option></select>
-      <button id="sheetToggleBtn" class="controls-toggle" aria-controls="sheet" aria-expanded="false">Controls</button>
+      <button id="sheetToggleBtn" class="controls-toggle icon-btn" aria-controls="sheet" aria-expanded="false" aria-label="Open settings">☰</button>
     </section>
     <aside id="inspectionCard" class="inspection-card" hidden>
       <button id="closeInspectionBtn" class="inspection-close" aria-label="Close inspection">×</button>
@@ -38,7 +42,7 @@
     </aside>
     <section id="sheet" class="sheet collapsed">
       <nav class="tabs" aria-label="Sandbox controls">
-        <button data-tab="material" class="active">MATERIAL</button><button data-tab="box">BOX</button><button data-tab="rules">RULES</button><button data-tab="env">ENV</button><button data-tab="graphics">GRAPHICS</button><button data-tab="debug">DEBUG</button>
+        <button data-tab="material" class="active">Matter</button><button data-tab="box">Box</button><button data-tab="rules">Rules</button><button data-tab="env">World</button><button data-tab="graphics">Display</button><button data-tab="debug">System</button>
       </nav>
       <div class="sheet-content">
         <section data-panel="material" class="panel active">
@@ -68,7 +72,7 @@
             <label>Cloud coarseness <span id="cloudValue">0.78</span><input id="cloudCellSize" type="range" min="0.35" max="1.4" step="0.05" value="0.78"></label>
             <label>Reaction FX <span id="effectsValue">55%</span><input id="effectsScale" type="range" min="0" max="1" step="0.05" value="0.55"></label>
           </div>
-          <p class="hint">Density clouds merge nearby particles into coarse visual cells only. Physics remains particle-based, so this can substantially reduce rendering cost without changing the simulation.</p>
+          <p class="hint">Eco mode favors coarse density clouds. 2D mode also flattens the physics grid to one plane, reducing neighbor-search and rendering work.</p>
         </section>
         <section data-panel="debug" class="panel"><div id="stats" class="stats"></div><div class="row wrap"><button data-debug="none">Normal</button><button data-debug="temperature">Temperature</button><button data-debug="density">Local Density</button><button data-debug="velocity">Velocity</button><button data-debug="material">Material ID</button><button data-debug="phase">Phase</button><button data-debug="grid">Grid</button></div><div class="row"><select id="quality"><option>LOW</option><option selected>MEDIUM</option><option>HIGH</option></select><button id="exportBtn">Export JSON</button><label class="file-btn">Import<input id="importInput" type="file" accept="application/json"></label></div></section>
       </div>

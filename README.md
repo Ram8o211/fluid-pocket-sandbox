@@ -1,6 +1,6 @@
 # Fluid Pocket Sandbox
 
-Fluid Pocket Sandbox is a mobile-first 3D procedural-matter sandbox designed for Chrome on Android. The phone acts conceptually as the container: changing the gravity vector with device orientation (or a touch fallback) changes how liquids, gases, and particle-cluster solids move inside a transparent box.
+Fluid Pocket Sandbox is a mobile-first procedural-matter sandbox with switchable 3D and lightweight 2D modes, designed for Chrome on Android. The phone acts conceptually as the container: changing the gravity vector with device orientation (or a touch fallback) changes how liquids, gases, and particle-cluster solids move inside a transparent box.
 
 This MVP is intentionally an approximate physical sandbox, not a scientific CFD or chemistry solver. Its design goal is systemic causality: local properties cross thresholds, change phase or behavior, and create new local conditions that can trigger further transformations.
 
@@ -23,7 +23,7 @@ Open `http://localhost:4173`. The runtime itself has no npm/browser framework de
 - `src/materials/`: material definitions, deterministic seeded generation, local material sampling/inspection, demo presets.
 - `src/reactions/`: contact-gated mixing, property-distance intensity, reaction-potential and thermal-shock responses.
 - `src/sensors/`: manual, device-orientation, and test gravity providers.
-- `src/rendering/`: lightweight WebGL particle rendering plus optional coarse density-cloud aggregation, transparent box, gravity arrow, and pooled reaction flashes.
+- `src/rendering/`: lightweight WebGL 3D rendering plus a dedicated Canvas2D planar renderer, with optional coarse density-cloud aggregation and reduced visual sampling.
 - `src/performance/`: adaptive quality controller.
 - `src/app/`: orchestration, save/export/import, touch tools.
 
@@ -79,7 +79,7 @@ The `RAIN CYCLE` preset is configured to demonstrate boiling, buoyancy, gas accu
 - `GRAPHICS`: choose Eco/Balanced/Detail or manually control representation, render resolution, visual particle sampling, density-cloud coarseness and reaction FX.
 - `DEBUG`: live phase/reaction/grid statistics, visual debug modes, physics-quality override, setup export/import.
 
-The compact bottom toolbar stays visible while the detailed control drawer can be hidden. Select a fluid, then choose `Brush`, `Eraser`, `Inspect`, or `Camera`; S/M/L/XL size presets are kept independently for brush and eraser. One finger uses the selected tool, so painting never moves the camera. Two simultaneous fingers always temporarily control the camera from any tool: drag their midpoint to orbit and pinch to zoom. In Inspector mode, tap a local region to inspect its current averaged properties and dominant material identity; emergent mixtures can be named and saved into the reusable palette. In Camera mode, one finger also orbits. `Reset view` restores the default camera.
+The interface is intentionally tool-first: a compact bottom dock stays visible, the settings drawer is hidden by default, and a persistent 2D/3D segmented switch changes simulation dimension without opening a menu. The 2D path uses a dedicated Canvas2D renderer and a one-layer spatial grid; entering 2D flattens current particles onto the visible plane.  Select a fluid, then choose `Brush`, `Eraser`, `Inspect`, or `Camera`; S/M/L/XL size presets are kept independently for brush and eraser. One finger uses the selected tool, so painting never moves the camera. Two simultaneous fingers always temporarily control the camera from any tool: drag their midpoint to orbit and pinch to zoom. In Inspector mode, tap a local region to inspect its current averaged properties and dominant material identity; emergent mixtures can be named and saved into the reusable palette. In Camera mode, one finger also orbits. `Reset view` restores the default camera.
 
 ## Device orientation
 
@@ -87,7 +87,7 @@ The compact bottom toolbar stays visible while the detailed control drawer can b
 
 ## Performance
 
-The simulation runs at a fixed 40 Hz while rendering follows `requestAnimationFrame`. Physics LOW/MEDIUM/HIGH controls solver iterations independently from manual graphics settings. The default Balanced graphics path is intentionally lighter than the first MVP: no WebGL antialiasing, reduced render resolution, partial visual sampling, smaller reaction-effect budget and uploads only for actually rendered points. Eco mode goes further by aggregating nearby particles into coarse density clouds, reducing visual point count while leaving the underlying particle physics untouched. The default demonstration uses roughly 420–450 simulated particles; the storage budget remains 1,800.
+The simulation runs at a fixed 40 Hz while rendering follows `requestAnimationFrame`. In 2D mode, depth is removed from integration, the spatial grid collapses to one z layer (9 neighboring cells instead of 27 in the common reach-1 case), and adaptive solver iterations are reduced by one, while 2D rendering uses Canvas2D instead of the WebGL camera path. Physics LOW/MEDIUM/HIGH controls solver iterations independently from manual graphics settings. The default Balanced graphics path is intentionally lighter than the first MVP: no WebGL antialiasing, reduced render resolution, partial visual sampling, smaller reaction-effect budget and uploads only for actually rendered points. Eco mode goes further by aggregating nearby particles into coarse density clouds, reducing visual point count while leaving the underlying particle physics untouched. The default demonstration uses roughly 420–450 simulated particles; the storage budget remains 1,800.
 
 Run `npm run benchmark` for non-gating CPU metrics. Node benchmark numbers are useful for regressions, not direct mobile FPS predictions.
 
@@ -97,7 +97,7 @@ A minimal manifest and service worker cache the application shell with network-f
 
 ## Tests
 
-The Node test suite covers deterministic generation, miscibility gating, rate monotonicity, mass-weighted means, emergent fusion identities and lineage reuse, local Inspector sampling, graphics-setting clamping/presets, visual intensity, hysteresis and all four main phase changes, buoyancy direction, condensation cooling, stratification, grid neighbors, box clamp, finite-value stress behavior, the boil → gas → buoyancy → cooling → condensation causal chain, local erasing, and pinch-camera gesture math/bounds.
+The Node test suite covers deterministic generation, miscibility gating, rate monotonicity, mass-weighted means, emergent fusion identities and lineage reuse, local Inspector sampling, graphics-setting clamping/presets, visual intensity, hysteresis and all four main phase changes, buoyancy direction, condensation cooling, stratification, 3D/2D grid behavior, deterministic depth flattening, box clamp, finite-value stress behavior, the boil → gas → buoyancy → cooling → condensation causal chain, local erasing, and pinch-camera gesture math/bounds.
 
 `npm run e2e` is a dependency-free app-shell smoke test. `e2e/mobile.spec.mjs` documents the Playwright mobile flow intended for a browser-enabled CI/QA environment.
 
