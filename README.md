@@ -15,96 +15,56 @@ npm run build
 npm run dev
 ```
 
-Open `http://localhost:4173`. The runtime itself has no npm/browser framework dependency; The MVP renderer is a zero-dependency raw WebGL point renderer; Three.js was deliberately omitted to remove first-load CDN/network cost and make the PWA self-contained. The static build is emitted to `dist/` and `vercel.json` points Vercel at that directory.
+Open `http://localhost:4173`. The runtime itself has no npm/browser framework dependency; the MVP renderer is a zero-dependency raw WebGL point renderer; Three.js was deliberately omitted to remove first-load CDN/network cost and make the PWA self-contained. The static build is emitted to `dist/` and `vercel.json` points Vercel at that directory.
 
 ## Core architecture
 
-- `src/simulation/`: SoA particle storage, dense spatial grid, fluid/solid/gas motion, thermal exchange, buoyancy, phase transitions.
+- `src/simulation/`: SoA particle storage, dense spatial grid, fluid/solid/gas motion, thermal exchange, buoyancy, phase transitions, solid mechanics, electrical conduction, molds and combustion.
 - `src/materials/`: material definitions, deterministic seeded generation, local material sampling/inspection, demo presets.
-- `src/reactions/`: contact-gated mixing, property-distance intensity, reaction-potential and thermal-shock responses.
+- `src/reactions/`: contact-gated mixing, property-distance intensity, thermal reactions and emergent fusion identities.
 - `src/sensors/`: manual, device-orientation, and test gravity providers.
 - `src/rendering/`: lightweight WebGL 3D rendering plus a dedicated Canvas2D planar renderer, with optional coarse density-cloud aggregation and reduced visual sampling.
 - `src/performance/`: adaptive quality controller.
-- `src/app/`: orchestration, save/export/import, touch tools.
+- `src/app/`: orchestration, save/export/import, responsive mobile/desktop controls.
 
-The hot particle state is stored in parallel `Float32Array`/`Int32Array` buffers. The grid stores per-cell linked lists, avoiding global O(N²) neighbor search.
+The hot particle state is stored in parallel typed-array buffers. The grid stores per-cell linked lists, avoiding global O(N²) neighbor search.
 
-## Simulation model
+## Material and phase model
 
-Liquids use a low-cost position-relaxation solver inspired by position-based fluids / double-density relaxation rather than Navier–Stokes. It provides qualitative volume preservation, cohesion, viscosity damping, splashing, box collisions and density ordering.
+Temperature is state, not an intrinsic material setting. New matter is placed at the current ambient temperature unless a preset explicitly supplies a spawn temperature. Its initial phase is selected from melting/boiling thresholds, so a material whose melting point is above ambient is emitted directly as a solid.
 
-Gas particles are sparse. Local gas density is derived from neighboring gas particles in grid cells. Light gas receives acceleration opposite gravity. When local gas density exceeds the condensation threshold, a configurable cooling term lowers temperature and can move particles below the condensation threshold.
+Materials expose density, viscosity, cohesion, miscibility, heat capacity, thermal conductivity, melting/boiling thresholds, volatility, reaction potential, reaction heat, crystallinity, solid subdivision, electrical conductivity/potential and an independent combustion threshold.
 
-Solids use strongly damped, cohesive particle clusters. Melting progressively removes the solid phase behavior by transitioning particles to liquid.
+Solid subdivision separates low-subdivision coherent rigid clusters from high-subdivision granular solids. Granular solids dissipate motion and stabilize into piles rather than continuously recirculating like liquids. Melting collapses subdivision so a granular feedstock can become one continuous cast and remain coherent after refreezing. Crystallinity controls how strongly a newly frozen coherent solid relaxes toward an ordered local lattice versus preserving the shape present at solidification.
 
-## Material properties
+Molds are open-top collision objects that can receive liquid; after cooling below melting, low-subdivision matter retains the molded shape.
 
-All values use abstract simulation units. Each material has color, opacity, base density, viscosity, cohesion/surface tension, miscibility, temperature, heat capacity, conductivity, melting and boiling thresholds, hysteresis, volatility, reaction potential, and gas compressibility.
+## Mixing, reactions and electricity
 
-Particles copy those properties locally when emitted. This matters: mixing changes only particles that actually touch instead of mutating a global material definition and causing remote transformations. Once two miscible identities converge past the canonical fusion threshold, the contacted matter receives a new emergent material ID rather than inheriting either parent identity.
+Two touching miscible materials converge locally rather than mutating their global presets. Completed fusion creates a distinct emergent material identity keyed by its source lineage. The Inspector can sample that local substance and save it into the reusable palette.
 
-## Mixing and reactions
+Reaction heat is independent from the abstract reaction potential. Thresholded property differences can therefore create exothermic or endothermic local responses. Conductive materials exchange electric potential through local contacts; potential remains a material/particle field and is exposed in debug visualization.
 
-For two touching particles:
+## Combustion
 
-- `ΔM = |miscibilityA - miscibilityB|` gates mixing.
-- Compatibility increases as `ΔM → 0`.
-- Reaction rate is `baseRate * compatibility^p * contactFactor`.
-- Visual/impulse intensity also depends on normalized property distance.
-- Local particle properties converge toward a mass-weighted mean.
-- Completed fusion creates a new emergent material identity keyed by its ingredient lineage, avoiding both parent-ID reuse and uncontrolled identity explosion.
-- The Inspector can sample that locally created substance and save a reusable snapshot into the material palette.
-- Strongly opposite abstract reaction potentials dissipate into heat and impulse.
-- Large temperature differences generate thermal-shock turbulence.
+Combustion is an independent thermal threshold and may lie below melting, between melting and boiling, or above boiling. Once local temperature stays above it, matter is consumed progressively and releases heat. A completed combustion event deterministically derives two or three daughter materials from the parent properties. Daughter fractions sum to the consumed parent mass, so total particle mass is conserved. Products have reproducibly different optical, mechanical, thermal and electrical properties and can themselves be inspected and saved.
 
-See `docs/REACTION_SYSTEM.md`.
+## 2D and 3D
 
-## Phase transitions
+The persistent 2D/3D switch changes both rendering and simulation dimension. 2D uses a dedicated Canvas2D renderer, removes z motion, collapses the spatial grid to one layer and reduces solver work. The planar box can be expanded to 60×60 simulation units. Entering 2D flattens existing matter onto z=0; returning to 3D does not invent lost depth.
 
-Transitions use hysteresis and progress rather than instantaneous toggles:
+## Controls and desktop
 
-- solid → liquid above melting + hysteresis;
-- liquid → solid below melting − hysteresis;
-- liquid → gas above boiling + hysteresis;
-- gas → liquid below boiling − hysteresis.
+On mobile the interface remains tool-first: material + Draw/Erase/Inspect/Mold/View stay in the compact dock while detailed controls live in a collapsible sheet. Two fingers always override the active tool for view movement and pinch zoom.
 
-The `RAIN CYCLE` preset is configured to demonstrate boiling, buoyancy, gas accumulation, concentration-driven cooling, condensation, and falling liquid.
+On desktop (fine pointer, 900 px or wider) the same application switches to a dedicated workspace: left tool palette, right settings inspector, mouse-wheel zoom and right/middle-drag or Alt-drag camera override. Shortcuts: `1–5` tools, `H/C` thermal tools, `D` 2D/3D, `Space` pause, `R` reset view, `[`/`]` tool size and `Esc` close contextual panels.
 
-## Controls
+## Performance and QA
 
-- `MATERIAL`: create/randomize materials, edit physical properties, pour, heat and cool.
-- `BOX`: resize the container from 3–12 simulation units on each axis.
-- `RULES`: tune mixing, condensation and thermal coupling.
-- `ENV`: tune environment density, ambient temperature, gravity and sensor sensitivity; enable/calibrate motion controls or drag the manual gravity pad.
-- `GRAPHICS`: choose Eco/Balanced/Detail or manually control representation, render resolution, visual particle sampling, density-cloud coarseness and reaction FX.
-- `DEBUG`: live phase/reaction/grid statistics, visual debug modes, physics-quality override, setup export/import.
+Physics LOW/MEDIUM/HIGH remains separate from manual graphics settings. Eco rendering can aggregate matter into coarse density clouds; resolution, visual sampling, cloud size and reaction effects are independently adjustable. 2D additionally reduces simulation cost by using a planar neighbor search.
 
-The interface is intentionally tool-first: a compact bottom dock stays visible, the settings drawer is hidden by default, and a persistent 2D/3D segmented switch changes simulation dimension without opening a menu. The 2D path uses a dedicated Canvas2D renderer and a one-layer spatial grid; entering 2D flattens current particles onto the visible plane.  Select a fluid, then choose `Brush`, `Eraser`, `Inspect`, or `Camera`; S/M/L/XL size presets are kept independently for brush and eraser. One finger uses the selected tool, so painting never moves the camera. Two simultaneous fingers always temporarily control the camera from any tool: drag their midpoint to orbit and pinch to zoom. In Inspector mode, tap a local region to inspect its current averaged properties and dominant material identity; emergent mixtures can be named and saved into the reusable palette. In Camera mode, one finger also orbits. `Reset view` restores the default camera.
-
-## Device orientation
-
-`DeviceOrientationProvider` performs feature detection, requests iOS-style permission only from a user gesture, supports calibration and low-pass filtering, clamps noisy input, and can always be replaced by `ManualGravityProvider`. Tests use `TestGravityProvider`; no physical sensor is required.
-
-## Performance
-
-The simulation runs at a fixed 40 Hz while rendering follows `requestAnimationFrame`. In 2D mode, depth is removed from integration, the spatial grid collapses to one z layer (9 neighboring cells instead of 27 in the common reach-1 case), and adaptive solver iterations are reduced by one, while 2D rendering uses Canvas2D instead of the WebGL camera path. Physics LOW/MEDIUM/HIGH controls solver iterations independently from manual graphics settings. The default Balanced graphics path is intentionally lighter than the first MVP: no WebGL antialiasing, reduced render resolution, partial visual sampling, smaller reaction-effect budget and uploads only for actually rendered points. Eco mode goes further by aggregating nearby particles into coarse density clouds, reducing visual point count while leaving the underlying particle physics untouched. The default demonstration uses roughly 420–450 simulated particles; the storage budget remains 1,800.
-
-Run `npm run benchmark` for non-gating CPU metrics. Node benchmark numbers are useful for regressions, not direct mobile FPS predictions.
-
-## PWA and persistence
-
-A minimal manifest and service worker cache the application shell with network-first refresh for code assets, preventing stale branch previews during iteration. Reusable material definitions (including Inspector captures), rules, graphics settings and box/environment settings are saved locally. JSON export/import supports sharing setups. Full live-particle state persistence is not part of this MVP.
-
-## Tests
-
-The Node test suite covers deterministic generation, miscibility gating, rate monotonicity, mass-weighted means, emergent fusion identities and lineage reuse, local Inspector sampling, graphics-setting clamping/presets, visual intensity, hysteresis and all four main phase changes, buoyancy direction, condensation cooling, stratification, 3D/2D grid behavior, deterministic depth flattening, box clamp, finite-value stress behavior, the boil → gas → buoyancy → cooling → condensation causal chain, local erasing, and pinch-camera gesture math/bounds.
-
-`npm run e2e` is a dependency-free app-shell smoke test. `e2e/mobile.spec.mjs` documents the Playwright mobile flow intended for a browser-enabled CI/QA environment.
+The Node test suite covers phase placement from ambient temperature, solid subdivision behavior, deterministic combustion products and mass preservation, mixing and emergent identities, thermal behavior, 2D/3D grid behavior, box bounds, Inspector sampling, graphics settings, erasing and gesture math. `npm run e2e` is a dependency-free app-shell smoke test. Full Android touch/gyro/FPS validation still requires a real browser/device pass.
 
 ## Deployment
 
-Vercel should build with `npm run build` and serve `dist/`. GitHub is intended to remain the source of truth; development should occur on `feature/procedural-fluid-sandbox-mvp` before any merge to `main`.
-
-## Known MVP limitations
-
-This is not quantitatively calibrated physics. Surface reconstruction, true pressure solves, rigid-body solids, latent heat, real thermodynamics/chemistry and fully conservative energy integration are deliberately out of scope. The solver prioritizes causal legibility, stability and mobile cost. The runtime has no external browser dependency and can be cached entirely by the service worker after first application load.
+Vercel builds with `npm run build` and serves `dist/`. GitHub remains the source of truth; active development stays on `feature/procedural-fluid-sandbox-mvp` until browser/mobile QA is complete.
