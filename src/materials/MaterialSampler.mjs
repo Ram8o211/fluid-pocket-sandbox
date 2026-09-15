@@ -2,7 +2,7 @@ import { rgbToHex } from '../simulation/math.mjs';
 import { sanitizeMaterial } from './MaterialDefinition.mjs';
 
 const PARTICLE_TO_MATERIAL = Object.freeze({
-  opacity: 'opacity', density: 'baseDensity', viscosity: 'viscosity', cohesion: 'cohesion', miscibility: 'miscibility', particleRadius: 'particleRadius',
+  opacity: 'opacity', density: 'baseDensity', viscosity: 'viscosity', cohesion: 'cohesion', miscibility: 'miscibility', particleRadius: 'particleRadius', incompressible: 'incompressible',
   heatCapacity: 'heatCapacity', thermalConductivity: 'thermalConductivity', meltingTemperature: 'meltingTemperature',
   boilingTemperature: 'boilingTemperature', phaseTransitionHysteresis: 'phaseHysteresis', volatility: 'volatility',
   reactionPotential: 'reactionPotential', reactionHeat: 'reactionHeat', compressibility: 'compressibility',
@@ -21,14 +21,15 @@ function weightedParticleMaterial(ps, weightedIndices, id, name, metadata={}) {
     sourceMass.set(ps.materialId[index],(sourceMass.get(ps.materialId[index])||0)+w);
   }
   if(totalWeight<=1e-8)return null;
-  const sourceMaterialIds=[...sourceMass.entries()].sort((a,b)=>b[1]-a[1]).map(([sourceId])=>sourceId);
+  const sorted=[...sourceMass.entries()].sort((a,b)=>b[1]-a[1]);
+  const sourceMaterialIds=sorted.map(([sourceId])=>sourceId),dominantMaterialId=sourceMaterialIds[0]??null,dominantShare=sorted.length?sorted[0][1]/totalWeight:0;
   const material={
     id,name,seed:Math.abs(sourceMaterialIds.reduce((s,v)=>((s*1664525)^v)>>>0,2166136261)),
     color:rgbToHex(r/totalWeight,g/totalWeight,b/totalWeight),
     ...Object.fromEntries(Object.keys(PARTICLE_TO_MATERIAL).map(key=>[key,sums[key]/totalWeight])),
     sourceMaterialIds,...metadata
   };
-  return {material:sanitizeMaterial(material),temperature:temperature/totalWeight,sourceMaterialIds,totalWeight,dominantMaterialId:sourceMaterialIds[0]??null};
+  return {material:sanitizeMaterial(material),temperature:temperature/totalWeight,sourceMaterialIds,totalWeight,dominantMaterialId,dominantShare};
 }
 
 export function materialFromParticlePair(ps,i,j,id,name,metadata={}){
@@ -42,5 +43,5 @@ export function sampleMaterialAt(ps,point,radius=.75,id=1,name='Sampled material
     if(d2>r2)continue;const d=Math.sqrt(d2),weight=.12+.88*(1-d/radius);weighted.push({index:i,weight});count++;
   }
   const result=weightedParticleMaterial(ps,weighted,id,name,{sampled:true,reusable:false});
-  return result?{...result,count,radius,point:{...point}}:null;
+  return result?{...result,count,indices:weighted.map(v=>v.index),radius,point:{...point}}:null;
 }

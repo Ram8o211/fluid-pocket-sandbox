@@ -35,17 +35,18 @@ export class SpatialGrid {
       }
     }
   }
-  forEachPair(ps,radius,callback){
-    const nx=this.nx,ny=this.ny,nz=this.nz,nxy=nx*ny,head=this.head,next=this.next;
-    const reach=Math.max(1,Math.ceil(radius/this.cellSize)),zReach=this.dimensionMode==='2D'?0:reach;
+  forEachPair(ps,radius,callback,stride=1,phase=0){
+    const nx=this.nx,ny=this.ny,nz=this.nz,head=this.head,next=this.next;
+    const reach=Math.max(1,Math.ceil(radius/this.cellSize)),zReach=this.dimensionMode==='2D'?0:reach,s=Math.max(1,stride|0),p=((phase%s)+s)%s;let ordinal=0;
+    const emit=(i,j)=>{const take=s===1||(ordinal%s)===p;ordinal++;if(take)callback(i,j);};
     for(let cz=0;cz<nz;cz++)for(let cy=0;cy<ny;cy++)for(let cx=0;cx<nx;cx++){
       const c=cx+nx*(cy+ny*cz),first=head[c];if(first===-1)continue;
-      for(let i=first;i!==-1;i=next[i])for(let j=next[i];j!==-1;j=next[j])callback(i,j);
+      for(let i=first;i!==-1;i=next[i])for(let j=next[i];j!==-1;j=next[j])emit(i,j);
       for(let dz=-zReach;dz<=zReach;dz++)for(let dy=-reach;dy<=reach;dy++)for(let dx=-reach;dx<=reach;dx++){
         if(dz<0||(dz===0&&dy<0)||(dz===0&&dy===0&&dx<=0))continue;
         const xx=cx+dx,yy=cy+dy,zz=cz+dz;if(xx<0||yy<0||zz<0||xx>=nx||yy>=ny||zz>=nz)continue;
-        const other=xx+nx*(yy+ny*zz),second=head[other];if(second===-1)continue;
-        for(let i=first;i!==-1;i=next[i])for(let j=second;j!==-1;j=next[j])callback(i,j);
+        const second=head[xx+nx*(yy+ny*zz)];if(second===-1)continue;
+        for(let i=first;i!==-1;i=next[i])for(let j=second;j!==-1;j=next[j])emit(i,j);
       }
     }
   }

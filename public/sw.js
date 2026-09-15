@@ -1,4 +1,4 @@
-const CACHE='fluid-pocket-v8';
+const CACHE='fluid-pocket-v9';
 const CORE=['/','/index.html','/styles.css','/base.css','/desktop.css','/fixes.css','/src/app/main.mjs','/manifest.webmanifest','/icons/icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
