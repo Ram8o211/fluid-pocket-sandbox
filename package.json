@@ -1,0 +1,19 @@
+{
+  "name": "fluid-pocket-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mobile-first emergent procedural matter sandbox",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "node scripts/lint.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "benchmark": "node scripts/benchmark.mjs",
+    "build": "node scripts/build.mjs",
+    "e2e": "node scripts/e2e-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
