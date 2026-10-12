@@ -7,6 +7,7 @@ import { encodeSave, decodeSave } from '../src/game/persistence.mjs';
 import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
 import { effectiveParticleRadius, particlePairRestDistance } from '../src/simulation/FluidSolver.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
+import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
 import { FIXED_STEP, SAVE_VERSION } from '../src/game/contracts.mjs';
 import { insideCauldron, cauldronParticlePadding, confineCauldronParticle, cauldronGranularWallSupport } from '../src/game/cauldron.mjs';
 
@@ -166,6 +167,42 @@ test('the cauldron stops downward powder impacts with no rebound and supports re
   for(let n=0;n<100;n++)b.step();
   assert.ok(Math.abs(ps.y[i]-beforeY)<.005,'unsupported spring oscillation at rest');
   assert.ok(Math.abs(ps.vy[i])<.05,'resting grain must not store rebound speed');
+});
+
+test('sand avalanches down steep single-grain supports but wet dough resists',()=>{
+  const b=new BrewingSession(generateWorld('sand-angle').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10);
+  ps.add({x:0,y:0,z:0,mass:.25},material,Phase.SOLID);
+  ps.add({x:.06,y:-.08,z:0,mass:.25},material,Phase.SOLID);
+  e.grid.rebuild(ps,e.env.box);
+  // A 37-degree off-centre support is steeper than the ~27-degree
+  // dry angle of repose, so gravity makes the upper grain slide to the left.
+  e.solid.settleGranularParticle(ps,e.grid,0,e.env,{x:0,y:-4.5,z:0},FIXED_STEP,true);
+  assert.ok(ps.vx[0]<-.001,`dry grain stuck on an unstable sand slope: ${ps.vx[0]}`);
+  const drySpeed=Math.abs(ps.vx[0]);
+  ps.vx[0]=ps.vy[0]=0;ps.powderContent[0]=.55;
+  e.solid.settleGranularParticle(ps,e.grid,0,e.env,{x:0,y:-4.5,z:0},FIXED_STEP,true);
+  assert.ok(Math.abs(ps.vx[0])<drySpeed*.1,'hydrated dough should not avalanche like dry sand');
+  // Without any supporting neighbor there must be no invisible shelf force.
+  ps.y[1]=-1;e.grid.rebuild(ps,e.env.box);ps.vy[0]=-.3;
+  e.solid.settleGranularParticle(ps,e.grid,0,e.env,{x:0,y:-4.5,z:0},FIXED_STEP,true);
+  near(ps.vy[0],-.3);
+});
+
+test('all potion materials use fine pixel footprints at both graphics resolutions',()=>{
+  const b=new BrewingSession(generateWorld('fine-pixels').ingredients),ps=b.engine.ps;
+  const liquid=b.engine.materials.get(1),powder=b.engine.materials.get(10);
+  ps.add({x:0,y:0,z:0,mass:.25},liquid,Phase.LIQUID);
+  ps.add({x:.3,y:0,z:0,mass:.25},powder,Phase.SOLID);
+  ps.add({x:-.3,y:0,z:0,mass:.25},liquid,Phase.GAS);
+  const draws=[],ctx={globalAlpha:1,fillStyle:'',fillRect(...args){draws.push(args);}};
+  const renderer={sim:b.engine,colorScratch:{r:0,g:0,b:0},particleColor(_ps,_i,out){out.r=180;out.g=140;out.b=100;}};
+  for(const [scale,maxSize] of [[40,4],[20,2]]){
+    draws.length=0;
+    LaboratoryRenderer.prototype.drawFluid.call(renderer,ctx,{cx:192,cy:158,scale});
+    assert.ok(draws.length>=ps.count,'every material phase should be visible');
+    assert.ok(draws.every(([, ,w,h])=>w>0&&h>0&&w<=maxSize&&h<=maxSize),
+      `oversized material pixel at scale ${scale}: ${JSON.stringify(draws)}`);
+  }
 });
 
 test('starter powders pour as dry grains and settle into a compact frictional pile',()=>{

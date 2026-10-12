@@ -86,7 +86,9 @@ export function cauldronGranularWallSupport(ps,i,gravity) {
   const length=Math.hypot(gravity.x,gravity.y)||1;
   const againstX=-gravity.x/length,againstY=-gravity.y/length;
   const padding=cauldronParticlePadding(ps,i);
-  return PLANES.some(p=>p.nx*againstX+p.ny*againstY>.35
+  // Only near-horizontal floor planes can cancel gravity outright. Inclined
+  // copper walls must let sand slide toward the bottom, not pin grains in place.
+  return PLANES.some(p=>p.nx*againstX+p.ny*againstY>.85
     && (ps.x[i]-p.x)*p.nx+(ps.y[i]-p.y)*p.ny-padding<.005);
 }
 
