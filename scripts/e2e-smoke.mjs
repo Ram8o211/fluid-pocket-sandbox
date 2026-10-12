@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readFile, access } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
-const required = ['index.html', 'sandbox.html', 'public/game.css', 'public/icons/alchemist.svg', 'public/manifest.webmanifest', 'src/game/main.mjs', 'src/game/brewing.mjs', 'src/simulation/GasDensitySolver.mjs', 'src/app/main.mjs', 'styles.css', 'public/base.css', 'public/desktop.css', 'public/fixes.css', 'sw.js', 'public/sw.js'];
+const required = ['index.html', 'sandbox.html', 'public/game.css', 'public/icons/alchemist.svg', 'public/manifest.webmanifest', 'src/game/main.mjs', 'src/game/brewing.mjs', 'src/simulation/GasDensitySolver.mjs', 'src/simulation/PowderSolver.mjs', 'src/app/main.mjs', 'styles.css', 'public/base.css', 'public/desktop.css', 'public/fixes.css', 'sw.js', 'public/sw.js'];
 const server = spawn(process.execPath, ['scripts/dev-server.mjs'], { stdio: 'ignore', env: { ...process.env, PORT: '4175', BASE_PATH: '/fluid-pocket-sandbox' } });
 try {
   await sleep(250);

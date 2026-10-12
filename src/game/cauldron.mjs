@@ -68,3 +68,26 @@ export function traceCauldron(ctx, transform) {
   ctx.closePath();
 }
 
+
+// A rigid block hits the pot as a whole: never project its individual grains
+// independently, which bends a frozen body at the tapered floor.
+export function confineCauldronBodies(ps) {
+  const groups=new Map();
+  for(let i=0;i<ps.count;i++){
+    const id=ps.phase[i]===0&&ps.solidSubdivision[i]<.55?ps.solidBodyId[i]:0;
+    if(!id){confineCauldronParticle(ps,i);continue;}
+    if(!groups.has(id))groups.set(id,[]);groups.get(id).push(i);
+  }
+  for(const indices of groups.values())for(let pass=0;pass<6;pass++){
+    let touched=false;
+    for(const p of PLANES){
+      let penetration=0;
+      for(const i of indices)penetration=Math.max(penetration,cauldronParticlePadding(ps,i)-(ps.x[i]-p.x)*p.nx-(ps.y[i]-p.y)*p.ny);
+      if(penetration<=0)continue;touched=true;
+      let mass=0,vx=0,vy=0;for(const i of indices){mass+=ps.mass[i];vx+=ps.vx[i]*ps.mass[i];vy+=ps.vy[i]*ps.mass[i];}
+      const normal=(vx*p.nx+vy*p.ny)/Math.max(.00001,mass);
+      for(const i of indices){ps.x[i]+=p.nx*penetration;ps.y[i]+=p.ny*penetration;if(normal<0){ps.vx[i]-=p.nx*normal;ps.vy[i]-=p.ny*normal;}}
+    }
+    if(!touched)break;
+  }
+}

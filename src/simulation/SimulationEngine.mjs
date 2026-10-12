@@ -10,6 +10,7 @@ import { updateElectrical } from './ElectricalSolver.mjs';
 import { updatePhaseParticle } from './PhaseSolver.mjs';
 import { applyBuoyancy } from './BuoyancySolver.mjs';
 import { updateGasDensity } from './GasDensitySolver.mjs';
+import { updatePowderDissolution } from './PowderSolver.mjs';
 import { Phase } from './Phase.mjs';
 import { clamp } from './math.mjs';
 import { materialFromParticlePair, sampleMaterialAt } from '../materials/MaterialSampler.mjs';
@@ -73,6 +74,7 @@ export class SimulationEngine{
     let positionsDirty=false;if(hasSolid){this.solid.step(this.ps,this.grid,this.env,this.gravity,dt);this.fluid.collideBox(this.ps,this.env.box,planar);positionsDirty=true;}if(this.molds.molds.length||this.molds.barriers.size){this.molds.collide(this.ps,planar);positionsDirty=true;}if(positionsDirty){this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);}
     if(this.stepIndex%profile.electricalStride===0)updateElectrical(this.ps,this.grid,this.rules,dt*profile.electricalStride);
     if(this.stepIndex%profile.reactionStride===0)this.reactions.step(this.ps,this.grid,this.rules,dt*profile.reactionStride,(ps,i,j,a,b)=>this.resolveFusion(ps,i,j,a,b));else this.reactions.clearFrame();
+    updatePowderDissolution(this.ps,dt);
     if(this.stepIndex%profile.combustionStride===0)this.combustion.step(this.ps,this.grid,this.materials,this.rules,this.env,dt*profile.combustionStride,m=>this.resolveCombustionProducts(m),(index,isPlanar)=>this.solid.initializeParticle(this.ps,index,isPlanar,this.grid),(x,y,z,intensity,thermal)=>this.reactions.pushEvent(x,y,z,intensity,thermal));else this.combustion.resetFrame();
     this.sanitize(this.stepIndex%profile.clampStride===0);this.boundaryCollider?.();this.stats.reactions=this.reactions.activeReactions+this.combustion.events;this.stats.combustions=this.combustion.events;this.stats.combustionMass=this.combustion.massConsumed;this.stats.gridCells=this.grid.cellCount;this.stats.phaseChanges=changes;this.stats.performanceTier=profile.tier;
   }
