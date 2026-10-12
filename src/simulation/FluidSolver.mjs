@@ -53,7 +53,10 @@ export class FluidSolver {
     // Granular contacts are unilateral, not springs. Separate penetrations
     // without pushing beyond the contact distance; leave distant grains alone.
     if(d<rest)separatePair(ps,i,j,nx,ny,nz,(rest-d)*.92,planar);
-    if(d>rest*1.08)return;
+    // Contact impulses are strictly local. Stopping approaching grains even
+    // slightly before their surfaces meet creates a permanent invisible gap
+    // because gravity subsequently accelerates both grains equally.
+    if(d>rest)return;
     const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i],normal=dvx*nx+dvy*ny+dvz*nz;
     // Cancel *all* approaching normal velocity with zero restitution. Unlike
     // an elastic impulse this never reverses the approach into a bounce.
