@@ -4,7 +4,7 @@ import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
 import { measurePotion } from './potion.mjs';
 import { CAPACITY_ML, FIXED_STEP, ROOM_TEMPERATURE, ROOM_DENSITY } from './contracts.mjs';
-import { confineCauldronBodies, confineCauldronParticle, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
+import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSupport, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 
@@ -44,6 +44,7 @@ export class BrewingSession {
     this.engine.reactions.mixtures = new MixtureSolver();
     this.engine.iterations = 1;
     this.engine.boundaryCollider = () => this.confineCauldron();
+    this.engine.env.granularWallSupport = cauldronGranularWallSupport;
     this.engine.rules.mixingTemperatureCoefficient = 3.5;
     // Contact ranges track the finer particle spacing. The sandbox defaults are
     // untouched; local neighbours keep full cauldrons within the mobile budget.
