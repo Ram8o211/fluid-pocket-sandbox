@@ -167,6 +167,17 @@ test('save/load preserves seed, stock, equipment, orders, full cauldron and pend
   close(restored.inspect().stability, brew.inspect().stability); close(restored.engine.ps.totalMass(), brew.engine.ps.totalMass());
   assert.equal(restored.heat, 0); // A resumed save never leaves a furnace unattended.
 });
+test('the Continue snapshot contains the latest particle positions and does not alias a live brew', () => {
+  const { state, brew } = setup(), data = new Map();
+  const storage = { getItem: key => data.get(key) || null, setItem: (key, value) => data.set(key, value) };
+  brew.pour(1, 20, state.inventory); const poured = saveShop(storage, state, brew);
+  const firstPositions = poured.brew.particles.y.slice(); ticks(brew, 160);
+  const settled = saveShop(storage, state, brew);
+  assert.deepEqual(settled.brew, brew.snapshot());
+  assert.deepEqual(settled.brew, JSON.parse(data.get(SAVE_KEY)).brew);
+  assert.notDeepEqual(settled.brew.particles.y, firstPositions);
+  assert.deepEqual(poured.brew.particles.y, firstPositions);
+});
 test('save migrations preserve progress, recover a good backup, reject corrupt and future data', () => {
   const { state, brew } = setup(); const text = encodeSave(state, brew), raw = JSON.parse(text); raw.version = 1;
   assert.equal(decodeSave(JSON.stringify(raw)).version, 2);

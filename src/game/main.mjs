@@ -31,7 +31,7 @@ function randomSeed() {
 function persist() {
   if (!state || !brew) return;
   try {
-    saveShop(localStorage, state, brew); loaded = { state, error: '' }; saveFailed = false;
+    const savedState = saveShop(localStorage, state, brew); loaded = { state: savedState, error: '' }; saveFailed = false;
     $('saveStatus').textContent = 'Saved on this device'; $('continueBtn').disabled = false;
     lastAutosave = performance.now();
   } catch (err) {

@@ -13,8 +13,8 @@ import { Phase } from './Phase.mjs';
 import { clamp } from './math.mjs';
 import { materialFromParticlePair, sampleMaterialAt } from '../materials/MaterialSampler.mjs';
 
-export const DEFAULT_RULES={miscibilityThreshold:.12,interactionRadiusScale:1,baseMixingRate:2.2,mixingTemperatureCoefficient:0,mixingExponent:1.7,condensationDensityThreshold:.62,condensationCoolingCoefficient:.38,thermalDiffusionRate:.7,reactionStrength:1.15,thermalShockStrength:1.1,canonicalizationDistance:.025,thermalReactionThreshold:.72,thermalReactionStrength:1.15,electricalConductionRate:2.2,jouleHeating:.025,combustionRate:1,combustionHeatScale:1};
-export const DEFAULT_ENV={environmentDensity:.52,ambientTemperature:.33,gravityStrength:5.4,buoyancyStrength:8.5,maxVelocity:7,dimensionMode:'3D',box:{width:5.4,height:7.2,depth:4.2}};
+export const DEFAULT_RULES={miscibilityThreshold:.12,interactionRadiusScale:1,baseMixingRate:2.2,mixingTemperatureCoefficient:0,mixingExponent:1.7,condensationDensityThreshold:.62,condensationCoolingCoefficient:.38,thermalDiffusionRate:.7,reactionStrength:1.15,thermalShockStrength:1.1,canonicalizationDistance:.025,thermalReactionThreshold:.72,thermalReactionStrength:1.15,electrostaticStrength:2.4,electricalConductionRate:2.2,jouleHeating:.025,combustionRate:1,combustionHeatScale:1};
+export const DEFAULT_ENV={environmentDensity:.52,ambientTemperature:.33,gravityStrength:5.4,buoyancyStrength:8.5,maxVelocity:7,liquidConstraintVelocityShare:1,dimensionMode:'3D',box:{width:5.4,height:7.2,depth:4.2}};
 export const DEFAULT_BOX_BY_MODE=Object.freeze({'3D':Object.freeze({width:5.4,height:7.2,depth:4.2}),'2D':Object.freeze({width:18,height:24,depth:4.2})});
 
 function cleanBox(box,fallback){return {width:clamp(Number(box?.width)||fallback.width,3,60),height:clamp(Number(box?.height)||fallback.height,3,60),depth:clamp(Number(box?.depth)||fallback.depth,3,18)};}

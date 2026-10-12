@@ -17,6 +17,11 @@ export class BrewingSession {
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
     this.engine.env.environmentDensity = .22;
     this.engine.env.gravityStrength = 4.5; this.engine.setGravity(0, -1, 0);
+    // Bulk reagents are electrically neutral fluids. Conductivity still drives
+    // charge exchange and alchemy, but point-charge repulsion must not levitate
+    // their small, low-mass parcels against gravity.
+    this.engine.rules.electrostaticStrength = 0;
+    this.engine.env.liquidConstraintVelocityShare = .15;
     this.engine.iterations = 1;
     this.engine.boundaryCollider = () => this.confineCauldron();
     this.engine.rules.mixingTemperatureCoefficient = 3.5;

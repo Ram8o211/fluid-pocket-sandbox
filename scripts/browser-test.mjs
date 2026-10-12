@@ -103,6 +103,18 @@ try {
   await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: tx + 28, y: ty - 18 }] });
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.locator('#measureBtn').click(); assert.match(await page.locator('#sheetContent').textContent(), /Density/); await page.locator('[data-action="close"]').click();
+  // Stop applying impulses and let gravity collect the small batch. Persist via
+  // the visible menu so this assertion reads the actual simulated resting state.
+  await page.waitForTimeout(2200); await page.locator('#menuBtn').click();
+  const settledSave = await readSave(page);
+  const settledY = settledSave.brew.particles.y.slice().sort((a, b) => a - b);
+  assert.ok(settledY.reduce((sum, y) => sum + y, 0) / settledY.length < -.75, 'Liquid should pool at the bottom');
+  assert.ok(settledY[Math.floor(settledY.length * .95)] < -.55, 'Idle liquid must not hang in mid-air');
+  await page.locator('#continueBtn').click(); await page.waitForSelector('body[data-game-state="brewing"]', { timeout });
+  const resumed = await readSave(page);
+  const resumedY = resumed.brew.particles.y.slice().sort((a, b) => a - b);
+  assert.ok(resumedY[Math.floor(resumedY.length * .95)] < -.55, 'Continue should preserve the settled physical state');
+  await page.screenshot({ path: 'test-results/settled-liquid.png', fullPage: true });
   // A real small batch boils through visible controls. The lid keeps its mass,
   // warns the player, and blocks bottling until cooling completes the phase loop.
   const massBeforeBoiling = beforeReload.brew.particles.mass.reduce((sum, mass) => sum + mass, 0);
@@ -128,5 +140,5 @@ try {
   assert.ok((await page.locator('#materialSelect').textContent()).length > 5);
   await page.screenshot({ path: 'test-results/original-sandbox.png', fullPage: true });
   assert.deepEqual(failedResponses, [], 'Missing deployment assets'); assert.deepEqual(errors, [], 'Browser initialization/runtime errors');
-  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, retained steam and condensation with conserved mass, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
+  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, gravity-driven liquid settling, retained steam and condensation with conserved mass, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
 } finally { if (browser) await browser.close(); if (server) server.kill('SIGTERM'); }

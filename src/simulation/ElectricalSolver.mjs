@@ -20,7 +20,9 @@ export function electrostaticPairImpulse(potentialA,potentialB,distance,strength
 
 export function updateElectrical(ps,grid,rules,dt){
   const rate=Math.max(0,rules.electricalConductionRate??2.2),joule=Math.max(0,rules.jouleHeating??.025),forceStrength=Math.max(0,rules.electrostaticStrength??2.4);
-  const dense=ps.count>1800,massive=ps.count>3500,interactionScale=clamp(rules.interactionRadiusScale??1,.4,1),forceRadius=(massive?.58:(dense?1.0:FORCE_RADIUS))*interactionScale;
+  // Neutral bulk fluids only need contact neighbours for charge conduction;
+  // traversing a disabled long-range field is particularly costly in a pool.
+  const dense=ps.count>1800,massive=ps.count>3500,interactionScale=clamp(rules.interactionRadiusScale??1,.4,1),forceRadius=(forceStrength>0?(massive?.58:(dense?1.0:FORCE_RADIUS)):CONTACT_RADIUS)*interactionScale;
   const x=ps.x,y=ps.y,z=ps.z,vx=ps.vx,vy=ps.vy,vz=ps.vz,conductivity=ps.electricalConductivity,potential=ps.electricPotential,temp=ps.temperature,heatCapacity=ps.heatCapacity,mass=ps.mass;
   grid.forEachPair(ps,forceRadius,(i,j)=>{
     const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<=1e-10)return;const d=Math.sqrt(d2);

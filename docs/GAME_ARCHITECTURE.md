@@ -44,6 +44,13 @@ phases inside the same convex cutaway used for rendering. Radius-aware collision
 planes run during fluid integration and packing, after rigid contacts, and after
 generated products. Clipping also contains particle rounding and reaction effects.
 
+Shop liquids use downward gravity without the sandbox's point-charge repulsion.
+Electrical conductivity and potential still drive charge exchange and alchemical
+measurements. The game bounds velocity feedback from dense overlap corrections;
+supporting contacts arrest falling liquid instead of launching it upward. This
+lets small batches settle into a bottom pool and settle again after stirring.
+Steam retains its existing buoyancy, and sandbox force/solver defaults are intact.
+
 Vapour is retained, continues to reserve capacity, and cools gradually through the
 lid. Frost accelerates that cooling; the existing hysteretic PhaseSolver converts
 gas back to liquid over time. Bottling waits while more than .01 ml remains as
