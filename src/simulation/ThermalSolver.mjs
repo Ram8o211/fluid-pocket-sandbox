@@ -17,8 +17,8 @@ export function updateThermal(ps,grid,rules,env,dt){
     if(phase[i]===Phase.GAS)t-=condensationCooling(gasDensity[i],rules.condensationDensityThreshold,rules.condensationCoolingCoefficient)*dt;
     const ambientFraction=1-Math.exp(-Math.max(0,conductivity[i])*diffusion*dt*.08);t+=(ambient-t)*ambientFraction;temp[i]=clamp(t,0,1.2);
   }
-  const x=ps.x,y=ps.y,z=ps.z,r2=.3025;
-  grid.forEachPair(ps,.55,(i,j)=>{
+  const x=ps.x,y=ps.y,z=ps.z,radius=.55*clamp(rules.interactionRadiusScale??1,.4,1),r2=radius*radius;
+  grid.forEachPair(ps,radius,(i,j)=>{
     const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i];if(dx*dx+dy*dy+dz*dz>r2)return;
     const f=thermalConductionFraction(conductivity[i],conductivity[j],diffusion,dt);if(f<=0)return;
     const ca=Math.max(.02,heatCapacity[i]*mass[i]),cb=Math.max(.02,heatCapacity[j]*mass[j]),eq=(temp[i]*ca+temp[j]*cb)/(ca+cb);

@@ -1,7 +1,7 @@
 /**
  * Public gameplay contracts. Physics temperatures/densities are normalized engine
  * units; quantities shown to players are ml. One emitted particle initially holds
- * one ml (mass = ingredient density). Solvers may split/change that mass.
+ * .25 ml (mass = ingredient density × .25). Solvers may split/change that mass.
  *
  * @typedef {string} WorldSeed
  * @typedef {{id:number, name:string, material:object, price:number, starter:boolean, lore:string}} Ingredient

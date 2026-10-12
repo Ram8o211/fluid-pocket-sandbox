@@ -1,11 +1,18 @@
 import { clamp, saturate } from '../simulation/math.mjs';
+import { Phase } from '../simulation/Phase.mjs';
+
+export function thermalMixingMultiplier(ps, i, j, coefficient = 0) {
+  if (ps.phase[i] !== Phase.LIQUID || ps.phase[j] !== Phase.LIQUID) return 1;
+  const warmth = Math.max(0, (ps.temperature[i] + ps.temperature[j]) * .5 - .33);
+  return Math.exp(clamp(warmth * coefficient, 0, 1.4));
+}
 
 export class ReactionEngine {
   constructor(){this.activeReactions=0;this.maxEvents=64;this.eventCount=0;this.eventX=new Float32Array(this.maxEvents);this.eventY=new Float32Array(this.maxEvents);this.eventZ=new Float32Array(this.maxEvents);this.eventIntensity=new Float32Array(this.maxEvents);this.eventThermal=new Float32Array(this.maxEvents);}
   clearFrame(){this.eventCount=0;this.activeReactions=0;}
   pushEvent(x,y,z,intensity,thermal=0){if(this.eventCount>=this.maxEvents)return;const i=this.eventCount++;this.eventX[i]=x;this.eventY[i]=y;this.eventZ[i]=z;this.eventIntensity[i]=intensity;this.eventThermal[i]=thermal;}
   step(ps,grid,rules,dt,onFuse=null){
-    this.clearFrame();const radius=.5,r2=radius*radius,x=ps.x,y=ps.y,z=ps.z,materialId=ps.materialId;
+    this.clearFrame();const radius=.5*clamp(rules.interactionRadiusScale??1,.4,1),r2=radius*radius,x=ps.x,y=ps.y,z=ps.z,materialId=ps.materialId;
     const thermalThreshold=clamp(rules.thermalReactionThreshold??.72,0,1.95),thermalStrength=Math.max(0,rules.thermalReactionStrength??1.15);
     grid.forEachPair(ps,radius,(i,j)=>{
       if(materialId[i]===materialId[j])return;
@@ -20,7 +27,7 @@ export class ReactionEngine {
       }
       const dm=Math.abs(ps.miscibility[i]-ps.miscibility[j]);
       if(dm<rules.miscibilityThreshold){
-        const compat=clamp(1-dm/Math.max(.001,rules.miscibilityThreshold),0,1),rate=rules.baseMixingRate*Math.pow(compat,rules.mixingExponent)*contact;
+        const compat=clamp(1-dm/Math.max(.001,rules.miscibilityThreshold),0,1),rate=rules.baseMixingRate*Math.pow(compat,rules.mixingExponent)*contact*thermalMixingMultiplier(ps,i,j,rules.mixingTemperatureCoefficient??0);
         if(rate>0){const propD=this.particleDistance(ps,i,j),mixVisual=saturate(compat*propD*contact*rules.reactionStrength),t=clamp(rate*dt,0,.22);this.mixPair(ps,i,j,t,rules,onFuse);visual=Math.max(visual,mixVisual);reacted=true;}
       }
       const td=Math.abs(ps.temperature[i]-ps.temperature[j]);
