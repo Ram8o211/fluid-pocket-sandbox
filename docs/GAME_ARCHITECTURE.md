@@ -53,16 +53,27 @@ Electrical conductivity and potential still drive charge exchange and alchemical
 measurements. The game bounds velocity feedback from dense overlap corrections;
 supporting contacts arrest falling liquid instead of launching it upward. This
 lets small batches settle into a bottom pool and settle again after stirring.
-Steam retains its existing buoyancy, and sandbox force/solver defaults are intact.
+Steam buoyancy compares each reagent's intrinsic vapour density with a fixed
+empty-atmosphere reference (`ROOM_DENSITY = 1`). Crowding under the lid never
+removes lift; lighter vapour still rises more strongly. Liquid stratification
+continues to use the separate reagent densities, and sandbox defaults are intact.
 
 Vapour is retained and continues to reserve capacity. The lid exchanges heat
 locally in either direction and warms with the pot, rather than remaining at room
-temperature. Ambient and density-driven gas cooling are disabled in the enclosed
-game vessel. A continuously powered pot can become uniformly hot/cold; above a
+temperature. Crowding does not create artificial cooling. Passive ambient
+exchange is disabled while a source is running, so a continuously powered pot
+can become uniformly hot/cold; above a
 fluid's boiling threshold a hot lid cannot keep recondensing that fluid. With the
-source off, copper releases energy to the room; Frost removes energy at the same
+sources off, both copper and contents gradually approach `ROOM_TEMPERATURE = .33`
+(33 °A), cooling hot brews and warming cold ones without source energy charges.
+Empty copper also approaches room temperature. Frost removes energy at the same
 bottom contacts and accelerates cooling through the existing neighbour network.
-The hysteretic PhaseSolver converts gas back to liquid over time. Condensation
+GasDensitySolver estimates local vapour concentration from parcel mass after
+vessel collisions, using a smooth distance kernel over the support area. Parcel
+refinement and fractional drains cannot invent concentration. The hysteretic
+PhaseSolver converts only sufficiently cool, saturated gas patches back to
+liquid over time; saturation falls with temperature, letting even dilute remnants
+eventually condense as the pot cools. Hot gas never condenses from density alone. Condensation
 droplets are rendered only for actual local gas-to-liquid progress. Bottling waits while more than .01 ml remains as
 steam. The HUD shows trapped steam and the needed cooling action. Newly evaporated
 ingredients are never removed; legacy evaporation history remains in old saves.

@@ -16,6 +16,9 @@
 export const SAVE_VERSION = 2;
 export const FIXED_STEP = 1 / 40;
 export const ROOM_TEMPERATURE = .33;
+// Fixed reference for the empty atmosphere: above every supported material's
+// vapour density (.85 maximum), independent of the brew's amount/composition.
+export const ROOM_DENSITY = 1;
 export const CAPACITY_ML = [200, 320, 440];
 export const PACKAGING_COST = 1;
 export const PROPERTIES = Object.freeze({

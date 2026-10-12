@@ -2,7 +2,7 @@ import { SimulationEngine } from '../simulation/SimulationEngine.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
 import { measurePotion } from './potion.mjs';
-import { CAPACITY_ML, FIXED_STEP, ROOM_TEMPERATURE } from './contracts.mjs';
+import { CAPACITY_ML, FIXED_STEP, ROOM_TEMPERATURE, ROOM_DENSITY } from './contracts.mjs';
 import { confineCauldronParticle, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
@@ -17,14 +17,18 @@ export class BrewingSession {
     this.ingredients = ingredients; this.equipment = equipment;
     this.engine = new SimulationEngine(PARTICLE_CAPACITY);
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
-    this.engine.env.environmentDensity = .22;
+    this.engine.env.environmentDensity = ROOM_DENSITY;
+    this.engine.env.gasBuoyancyUsesMaterialDensity = true;
+    this.engine.env.ambientTemperature = ROOM_TEMPERATURE;
     this.engine.env.gravityStrength = 4.5; this.engine.setGravity(0, -1, 0);
     // Bulk reagents are electrically neutral fluids. Conductivity still drives
     // charge exchange and alchemy, but point-charge repulsion must not levitate
     // their small, low-mass parcels against gravity.
     this.engine.rules.electrostaticStrength = 0;
     this.engine.env.liquidConstraintVelocityShare = .15;
-    this.engine.env.ambientThermalExchange = 0;
+    this.engine.env.ambientThermalExchange = 1;
+    this.engine.rules.densityDrivenCondensation = true;
+    this.engine.rules.condensationDensityThreshold = 4;
     this.engine.rules.condensationCoolingCoefficient = 0;
     this.engine.rules.thermalDiffusionRate = 1.2;
     this.thermal = new CauldronThermal();
@@ -107,11 +111,15 @@ export class BrewingSession {
   }
   step(dt = FIXED_STEP) {
     const ps = this.engine.ps;
+    if (!ps.count) this.heat = this.cool = 0;
+    const power = (this.heat * 3.2 - this.cool * 3.8) * (1 + (this.equipment.furnace || 0) * .35);
+    // Passive heat exchange is gradual in either direction. While powered,
+    // source energy still enters only through bottom contacts and neighbours.
+    this.engine.env.ambientThermalExchange = power ? 0 : 1;
+    const thermal = this.thermal.step(ps, power, dt);
     if (ps.count) {
       const previousCount = ps.count;
       this.previousPhases.set(ps.phase.subarray(0, previousCount));
-      const power = (this.heat * 3.2 - this.cool * 3.8) * (1 + (this.equipment.furnace || 0) * .35);
-      const thermal = this.thermal.step(ps, power, dt);
       if (thermal.supplied > 0) this.history.heatEnergy += thermal.supplied; else this.history.coldEnergy -= thermal.supplied;
       this.history.lidCoolingEnergy += thermal.lidCooling;
       this.cost.energy += Math.abs(thermal.supplied) * .025;

@@ -6,7 +6,8 @@ const FLOOR_CAPACITY = .75, LID_CAPACITY = .45;
 
 /** Finite copper reservoirs: source -> lower bowl -> neighbours. The lid warms
  * through the copper and can exchange heat in either direction with its fluid.
- * No cold ambient bath or density-driven cooling is imposed on trapped steam. */
+ * With both sources off, copper and contents gradually approach room temperature;
+ * crowding never removes heat from an otherwise hot patch of trapped steam. */
 export class CauldronThermal {
   constructor() { this.reset(); this.exchange = new Float64Array(0); }
   reset() { this.floor = this.lid = ROOM_TEMPERATURE; }

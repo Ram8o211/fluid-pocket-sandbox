@@ -15,6 +15,10 @@ The fitted lid retains steam and ingredients. Turn off Flame or use Frost, then
 wait for steam to condense before bottling. Flame and Frost enter through the
 bottom; temperature and phase changes spread through neighbouring particles.
 The lid warms with the pot, so a uniformly hot brew stays vapour until cooled.
+Vapour always rises against a fixed reference atmosphere, retaining the different
+reagents' densities. Trapped vapour concentrates under the lid; cool, concentrated
+patches recondense first. With both sources off, hot or cold contents and copper
+gradually return to room temperature (33 °A), including tiny residual droplets.
 Compatible fluids smoothly converge to their full-mixture proportions, starting
 at local contacts; warmth and stirring accelerate this. Incompatible fluids stay
 separate, and colour blending continues after the first particles have mixed.
