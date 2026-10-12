@@ -113,6 +113,22 @@ test('powder contacts have zero restitution, dissipate slip and never attract se
   b.engine.fluid.solvePowderPair(ps,0,1,-1,0,0,.18,FIXED_STEP,true,b.engine.rules);
   near(ps.x[1]-ps.x[0],rest);
   assert.ok(Math.abs(ps.vx[1]-ps.vx[0])<.00001,'swept collision must be inelastic');
+  // Initially touching grains can also swap during one strong impulse.
+  // The sweep must take the t=0 incoming normal, not the reversed endpoint.
+  ps.px[0]=-rest/2;ps.px[1]=rest/2;
+  ps.x[0]=.09;ps.x[1]=-.09;ps.vx[0]=7;ps.vx[1]=-7;
+  b.engine.fluid.solvePowderPair(ps,0,1,-1,0,0,.18,FIXED_STEP,true,b.engine.rules);
+  near(ps.x[1]-ps.x[0],rest);
+  assert.ok(Math.abs(ps.vx[1]-ps.vx[0])<.00001,'initial contact must not tunnel');
+  // A fast glancing pass misses the contact circle; radial closing speed
+  // alone must not snap grains sideways into an invented collision.
+  ps.x[0]=ps.px[0]=0;ps.x[1]=ps.px[1]=rest*1.04;
+  ps.y[0]=ps.py[0]=0;ps.y[1]=ps.py[1]=0;
+  ps.vx[0]=.3;ps.vx[1]=-.3;ps.vy[0]=-3;ps.vy[1]=3;
+  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest*1.04,FIXED_STEP,true,b.engine.rules);
+  near(ps.x[0],0);near(ps.x[1],rest*1.04);
+  near(ps.vx[0],.3);near(ps.vx[1],-.3);
+  near(ps.vy[0],-3);near(ps.vy[1],3);
   // Leaving contact must not create a Hooke-law force, even for wet dough.
   ps.x[0]=0;ps.x[1]=rest*1.35;ps.vx[0]=ps.vx[1]=0;
   ps.vy[0]=ps.vy[1]=0;ps.powderContent[0]=ps.powderContent[1]=.55;
@@ -123,6 +139,19 @@ test('powder contacts have zero restitution, dissipate slip and never attract se
   ps.x[0]=0;ps.x[1]=rest;ps.vx[0]=-.4;ps.vx[1]=.4;
   b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest,FIXED_STEP,true,b.engine.rules);
   assert.ok(ps.vx[0]<0&&ps.vx[1]>0);
+});
+
+test('granular swept contacts cannot be skipped by large-world pair striding',()=>{
+  const b=new BrewingSession(generateWorld('swept-stride').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10);
+  ps.add({x:-.05,y:0,z:0,mass:.25,vx:5},material,Phase.SOLID);
+  ps.add({x:.05,y:0,z:0,mass:.25,vx:-5},material,Phase.SOLID);
+  // The only pair is ordinal zero; stride phase one normally skips it.
+  e.fluid.pairPhase=1;
+  e.fluid.step(ps,e.grid,{x:0,y:0,z:0},e.env,e.rules,FIXED_STEP,1,
+    {fluidPairStride:4,fluidRadius:.48},null);
+  assert.ok(ps.x[0]<ps.x[1],'swept impact must preserve incoming grain order');
+  near(ps.x[1]-ps.x[0],particlePairRestDistance(ps,0,1,true));
+  assert.ok(Math.abs(ps.vx[0]-ps.vx[1])<.00001);
 });
 
 test('the cauldron stops downward powder impacts with no rebound and supports resting grains',()=>{
