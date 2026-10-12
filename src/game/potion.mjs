@@ -10,10 +10,11 @@ export function measurePotion(engine, selections, history, cost = { ingredients:
   const sampled = sampleParticleSet(ps, selections.map(s => ({ index: s.index, weight: s.mass / ps.mass[s.index] })), 1, 'Cauldron sample');
   if (!sampled) return null;
   let mass = 0, volume = 0, liquidMass = 0, viscosity = 0, density = 0, arcana = 0;
-  const composition = {}, means = [0, 0, 0, 0, 0];
+  const composition = {}, means = [0, 0, 0, 0, 0], phases = [0, 0, 0], phaseMass = [0, 0, 0];
   for (const s of selections) {
     const i = s.index, m = s.mass;
     mass += m; volume += m / Math.max(.04, ps.density[i]);
+    phases[ps.phase[i]]++; phaseMass[ps.phase[i]] += m;
     liquidMass += ps.phase[i] === Phase.LIQUID ? m : 0;
     viscosity += effectiveLiquidViscosity(ps, i) * m; density += ps.density[i] * m;
     arcana += (.5 * Math.abs(ps.reactionPotential[i]) + .35 * ps.electricalConductivity[i] + .15 * ps.crystallinity[i]) * m;
@@ -37,7 +38,7 @@ export function measurePotion(engine, selections, history, cost = { ingredients:
     viscosity: viscosity / mass, temperature: sampled.temperature,
     volatility: sampled.material.volatility, stability, potency, liquidFraction: liquidMass / mass,
     homogeneity, composition, history: { ...history }, cost: { ...cost },
-    phases: ps.phaseCounts(), sourceMaterialIds: sampled.sourceMaterialIds
+    phases, phaseMass, sourceMaterialIds: sampled.sourceMaterialIds
   };
 }
 

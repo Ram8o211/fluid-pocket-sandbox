@@ -86,6 +86,7 @@ test('bottle excludes gas and solids and does not fabricate missing quantity', (
   const { state, brew } = setup(); brew.pour(1, 60, state.inventory);
   for (let i = 0; i < 20; i++) brew.engine.ps.setPhase(i, i < 10 ? Phase.GAS : Phase.SOLID);
   const sample = brew.bottle(60); close(sample.volume, 40); assert.equal(sample.liquidFraction, 1); assert.equal(brew.engine.ps.count, 20);
+  assert.deepEqual(sample.phases, [0, 40, 0]); close(sample.phaseMass[Phase.LIQUID], sample.mass);
 });
 test('overheating creates actual vapour losses and cooling can solidify a brew', () => {
   const hot = setup(); hot.brew.pour(1, 15, hot.state.inventory); hot.brew.setThermal(1); ticks(hot.brew, 400);
