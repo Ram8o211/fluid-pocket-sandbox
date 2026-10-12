@@ -327,7 +327,7 @@ function bindUI() {
     if (!pointer || pointer.id !== event.pointerId) return;
     const now = performance.now(), point = renderer.screenToWorld(event.clientX, event.clientY), dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
     if (tool === 'pestle') brew.crush(point);
-    else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt);
+    else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt, pointer.point);
     renderer.tool = tool;
     renderer.spoon = point; pointer = { id: event.pointerId, point, time: now }; advanceTutorial();
   };
