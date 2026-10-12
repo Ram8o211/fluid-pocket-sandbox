@@ -51,41 +51,52 @@ export class FluidSolver {
     const compatible=Math.abs(ps.miscibility[i]-ps.miscibility[j])<rules.miscibilityThreshold;
     const wet=compatible?(doughStrength(ps.powderContent[i])+doughStrength(ps.powderContent[j]))*.5:0;
 
-    // A grain may cross an entire diameter in one step after a strong spoon
-    // impulse. Sweep the relative movement from previous to current positions
-    // and stop at the *first surface impact*, not the swapped/end position.
-    // This prevents tunnelling without introducing a distance-based spring.
+    // Continuous pair contact: check the relative path this frame before
+    // accepting the endpoints. A compact pile may begin *already touching*;
+    // a strong spoon stroke can swap those grains in one integration step.
     const rx=nx*d,ry=ny*d,rz=planar?0:nz*d;
     const px=ps.px[j]-ps.px[i],py=ps.py[j]-ps.py[i],pz=planar?0:ps.pz[j]-ps.pz[i];
     const mx=rx-px,my=ry-py,mz=rz-pz;
     const a=mx*mx+my*my+mz*mz,b=px*mx+py*my+pz*mz,c=px*px+py*py+pz*pz-rest*rest;
-    let swept=false;
-    if(c>1e-8&&b<0&&a>1e-10){
-      const discriminant=b*b-a*c;
-      if(discriminant>=0){
-        const t=(-b-Math.sqrt(discriminant))/a;
-        if(t>=0&&t<=1){
-          const hitX=px+mx*t,hitY=py+my*t,hitZ=pz+mz*t;
-          const length=Math.hypot(hitX,hitY,hitZ);
-          if(length>1e-7){
-            // Preserve the mass-weighted centre of the pair during rewind.
-            const dx=hitX-rx,dy=hitY-ry,dz=hitZ-rz;
-            ps.x[i]-=dx*wi;ps.y[i]-=dy*wi;if(!planar)ps.z[i]-=dz*wi;
-            ps.x[j]+=dx*wj;ps.y[j]+=dy*wj;if(!planar)ps.z[j]+=dz*wj;
-            nx=hitX/length;ny=hitY/length;nz=planar?0:hitZ/length;d=rest;swept=true;
-          }
+    let hitX=0,hitY=0,hitZ=0,swept=false;
+    if(a>1e-10){
+      if(c>1e-8&&b<0){
+        const discriminant=b*b-a*c;
+        if(discriminant>=0){
+          const t=(-b-Math.sqrt(discriminant))/a;
+          if(t>=0&&t<=1){hitX=px+mx*t;hitY=py+my*t;hitZ=pz+mz*t;swept=true;}
         }
+      }else if(c<=1e-8&&px*rx+py*ry+pz*rz<0){
+        // Already touching/overlapping at t=0, now on opposite sides:
+        // take the incoming normal rather than the flipped endpoint normal.
+        const initialLength=Math.hypot(px,py,pz);
+        if(initialLength>1e-7){hitX=px/initialLength*rest;hitY=py/initialLength*rest;hitZ=pz/initialLength*rest;swept=true;}
       }
     }
     if(!swept&&d>rest){
-      // An imminent impact may be crossed by the next fixed timestep. Advance
-      // both grains to touching surfaces, never stop them across empty space.
-      const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];
-      const approach=-(dvx*nx+dvy*ny+dvz*nz);
-      if(approach<=0||d-rest>approach*dt)return;
-      separatePair(ps,i,j,nx,ny,nz,-(d-rest),planar);
-      d=rest;
+      // Solve the full quadratic for the *next* timestep. Radial speed alone
+      // falsely predicts collisions when grains narrowly pass tangentially.
+      const vx=ps.vx[j]-ps.vx[i],vy=ps.vy[j]-ps.vy[i],vz=planar?0:ps.vz[j]-ps.vz[i];
+      const speed2=vx*vx+vy*vy+vz*vz,along=rx*vx+ry*vy+rz*vz,gap2=d*d-rest*rest;
+      if(speed2<1e-10||along>=0)return;
+      const discriminant=along*along-speed2*gap2;
+      if(discriminant<0)return;
+      const t=(-along-Math.sqrt(discriminant))/speed2;
+      if(t<0||t>dt)return;
+      hitX=rx+vx*t;hitY=ry+vy*t;hitZ=rz+vz*t;swept=true;
     }
+    if(swept){
+      const length=Math.hypot(hitX,hitY,hitZ);
+      if(length>1e-7){
+        // Reposition to the first actual contact, conserving the pair's
+        // mass-weighted centre; no velocity is reversed into a bounce.
+        const sx=hitX/length*rest,sy=hitY/length*rest,sz=hitZ/length*rest;
+        const dx=sx-rx,dy=sy-ry,dz=sz-rz;
+        ps.x[i]-=dx*wi;ps.y[i]-=dy*wi;if(!planar)ps.z[i]-=dz*wi;
+        ps.x[j]+=dx*wj;ps.y[j]+=dy*wj;if(!planar)ps.z[j]+=dz*wj;
+        nx=sx/rest;ny=sy/rest;nz=planar?0:sz/rest;d=rest;
+      }else if(d>rest)return;
+    }else if(d>rest)return;
     // Only unilateral penetrations need positional separation. Wet dough
     // gains plastic sliding resistance but no spring attraction at a distance.
     if(d<rest)separatePair(ps,i,j,nx,ny,nz,(rest-d)*.92,planar);
@@ -134,6 +145,10 @@ export class FluidSolver {
     this.collideBox(ps,env.box,planar);
     collideBoundary?.();
     const r2=searchRadius*searchRadius;
+    // Contact/tunnelling checks must run every frame, even when the generic
+    // far-field fluid solver subsamples pairs at large particle counts.
+    const forceGranularPair=(i,j)=>(isPowder(ps,i)||isPowder(ps,j)||ps.powderContent[i]>.15||ps.powderContent[j]>.15)
+      &&!isCoherentSolid(ps,i)&&!isCoherentSolid(ps,j);
     for(let it=0;it<iterations;it++){
       grid.rebuild(ps,env.box);this.gasCounts.fill(0,0,ps.count);
       grid.forEachPair(ps,searchRadius,(i,j)=>{
@@ -154,7 +169,7 @@ export class FluidSolver {
         if(pi===Phase.SOLID&&pj===Phase.SOLID){this.solveSolidPair(ps,i,j,nx,ny,nz,d,dt,planar);return;}
         if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar,interactionScale);return;}
         if(pi===Phase.LIQUID&&pj===Phase.SOLID)this.solveSolidLiquidPair(ps,j,i,-nx,-ny,-nz,d,gravity,rules,planar,interactionScale);
-      },pairStride,(pairPhase+it)%pairStride);
+      },pairStride,(pairPhase+it)%pairStride,forceGranularPair);
       if(hasHard){grid.rebuild(ps,env.box);this.enforceHardPacking(ps,grid,searchRadius,planar);}
       for(let i=0;i<ps.count;i++)ps.localGasDensity[i]=ps.phase[i]===Phase.GAS?clamp(.18+this.gasCounts[i]*.075,0,1.8):0;
       this.collideBox(ps,env.box,planar);
