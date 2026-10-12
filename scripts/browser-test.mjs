@@ -144,75 +144,18 @@ try {
   for (let i = 0; i < 3; i++) await page.locator('#coolBtn').click();
   await page.waitForFunction(solid => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.phase.some(p => p === solid), Phase.SOLID, { timeout: 20000 });
   await page.locator('#crushBtn').click();
- …19169 tokens truncated…r)ps.vz[i]+=kick(3)*amplitude;
-      }
-      const damping=Math.exp(-dt*(ps.phase[i]===Phase.GAS?.15:.025));ps.vx[i]*=damping;ps.vy[i]*=damping;ps.vz[i]*=damping;
-      const speed2=ps.vx[i]*ps.vx[i]+ps.vy[i]*ps.vy[i]+(planar?0:ps.vz[i]*ps.vz[i]);if(speed2>maxV*maxV){const k=maxV/Math.sqrt(speed2);ps.vx[i]*=k;ps.vy[i]*=k;if(!planar)ps.vz[i]*=k;}
-      ps.x[i]+=ps.vx[i]*dt;ps.y[i]+=ps.vy[i]*dt;if(planar){ps.z[i]=0;ps.vz[i]=0;}else ps.z[i]+=ps.vz[i]*dt;
-    }
-    this.collideBox(ps,env.box,planar);
-    collideBoundary?.();
-    const r2=searchRadius*searchRadius;
-    for(let it=0;it<iterations;it++){
-      grid.rebuild(ps,env.box);this.gasCounts.fill(0,0,ps.count);
-      grid.forEachPair(ps,searchRadius,(i,j)=>{
-        const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<=1e-12||d2>r2)return;const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,nz=planar?0:dz/d,pi=ps.phase[i],pj=ps.phase[j];
-        // Vapour parcels represent overlapping gas volumes, not hard spheres.
-        // Only very close contacts separate, with a time-scaled soft response.
-        if(pi===Phase.GAS&&pj===Phase.GAS){
-          const contact=particlePairRestDistance(ps,i,j,planar)*(env.gasContactScale??.55);
-          if(d<contact){const q=1-d/contact,amount=q*q*(env.gasContactStrength??.12)*dt/Math.max(1,iterations);separatePair(ps,i,j,nx,ny,nz,amount,planar);}
-          this.gasCounts[i]=Math.min(65535,this.gasCounts[i]+pairStride);this.gasCounts[j]=Math.min(65535,this.gasCounts[j]+pairStride);return;
-        }
-        if(pi===Phase.GAS||pj===Phase.GAS){
-          const gas=pi===Phase.GAS?i:j,sign=pi===Phase.GAS?-1:1,contact=particlePairRestDistance(ps,i,j,planar)*.7;
-          if(d<contact){const q=1-d/contact,spread=q*q*.24*dt/Math.max(1,iterations);ps.x[gas]+=nx*spread*sign;ps.y[gas]+=ny*spread*sign;if(!planar)ps.z[gas]+=nz*spread*sign;}return;
-        }
-        if(pi===Phase.LIQUID&&pj===Phase.LIQUID){this.solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar,interactionScale);return;}
-        if(pi===Phase.SOLID&&pj===Phase.SOLID){this.solveSolidPair(ps,i,j,nx,ny,nz,d,dt,planar);return;}
-        if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar);return;}
-        if(pi===Phase.LIQUID&&pj===Phase.SOLID)this.solveSolidLiquidPair(ps,j,i,-nx,-ny,-nz,d,gravity,rules,planar);
-      },pairStride,(pairPhase+it)%pairStride);
-      if(hasHard){grid.rebuild(ps,env.box);this.enforceHardPacking(ps,grid,searchRadius,planar);}
-      for(let i=0;i<ps.count;i++)ps.localGasDensity[i]=ps.phase[i]===Phase.GAS?clamp(.18+this.gasCounts[i]*.075,0,1.8):0;
-      this.collideBox(ps,env.box,planar);
-      collideBoundary?.();
-    }
-    for(let i=0;i<ps.count;i++){
-      const rx=(ps.x[i]-ps.px[i])/dt,ry=(ps.y[i]-ps.py[i])/dt,rz=planar?0:(ps.z[i]-ps.pz[i])/dt;
-      if(ps.phase[i]===Phase.SOLID){if(planar)ps.vz[i]=0;}
-      else{
-        const liquid=ps.phase[i]===Phase.LIQUID,freezing=liquid&&ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
-        // Dense packing moves positions to remove overlaps. Feeding all of that
-        // correction into velocity can launch fine liquids off a supporting
-        // floor every frame. Retain physical gravity, spoon and contact momentum
-        // while allowing a bounded contribution from constraint displacement.
-        const constraintShare=liquid?clamp(env.liquidConstraintVelocityShare??1,0,1):clamp(env.gasConstraintVelocityShare??.1,0,1),physicalShare=Math.max(freezing*.94,1-constraintShare);
-        const physicalDown=ps.vx[i]*gravity.x+ps.vy[i]*gravity.y+ps.vz[i]*gravity.z;
-        ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;
-        if(liquid&&constraintShare<1&&physicalDown>=0){
-          const projectedDown=rx*gravity.x+ry*gravity.y+rz*gravity.z;
-          if(projectedDown<physicalDown){
-            // Supporting liquid/floor contacts arrest downward motion; they do
-            // not turn falling momentum into a new upward launch. Use the
-            // supported displacement directly, avoiding hidden falling speed
-            // inside a stationary packed layer. Spoon-driven rising remains free.
-            const gravity2=gravity.x*gravity.x+gravity.y*gravity.y+gravity.z*gravity.z;
-            if(gravity2>1e-8){const currentDown=ps.vx[i]*gravity.x+ps.vy[i]*gravity.y+ps.vz[i]*gravity.z,k=(Math.max(0,projectedDown)-currentDown)/gravity2;ps.vx[i]+=gravity.x*k;ps.vy[i]+=gravity.y*k;if(!planar)ps.vz[i]+=gravity.z*k;}
-          }
-        }
-      }
-    }
-  }
-  collideBox(ps,box,planar=false){
-    for(let i=0;i<ps.count;i++){
-      const pad=clamp(effectiveParticleRadius(ps,i,planar)*.62,.05,.16),hx=box.width/2-pad,hy=box.height/2-pad,hz=box.depth/2-pad;
-      const solid=ps.phase[i]===Phase.SOLID,granular=solid&&ps.solidSubdivision[i]>.45,restitution=solid?0:.08,tangent=solid?(granular?.48:.72):.92;let hitX=false,hitY=false,hitZ=false;
-      if(ps.x[i]<-hx){ps.x[i]=-hx;if(ps.vx[i]<0)ps.vx[i]=-ps.vx[i]*restitution;hitX=true;}else if(ps.x[i]>hx){ps.x[i]=hx;if(ps.vx[i]>0)ps.vx[i]=-ps.vx[i]*restitution;hitX=true;}
-      if(ps.y[i]<-hy){ps.y[i]=-hy;if(ps.vy[i]<0)ps.vy[i]=-ps.vy[i]*restitution;hitY=true;}else if(ps.y[i]>hy){ps.y[i]=hy;if(ps.vy[i]>0)ps.vy[i]=-ps.vy[i]*restitution;hitY=true;}
-      if(planar){ps.z[i]=0;ps.vz[i]=0;}else if(ps.z[i]<-hz){ps.z[i]=-hz;if(ps.vz[i]<0)ps.vz[i]=-ps.vz[i]*restitution;hitZ=true;}else if(ps.z[i]>hz){ps.z[i]=hz;if(ps.vz[i]>0)ps.vz[i]=-ps.vz[i]*restitution;hitZ=true;}
-      if(hitX){ps.vy[i]*=tangent;ps.vz[i]*=tangent;}if(hitY){ps.vx[i]*=tangent;ps.vz[i]*=tangent;if(granular&&Math.abs(ps.vy[i])<.18)ps.vy[i]=0;}if(hitZ){ps.vx[i]*=tangent;ps.vy[i]*=tangent;}
-    }
-  }
-}
-
+  assert.equal(await page.locator('#crushBtn').getAttribute('aria-pressed'), 'true');
+  const frozen = await readSave(page), target = frozen.brew.particles.phase.findIndex(p => p === Phase.SOLID);
+  const canvasBox = await page.locator('#labCanvas').boundingBox();
+  await page.mouse.click(canvasBox.x + (192 + frozen.brew.particles.x[target] * 40) / 384 * canvasBox.width, canvasBox.y + (158 - frozen.brew.particles.y[target] * 40) / 232 * canvasBox.height);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.solidSubdivision.some(v => v === 1), null, { timeout });
+  await page.screenshot({ path: 'test-results/pestle-powder.png', fullPage: true });
+  await page.goto(new URL('sandbox.html?mode=2D', base).href);
+  await page.waitForFunction(() => document.querySelector('#materialSelect')?.options.length > 0, null, { timeout });
+  assert.equal(await page.locator('#scene2d').isVisible(), true); assert.equal(await page.locator('#scene').isVisible(), false);
+  assert.equal(await page.getByText('Startup failed', { exact: false }).count(), 0);
+  assert.ok((await page.locator('#materialSelect').textContent()).length > 5);
+  await page.screenshot({ path: 'test-results/original-sandbox.png', fullPage: true });
+  assert.deepEqual(failedResponses, [], 'Missing deployment assets'); assert.deepEqual(errors, [], 'Browser initialization/runtime errors');
+  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, gravity-driven liquid settling, vapour rising to the lid, retained steam and condensation with conserved mass, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
+} finally { if (browser) await browser.close(); if (server) server.kill('SIGTERM'); }
