@@ -62,23 +62,29 @@ export class SolidSolver{
   }
   wallSupports(ps,i,env,gravity,planar){
     const g=Math.hypot(gravity.x,gravity.y,planar?0:gravity.z)||1,gx=gravity.x/g,gy=gravity.y/g,gz=planar?0:gravity.z/g,m=.002,pad=clamp(effectiveParticleRadius(ps,i,planar)*.62,.05,.16),hx=env.box.width/2-pad,hy=env.box.height/2-pad,hz=env.box.depth/2-pad;
-    if(gx<-.16&&ps.x[i]<=-hx+m)return true;if(gx>.16&&ps.x[i]>=hx-m)return true;if(gy<-.16&&ps.y[i]<=-hy+m)return true;if(gy>.16&&ps.y[i]>=hy-m)return true;if(!planar){if(gz<-.16&&ps.z[i]<=-hz+m)return true;if(gz>.16&&ps.z[i]>=hz-m)return true;}return false;
+    if(gx<-.16&&ps.x[i]<=-hx+m)return true;if(gx>.16&&ps.x[i]>=hx-m)return true;if(gy<-.16&&ps.y[i]<=-hy+m)return true;if(gy>.16&&ps.y[i]>=hy-m)return true;if(!planar){if(gz<-.16&&ps.z[i]<=-hz+m)return true;if(gz>.16&&ps.z[i]>=hz-m)return true;}
+    // The shop's actual bottom is a tapered polygon, not the engine box.
+    return env.granularWallSupport?.(ps,i,gravity)??false;
   }
   settleGranularParticle(ps,grid,i,env,gravity,dt,planar){
     const subdivision=ps.solidSubdivision[i],friction=clamp(.18+.7*subdivision,0,1),radius=.34,gLen=Math.hypot(gravity.x,gravity.y,planar?0:gravity.z)||1,gx=gravity.x/gLen,gy=gravity.y/gLen,gz=planar?0:gravity.z/gLen;
-    let supported=this.wallSupports(ps,i,env,gravity,planar),supportContacts=0;
+    let supported=this.wallSupports(ps,i,env,gravity,planar);
     grid.forEachNeighbor(ps,i,radius,j=>{
       if(ps.phase[j]!==Phase.SOLID||ps.solidSubdivision[j]<.42)return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);
       // Fine grains are supported only at their actual surface contact. The old
       // fixed .31 range held tiny grains several diameters above their neighbours.
       if(d>particlePairRestDistance(ps,i,j,planar)*1.02||d<1e-6)return;
       const downhill=(dx*gx+dy*gy+dz*gz)/d,neighborG=ps.vx[j]*gx+ps.vy[j]*gy+(planar?0:ps.vz[j]*gz);
-      if(downhill>.32&&(this.wallSupports(ps,j,env,gravity,planar)||Math.abs(neighborG)<.12)){supported=true;supportContacts++;}
+      if(downhill>.32&&(this.wallSupports(ps,j,env,gravity,planar)||Math.abs(neighborG)<.12)){supported=true;}
       const lock=clamp(friction*dt*(supported?4.4:1.1),0,supported?.2:.045);ps.vx[i]+=(ps.vx[j]-ps.vx[i])*lock;ps.vy[i]+=(ps.vy[j]-ps.vy[i])*lock;if(!planar)ps.vz[i]+=(ps.vz[j]-ps.vz[i])*lock;
     });
     if(!supported)return;
     const vg=ps.vx[i]*gx+ps.vy[i]*gy+(planar?0:ps.vz[i]*gz),tx=ps.vx[i]-vg*gx,ty=ps.vy[i]-vg*gy,tz=planar?0:ps.vz[i]-vg*gz,damp=Math.exp(-dt*(6+14*friction));
     ps.vx[i]=tx*damp+vg*gx;ps.vy[i]=ty*damp+vg*gy;if(!planar)ps.vz[i]=tz*damp+vg*gz;
-    if(vg>0&&vg<.28+.18*friction&&supportContacts>=0){ps.vx[i]-=vg*gx;ps.vy[i]-=vg*gy;if(!planar)ps.vz[i]-=vg*gz;}
+    // A grain supported by the bowl or a stationary grain cannot store
+    // downward impact speed and launch back upward on the next frame.
+    // Only gravity-axis compression is removed: tangential slipping and
+    // explicit spoon impulses are still possible.
+    if(vg>0){ps.vx[i]-=vg*gx;ps.vy[i]-=vg*gy;if(!planar)ps.vz[i]-=vg*gz;}
   }
 }
