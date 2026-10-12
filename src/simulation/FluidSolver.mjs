@@ -50,18 +50,46 @@ export class FluidSolver {
     const rest=particlePairRestDistance(ps,i,j,planar),[wi,wj]=pairWeights(ps,i,j);
     const compatible=Math.abs(ps.miscibility[i]-ps.miscibility[j])<rules.miscibilityThreshold;
     const wet=compatible?(doughStrength(ps.powderContent[i])+doughStrength(ps.powderContent[j]))*.5:0;
-    // Granular contacts are unilateral, not springs. Separate penetrations
-    // without pushing beyond the contact distance; leave distant grains alone.
+
+    // A grain may cross an entire diameter in one step after a strong spoon
+    // impulse. Sweep the relative movement from previous to current positions
+    // and stop at the *first surface impact*, not the swapped/end position.
+    // This prevents tunnelling without introducing a distance-based spring.
+    const rx=nx*d,ry=ny*d,rz=planar?0:nz*d;
+    const px=ps.px[j]-ps.px[i],py=ps.py[j]-ps.py[i],pz=planar?0:ps.pz[j]-ps.pz[i];
+    const mx=rx-px,my=ry-py,mz=rz-pz;
+    const a=mx*mx+my*my+mz*mz,b=px*mx+py*my+pz*mz,c=px*px+py*py+pz*pz-rest*rest;
+    let swept=false;
+    if(c>1e-8&&b<0&&a>1e-10){
+      const discriminant=b*b-a*c;
+      if(discriminant>=0){
+        const t=(-b-Math.sqrt(discriminant))/a;
+        if(t>=0&&t<=1){
+          const hitX=px+mx*t,hitY=py+my*t,hitZ=pz+mz*t;
+          const length=Math.hypot(hitX,hitY,hitZ);
+          if(length>1e-7){
+            // Preserve the mass-weighted centre of the pair during rewind.
+            const dx=hitX-rx,dy=hitY-ry,dz=hitZ-rz;
+            ps.x[i]-=dx*wi;ps.y[i]-=dy*wi;if(!planar)ps.z[i]-=dz*wi;
+            ps.x[j]+=dx*wj;ps.y[j]+=dy*wj;if(!planar)ps.z[j]+=dz*wj;
+            nx=hitX/length;ny=hitY/length;nz=planar?0:hitZ/length;d=rest;swept=true;
+          }
+        }
+      }
+    }
+    if(!swept&&d>rest){
+      // An imminent impact may be crossed by the next fixed timestep. Advance
+      // both grains to touching surfaces, never stop them across empty space.
+      const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];
+      const approach=-(dvx*nx+dvy*ny+dvz*nz);
+      if(approach<=0||d-rest>approach*dt)return;
+      separatePair(ps,i,j,nx,ny,nz,-(d-rest),planar);
+      d=rest;
+    }
+    // Only unilateral penetrations need positional separation. Wet dough
+    // gains plastic sliding resistance but no spring attraction at a distance.
     if(d<rest)separatePair(ps,i,j,nx,ny,nz,(rest-d)*.92,planar);
-    // Contact impulses are strictly local. Stopping approaching grains even
-    // slightly before their surfaces meet creates a permanent invisible gap
-    // because gravity subsequently accelerates both grains equally.
-    if(d>rest)return;
     const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i],normal=dvx*nx+dvy*ny+dvz*nz;
-    // Cancel *all* approaching normal velocity with zero restitution. Unlike
-    // an elastic impulse this never reverses the approach into a bounce.
-    // Tangential friction dissipates sliding; wet dough dissipates more and
-    // yields plastically, with no spring pulling separated grains together.
     const approaching=Math.min(0,normal),tx=dvx-normal*nx,ty=dvy-normal*ny,tz=dvz-normal*nz;
     const friction=clamp(dt*(17+13*wet),0,.85);
     const cx=nx*approaching+tx*friction,cy=ny*approaching+ty*friction,cz=nz*approaching+tz*friction;
