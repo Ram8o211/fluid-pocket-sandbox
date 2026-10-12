@@ -1,6 +1,6 @@
 import { generateWorld, availableIngredients } from './world.mjs';
 import { BrewingSession } from './brewing.mjs';
-import { newShop, restock, UPGRADES, upgradeStatus, buyUpgrade, completeSale, nextCustomer, recordDiscovery, guildLoan } from './economy.mjs';
+import { newShop, restock, tradeStock, discardVial, UPGRADES, upgradeStatus, buyUpgrade, completeSale, nextCustomer, recordDiscovery, guildLoan } from './economy.mjs';
 import { assessPotion, priceSale } from './evaluation.mjs';
 import { saveShop, loadShop, encodeSave, decodeSave } from './persistence.mjs';
 import { propertyDescription } from './potion.mjs';
@@ -206,7 +206,7 @@ function showVial() {
   const vial = state.pendingBottle; if (!vial) return;
   latestInspection = vial; const sale = priceSale(vial, state.order, state.reputation);
   const ingredientsCost = vial.cost.ingredients.toFixed(1);
-  sheet('Your bottled potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><div class="score">${Math.round(sale.quality)}<small> / 100 match</small></div><p>${vial.volume.toFixed(1)} / ${state.order.volume} ml · Sealed and ready</p><p>Expected offer: ${sale.payment} coins</p></div></div>${breakdownHTML(sale)}<p class="quiet">Reagents used: ${ingredientsCost} coins · Vial and energy: ${sale.expenses.toFixed(1)} coins. ${sale.quantityRatio < .99 ? 'A short vial lowers the offer.' : 'Extra volume never increases the customer’s budget.'}</p><button class="primary" data-action="sell">Sell to ${escape(state.order.customer.name)} · ${sale.payment} coins</button><button class="secondary" data-action="save-inspection">Save formula to recipe book</button>`);
+  sheet('Your bottled potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><div class="score">${Math.round(sale.quality)}<small> / 100 match</small></div><p>${vial.volume.toFixed(1)} / ${state.order.volume} ml · Sealed and ready</p><p>Expected offer: ${sale.payment} coins</p></div></div>${breakdownHTML(sale)}<p class="quiet">Reagents used: ${ingredientsCost} coins · Vial and energy: ${sale.expenses.toFixed(1)} coins. ${sale.quantityRatio < .99 ? 'A short vial lowers the offer.' : 'Extra volume never increases the customer’s budget.'}</p><button class="primary" data-action="sell">Sell to ${escape(state.order.customer.name)} · ${sale.payment} coins</button><button class="secondary" data-action="save-inspection">Save formula to recipe book</button><div class="action-list"><button class="danger-button" data-action="discard-vial">Discard vial and try again</button><button data-action="supplies">Visit supplies</button></div>`);
 }
 function sell() {
   completeSale(state); state.tutorial = 7;
@@ -226,7 +226,8 @@ async function moveToNext() {
 function showInventory() {
   const rows = availableIngredients(state.world, state.equipment).map(i => {
     const cost = Math.ceil(i.price * 60);
-    return `<div class="stock-row"><img src="${bottleSprite(i.material.color, i.id)}" alt=""><div class="stock-info"><strong>${escape(i.name)}</strong><p>${Math.floor(state.inventory[i.id] || 0)} ml in stock · ${cost} coins per 60 ml</p><p>${escape(i.lore)}</p></div><button data-restock="${i.id}"${state.coins < cost ? ' disabled' : ''}>Refill<br>${cost} coins</button></div>`;
+    const trade = Math.floor(i.price * 60 * .55);
+    return `<div class="stock-row"><img src="${bottleSprite(i.material.color, i.id)}" alt=""><div class="stock-info"><strong>${escape(i.name)}</strong><p>${Math.floor(state.inventory[i.id] || 0)} ml in stock · ${cost} coins per 60 ml</p><p>${escape(i.lore)}</p><button data-trade="${i.id}"${(state.inventory[i.id] || 0) < 60 ? ' disabled' : ''}>Trade 60 ml · +${trade} coins</button></div><button data-restock="${i.id}"${state.coins < cost ? ' disabled' : ''}>Refill<br>${cost} coins</button></div>`;
   }).join('');
   sheet('Reagent supplies', `<p>Refill measured bottles at the village apothecary. Consumed stock stays consumed when you clean or leave the shop.</p>${rows}<details><summary>Apprentice emergency fund</summary><p>If your total coins and remaining stock are worth less than 15 coins, the guild offers a 25 coin loan. You repay 30 coins from future sales. Only one loan can be outstanding.</p><button data-action="loan">Request guild loan</button><p>Outstanding debt: ${state.debt || 0} coins</p></details>`);
 }
@@ -329,6 +330,7 @@ function bindUI() {
   $('sheetContent').onclick = guard(event => {
     const button = event.target.closest('button'); if (!button) return;
     if (button.dataset.restock) { const result = restock(state, Number(button.dataset.restock)); renderAll(); persist(); showInventory(); notify(`Refilled ${result.quantity} ml for ${result.cost} coins.`); return; }
+    if (button.dataset.trade) { const result = tradeStock(state, Number(button.dataset.trade)); renderAll(); persist(); showInventory(); notify(`Traded ${result.quantity} ml for ${result.payment} coins.`); return; }
     if (button.dataset.upgrade) { const upgrade = buyUpgrade(state, Number(button.dataset.upgrade)); brew.equipment = state.equipment; audio.play('sale'); renderAll(); persist(); showGuild(); notify(`${upgrade.name} is ready.`); return; }
     if (button.dataset.recipe) {
       selectedRecipe = state.discoveries[Number(button.dataset.recipe)];
@@ -340,6 +342,9 @@ function bindUI() {
       case 'confirm-new': openWorld($('worldSeed').value.trim() || randomSeed()); break;
       case 'confirm-clean': brew.clean(); closeSheet(); renderAll(); persist(); notify('Cauldron drained and cleaned.'); break;
       case 'sell': sell(); break;
+      case 'discard-vial': sheet('Discard this vial?', '<p>The sealed potion and its ingredients will be lost. Your customer will wait while you brew another.</p><div class="confirm-actions"><button data-action="close">Keep the vial</button><button class="danger-button" data-action="confirm-discard">Discard and brew again</button></div>'); break;
+      case 'confirm-discard': discardVial(state); if (state.tutorial === 6) state.tutorial = 5; closeSheet(); renderAll(); persist(); notify('Vial discarded. Your customer is still waiting.'); break;
+      case 'supplies': showInventory(); break;
       case 'next': moveToNext(); break;
       case 'guild': showGuild(); break;
       case 'book': showBook(); break;

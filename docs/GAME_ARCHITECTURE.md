@@ -78,7 +78,8 @@ liquid fraction, and a penalty for hard failures. Empty/tiny vials earn nothing.
 Payment has a quality-dependent curve and a strict customer-budget ceiling.
 Ingredient acquisition debits coins when restocked, not again when poured.
 Profit separately accounts for the consumed stock value, energy and vial.
-Each order can be sold once. Loans are restricted, outstanding debt blocks a
+Each order can be sold once. Spare stock can be traded at a loss to raise cash;
+rejected vials can be discarded to retry without a stock refund. Loans are restricted, outstanding debt blocks a
 second loan, and repayments come from subsequent actual sales.
 
 ## State and saves

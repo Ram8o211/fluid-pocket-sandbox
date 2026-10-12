@@ -34,6 +34,20 @@ export function restock(state, ingredientId, ml = 60) {
   return { quantity, cost };
 }
 
+export function tradeStock(state, ingredientId, ml = 60) {
+  const ingredient = availableIngredients(state.world, state.equipment).find(i => i.id === ingredientId);
+  const quantity = Math.floor(ml), payment = ingredient ? Math.floor(quantity * ingredient.price * .55) : 0;
+  if (!ingredient || !Number.isFinite(ml) || quantity <= 0 || payment < 1 || (state.inventory[ingredientId] || 0) < quantity) throw new Error('You need 60 ml of this stock to trade.');
+  state.inventory[ingredientId] -= quantity; state.coins += payment;
+  return { quantity, payment };
+}
+
+export function discardVial(state) {
+  if (!state.pendingBottle) throw new Error('There is no sealed vial to discard.');
+  const vial = state.pendingBottle; state.pendingBottle = null; state.stage = 'brewing';
+  return vial;
+}
+
 export function upgradeStatus(state, upgrade) {
   const owned = upgrade.level ? (state.equipment[upgrade.id] || 0) >= upgrade.level : Boolean(state.equipment[upgrade.id]);
   const previous = !upgrade.level || (state.equipment[upgrade.id] || 0) === upgrade.level - 1;
