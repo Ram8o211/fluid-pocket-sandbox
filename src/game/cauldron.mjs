@@ -1,4 +1,5 @@
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
+import { isPowder } from '../simulation/PowderSolver.mjs';
 
 // One clockwise cutaway outline, in simulation units, for both the visible
 // copper walls and their collision planes. The top plane is the sealed lid.
@@ -50,8 +51,18 @@ export function confineCauldronParticle(ps, i) {
       ps.y[i] += p.ny * (padding - distance);
       const normalSpeed = ps.vx[i] * p.nx + ps.vy[i] * p.ny;
       if (normalSpeed < 0) {
-        ps.vx[i] -= p.nx * normalSpeed * 1.03;
-        ps.vy[i] -= p.ny * normalSpeed * 1.03;
+        // Dry grains and dough lose all inward normal speed: a collision may
+        // stop or redirect sliding but must never reverse into elastic recoil.
+        const granular = isPowder(ps,i);
+        const rebound = granular ? 1 : 1.03;
+        ps.vx[i] -= p.nx * normalSpeed * rebound;
+        ps.vy[i] -= p.ny * normalSpeed * rebound;
+        if (granular) {
+          const tangentX = -p.ny, tangentY = p.nx;
+          const slip = ps.vx[i]*tangentX + ps.vy[i]*tangentY;
+          ps.vx[i] -= tangentX*slip*.36;
+          ps.vy[i] -= tangentY*slip*.36;
+        }
       }
       contact = true;
     }
@@ -68,6 +79,16 @@ export function traceCauldron(ctx, transform) {
   ctx.closePath();
 }
 
+
+// An actual inward-facing bowl normal opposing gravity provides granular
+// support. Only near-surface grains qualify; empty space never suspends powder.
+export function cauldronGranularWallSupport(ps,i,gravity) {
+  const length=Math.hypot(gravity.x,gravity.y)||1;
+  const againstX=-gravity.x/length,againstY=-gravity.y/length;
+  const padding=cauldronParticlePadding(ps,i);
+  return PLANES.some(p=>p.nx*againstX+p.ny*againstY>.35
+    && (ps.x[i]-p.x)*p.nx+(ps.y[i]-p.y)*p.ny-padding<.005);
+}
 
 // A rigid block hits the pot as a whole: never project its individual grains
 // independently, which bends a frozen body at the tapered floor.

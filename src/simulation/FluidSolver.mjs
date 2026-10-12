@@ -47,19 +47,23 @@ export class FluidSolver {
     if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=rules.miscibilityThreshold)this.sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility,planar,interactionScale);
   }
   solvePowderPair(ps,i,j,nx,ny,nz,d,dt,planar,rules){
-    const rest=particlePairRestDistance(ps,i,j,planar)*.95,[wi,wj]=pairWeights(ps,i,j),a=ps.powderContent[i],b=ps.powderContent[j];
-    const wet=(doughStrength(a)+doughStrength(b))*.5;
-    if(d<rest)separatePair(ps,i,j,nx,ny,nz,(rest-d)*.9,planar);
-    else if(wet>0&&d<rest*1.6&&Math.abs(ps.miscibility[i]-ps.miscibility[j])<rules.miscibilityThreshold){
-      const amount=(d-rest)*wet*Math.min(.25,dt*6);separatePair(ps,i,j,nx,ny,nz,-amount,planar);
-    }
-    if(d>rest*1.2)return;
+    const rest=particlePairRestDistance(ps,i,j,planar),[wi,wj]=pairWeights(ps,i,j);
+    const compatible=Math.abs(ps.miscibility[i]-ps.miscibility[j])<rules.miscibilityThreshold;
+    const wet=compatible?(doughStrength(ps.powderContent[i])+doughStrength(ps.powderContent[j]))*.5:0;
+    // Granular contacts are unilateral, not springs. Separate penetrations
+    // without pushing beyond the contact distance; leave distant grains alone.
+    if(d<rest)separatePair(ps,i,j,nx,ny,nz,(rest-d)*.92,planar);
+    if(d>rest*1.08)return;
     const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i],normal=dvx*nx+dvy*ny+dvz*nz;
-    // Coulomb-like tangential friction and a damp dough yield threshold.
-    const tx=dvx-normal*nx,ty=dvy-normal*ny,tz=dvz-normal*nz,speed=Math.hypot(tx,ty,tz),yieldSpeed=.12+wet*.8;
-    const friction=speed<yieldSpeed?.85:Math.min(.8,dt*(12+wet*22));
-    const cx=tx*friction+nx*Math.min(0,normal)*.85,cy=ty*friction+ny*Math.min(0,normal)*.85,cz=tz*friction+nz*Math.min(0,normal)*.85;
-    ps.vx[i]+=cx*wi;ps.vy[i]+=cy*wi;if(!planar)ps.vz[i]+=cz*wi;ps.vx[j]-=cx*wj;ps.vy[j]-=cy*wj;if(!planar)ps.vz[j]-=cz*wj;
+    // Cancel *all* approaching normal velocity with zero restitution. Unlike
+    // an elastic impulse this never reverses the approach into a bounce.
+    // Tangential friction dissipates sliding; wet dough dissipates more and
+    // yields plastically, with no spring pulling separated grains together.
+    const approaching=Math.min(0,normal),tx=dvx-normal*nx,ty=dvy-normal*ny,tz=dvz-normal*nz;
+    const friction=clamp(dt*(17+13*wet),0,.85);
+    const cx=nx*approaching+tx*friction,cy=ny*approaching+ty*friction,cz=nz*approaching+tz*friction;
+    ps.vx[i]+=cx*wi;ps.vy[i]+=cy*wi;if(!planar)ps.vz[i]+=cz*wi;
+    ps.vx[j]-=cx*wj;ps.vy[j]-=cy*wj;if(!planar)ps.vz[j]-=cz*wj;
   }
   solveSolidPair(ps,i,j,nx,ny,nz,d,dt,planar){
     const subI=ps.solidSubdivision[i],subJ=ps.solidSubdivision[j],coherent=subI<.55&&subJ<.55,sameRigidBody=coherent&&ps.solidBodyId[i]>0&&ps.solidBodyId[i]===ps.solidBodyId[j],sameCoherentMaterial=coherent&&ps.materialId[i]===ps.materialId[j];if(sameRigidBody||sameCoherentMaterial)return;

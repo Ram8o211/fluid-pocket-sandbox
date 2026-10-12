@@ -8,7 +8,7 @@ import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
 import { effectiveParticleRadius, particlePairRestDistance } from '../src/simulation/FluidSolver.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { FIXED_STEP, SAVE_VERSION } from '../src/game/contracts.mjs';
-import { insideCauldron, cauldronParticlePadding } from '../src/game/cauldron.mjs';
+import { insideCauldron, cauldronParticlePadding, confineCauldronParticle, cauldronGranularWallSupport } from '../src/game/cauldron.mjs';
 
 const near = (a,b) => assert.ok(Math.abs(a-b)<.001,`${a} != ${b}`);
 const liquids = () => [.65,1.5].map((density,i) => {
@@ -81,6 +81,43 @@ test('unsupported fine powder keeps falling until actual grain or wall contact',
   b.engine.grid.rebuild(ps,b.engine.env.box);
   b.engine.solid.settleGranularParticle(ps,b.engine.grid,0,b.engine.env,{x:0,y:-4.5,z:0},FIXED_STEP,true);
   assert.ok(ps.vy[0]<-.1,'a distant stationary grain must not suspend powder');
+});
+
+test('powder contacts have zero restitution, dissipate slip and never attract separated grains',()=>{
+  const b=new BrewingSession(generateWorld('inelastic-contacts').ingredients),ps=b.engine.ps;
+  const powder=b.engine.materials.get(10);
+  ps.add({x:0,y:0,z:0,mass:.25,vx:1,vy:.7},powder,Phase.SOLID);
+  ps.add({x:.095,y:0,z:0,mass:.25,vx:-1,vy:-.7},powder,Phase.SOLID);
+  ps.solidSubdivision[0]=ps.solidSubdivision[1]=1;
+  const rest=particlePairRestDistance(ps,0,1,true);
+  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,.095,FIXED_STEP,true,b.engine.rules);
+  assert.ok(ps.vx[1]-ps.vx[0]>=-.000001,'no residual approaching velocity');
+  assert.ok(ps.vx[1]-ps.vx[0]<.000001,'impact cannot generate separation speed');
+  assert.ok(Math.abs(ps.vy[1]-ps.vy[0])<1.4,'friction must dissipate lateral slip');
+  // Leaving contact must not create a Hooke-law force, even for wet dough.
+  ps.x[0]=0;ps.x[1]=rest*1.35;ps.vx[0]=ps.vx[1]=0;
+  ps.vy[0]=ps.vy[1]=0;ps.powderContent[0]=ps.powderContent[1]=.55;
+  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest*1.35,FIXED_STEP,true,b.engine.rules);
+  near(ps.x[0],0);near(ps.x[1],rest*1.35);
+  near(ps.vx[0],0);near(ps.vx[1],0);
+  // Separating grains retain their outward motion; no artificial pull-back.
+  ps.x[0]=0;ps.x[1]=rest;ps.vx[0]=-.4;ps.vx[1]=.4;
+  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest,FIXED_STEP,true,b.engine.rules);
+  assert.ok(ps.vx[0]<0&&ps.vx[1]>0);
+});
+
+test('the cauldron stops downward powder impacts with no rebound and supports resting grains',()=>{
+  const b=new BrewingSession(generateWorld('inelastic-walls').ingredients),ps=b.engine.ps;
+  const i=ps.add({x:0,y:-1.23,z:0,mass:.25,vy:-3,vx:1},b.engine.materials.get(10),Phase.SOLID);
+  ps.solidSubdivision[i]=1;ps.powderContent[i]=1;
+  confineCauldronParticle(ps,i);
+  assert.ok(Math.abs(ps.vy[i])<.00001,`grain bounced off base with vy=${ps.vy[i]}`);
+  assert.ok(Math.abs(ps.vx[i])<1,'impact should dissipate sliding energy');
+  assert.ok(cauldronGranularWallSupport(ps,i,{x:0,y:-4.5,z:0}));
+  const beforeY=ps.y[i];
+  for(let n=0;n<100;n++)b.step();
+  assert.ok(Math.abs(ps.y[i]-beforeY)<.005,'unsupported spring oscillation at rest');
+  assert.ok(Math.abs(ps.vy[i])<.05,'resting grain must not store rebound speed');
 });
 
 test('starter powders pour as dry grains and settle into a compact frictional pile',()=>{
