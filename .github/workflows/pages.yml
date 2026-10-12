@@ -41,8 +41,8 @@ jobs:
           set -eu
           echo "Published site: $SITE_URL"
           curl --fail --silent --show-error --location --retry 10 --retry-delay 6 -o /tmp/pages-index.html "${SITE_URL}?probe=${GITHUB_SHA}"
-          grep -F 'href="./styles.css"' /tmp/pages-index.html
-          grep -F 'src="./src/app/main.mjs"' /tmp/pages-index.html
+          grep -F 'href="./styles.css /tmp/pages-index.html
+          grep -F 'src="./src/app/main.mjs /tmp/pages-index.html
           for asset in styles.css public/base.css public/desktop.css public/fixes.css src/app/main.mjs public/manifest.webmanifest sw.js; do
             echo "Checking: ${SITE_URL}${asset}"
             curl --fail --silent --show-error --location --retry 10 --retry-delay 6 -o /tmp/asset "${SITE_URL}${asset}?probe=${GITHUB_SHA}"
