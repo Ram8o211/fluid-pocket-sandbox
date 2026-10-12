@@ -65,8 +65,17 @@ export class FluidSolver {
       grid.rebuild(ps,env.box);this.gasCounts.fill(0,0,ps.count);
       grid.forEachPair(ps,searchRadius,(i,j)=>{
         const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<=1e-12||d2>r2)return;const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,nz=planar?0:dz/d,pi=ps.phase[i],pj=ps.phase[j];
-        if(pi===Phase.GAS&&pj===Phase.GAS){const scale=pairStride,spread=(1-d/searchRadius)*(.018+.0125*(ps.compressibility[i]+ps.compressibility[j])),[wi,wj]=pairWeights(ps,i,j),amount=spread*2;ps.x[i]-=nx*amount*wi;ps.y[i]-=ny*amount*wi;if(!planar)ps.z[i]-=nz*amount*wi;ps.x[j]+=nx*amount*wj;ps.y[j]+=ny*amount*wj;if(!planar)ps.z[j]+=nz*amount*wj;this.gasCounts[i]=Math.min(65535,this.gasCounts[i]+scale);this.gasCounts[j]=Math.min(65535,this.gasCounts[j]+scale);return;}
-        if(pi===Phase.GAS||pj===Phase.GAS){const gas=pi===Phase.GAS?i:j,sign=pi===Phase.GAS?-1:1,spread=(1-d/searchRadius)*(.018+.025*ps.compressibility[gas]);ps.x[gas]+=nx*spread*sign;ps.y[gas]+=ny*spread*sign;if(!planar)ps.z[gas]+=nz*spread*sign;return;}
+        // Vapour parcels represent overlapping gas volumes, not hard spheres.
+        // Only very close contacts separate, with a time-scaled soft response.
+        if(pi===Phase.GAS&&pj===Phase.GAS){
+          const contact=particlePairRestDistance(ps,i,j,planar)*.55;
+          if(d<contact){const q=1-d/contact,amount=q*q*.12*dt/Math.max(1,iterations);separatePair(ps,i,j,nx,ny,nz,amount,planar);}
+          this.gasCounts[i]=Math.min(65535,this.gasCounts[i]+pairStride);this.gasCounts[j]=Math.min(65535,this.gasCounts[j]+pairStride);return;
+        }
+        if(pi===Phase.GAS||pj===Phase.GAS){
+          const gas=pi===Phase.GAS?i:j,sign=pi===Phase.GAS?-1:1,contact=particlePairRestDistance(ps,i,j,planar)*.7;
+          if(d<contact){const q=1-d/contact,spread=q*q*.24*dt/Math.max(1,iterations);ps.x[gas]+=nx*spread*sign;ps.y[gas]+=ny*spread*sign;if(!planar)ps.z[gas]+=nz*spread*sign;}return;
+        }
         if(pi===Phase.LIQUID&&pj===Phase.LIQUID){this.solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar,interactionScale);return;}
         if(pi===Phase.SOLID&&pj===Phase.SOLID){this.solveSolidPair(ps,i,j,nx,ny,nz,d,dt,planar);return;}
         if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar);return;}
@@ -86,7 +95,7 @@ export class FluidSolver {
         // correction into velocity can launch fine liquids off a supporting
         // floor every frame. Retain physical gravity, spoon and contact momentum
         // while allowing a bounded contribution from constraint displacement.
-        const constraintShare=liquid?clamp(env.liquidConstraintVelocityShare??1,0,1):1,physicalShare=Math.max(freezing*.94,1-constraintShare);
+        const constraintShare=liquid?clamp(env.liquidConstraintVelocityShare??1,0,1):.1,physicalShare=Math.max(freezing*.94,1-constraintShare);
         const physicalDown=ps.vx[i]*gravity.x+ps.vy[i]*gravity.y+ps.vz[i]*gravity.z;
         ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;
         if(liquid&&constraintShare<1&&physicalDown>=0){
