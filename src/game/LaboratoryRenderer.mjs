@@ -105,23 +105,33 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.restore();
   }
   drawFluid(ctx, t) {
-    const ps = this.sim.ps, c = this.colorScratch, pixel = 1;
+    const ps = this.sim.ps, c = this.colorScratch;
     for (let i = 0; i < ps.count; i++) {
       this.particleColor(ps, i, c);
-      const x = Math.round((t.cx + ps.x[i] * t.scale) / pixel) * pixel, y = Math.round((t.cy - ps.y[i] * t.scale) / pixel) * pixel;
-      const radius = Math.max(pixel, effectiveParticleRadius(ps, i, true) * t.scale);
-      const dryGrain = isPowder(ps,i) && ps.powderContent[i] > .85;
-      const r = Math.ceil(radius / pixel) * pixel;
-      ctx.globalAlpha = ps.phase[i] === Phase.GAS ? .24 : .93;
-      ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
-      // A full pixel footprint covers packed contacts at both resolutions. Grain
-      // texture comes from colour flecks rather than transparent gaps in the pile.
-      ctx.fillRect(x - r, y - r, r * 2, r * 2);
-      if (dryGrain) { ctx.fillStyle = `rgb(${Math.round(c.r*.82)},${Math.round(c.g*.82)},${Math.round(c.b*.82)})`; ctx.fillRect(x + (i%2 ? 0 : -pixel), y - pixel, pixel, pixel); }
-      if (ps.phase[i] === Phase.SOLID) { ctx.fillStyle = '#c1d9d2'; ctx.globalAlpha = .45; ctx.fillRect(x, y, pixel, pixel); }
-      else if (ps.phase[i] === Phase.LIQUID && i % 16 === 0) { ctx.fillStyle = '#e6f9e1'; ctx.globalAlpha = .17; ctx.fillRect(x, y - r, pixel, pixel); }
+      const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
+      const phase=ps.phase[i],dryGrain=isPowder(ps,i)&&ps.powderContent[i]>.85;
+      // Each material now consists of 1-2 screen-pixel texels instead of the
+      // old 6x6 squares. Scale both the footprint and texels with ECO mode:
+      // 2px at 384x232 and 1px at 192x116 represent the same visible detail.
+      const size=Math.max(1,Math.round(effectiveParticleRadius(ps,i,true)*t.scale*.9));
+      const tile=Math.max(1,Math.min(2,Math.round(t.scale/40*2)));
+      const variation=dryGrain?.13:phase===Phase.SOLID?.07:phase===Phase.GAS?.04:.025;
+      ctx.globalAlpha=phase===Phase.GAS?.24:phase===Phase.LIQUID?.94:.98;
+      for(let oy=-size;oy<size;oy+=tile)for(let ox=-size;ox<size;ox+=tile){
+        const hash=((i*67+ox*23+oy*41)>>>0)%11-5;
+        const v=1+variation*hash/5;
+        ctx.fillStyle=`rgb(${Math.max(0,Math.min(255,Math.round(c.r*v)))},${Math.max(0,Math.min(255,Math.round(c.g*v)))},${Math.max(0,Math.min(255,Math.round(c.b*v)))})`;
+        ctx.fillRect(x+ox,y+oy,Math.min(tile,size-ox),Math.min(tile,size-oy));
+      }
+      // One-pixel grit/highlights preserve the medieval pixel-art texture
+      // without enlarging the physical grains or creating hollow powder piles.
+      if(dryGrain){
+        ctx.globalAlpha=.5;ctx.fillStyle=`rgb(${Math.round(c.r*.64)},${Math.round(c.g*.64)},${Math.round(c.b*.64)})`;
+        ctx.fillRect(x+(i%2),y-1,1,1);
+      }else if(phase===Phase.SOLID){ctx.globalAlpha=.28;ctx.fillStyle='#c1d9d2';ctx.fillRect(x,y,1,1);}
+      else if(phase===Phase.LIQUID&&i%16===0){ctx.globalAlpha=.14;ctx.fillStyle='#e6f9e1';ctx.fillRect(x,y-size,1,1);}
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
   }
 }
 
