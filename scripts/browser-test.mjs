@@ -69,6 +69,8 @@ try {
   assert.match(await page.locator('#sheetContent').textContent(), /60 ml|60\.0 ml/);
   assert.match(await page.locator('#sheetContent').textContent(), /°A/);
   const activeSave = await readSave(page);
+  assert.equal(activeSave.brew.count, 240); assert.equal(activeSave.brew.particleMl, .25);
+  assert.match(await page.locator('#labStatus').textContent(), /SEALED/);
   assert.ok(activeSave.brew.history.stirred > 0); assert.ok(activeSave.brew.history.heatEnergy > 0); assert.ok(activeSave.brew.history.coldEnergy > 0);
   await page.locator('[data-action="save-inspection"]').click(); await page.locator('#discoveryName').fill('First travelling tonic'); await page.locator('[data-action="record-discovery"]').click();
   assert.match(await page.locator('#sheetContent').textContent(), /First travelling tonic/);
@@ -84,9 +86,9 @@ try {
   await pourRecipe(page, second.order.witness); await page.waitForTimeout(550); await bottleAndSell(page);
   const twoSales = await readSave(page); assert.equal(twoSales.completed, 2); assert.ok(twoSales.lastSale.quality >= 95);
   await page.locator('[data-action="next"]').click(); await page.waitForSelector('body[data-game-state="brewing"]', { timeout });
-  await page.locator('#pourBtn').click(); const beforeReload = await readSave(page); assert.equal(beforeReload.brew.count, 20);
+  await page.locator('#pourBtn').click(); const beforeReload = await readSave(page); assert.equal(beforeReload.brew.count, 80);
   await page.reload(); await page.locator('#continueBtn').click(); await page.waitForSelector('body[data-game-state="brewing"]', { timeout });
-  const afterReload = await readSave(page); assert.equal(afterReload.completed, 2); assert.equal(afterReload.brew.count, 20); assert.deepEqual(afterReload.inventory, beforeReload.inventory); assert.ok(afterReload.equipment.densimeter);
+  const afterReload = await readSave(page); assert.equal(afterReload.completed, 2); assert.equal(afterReload.brew.count, 80); assert.deepEqual(afterReload.inventory, beforeReload.inventory); assert.ok(afterReload.equipment.densimeter);
   // Mobile overflow and main controls at narrow widths; desktop shares the game.
   for (const viewport of [{ width: 320, height: 740 }, { width: 393, height: 852 }, { width: 1280, height: 900 }]) {
     await page.setViewportSize(viewport);
@@ -101,6 +103,24 @@ try {
   await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: tx + 28, y: ty - 18 }] });
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.locator('#measureBtn').click(); assert.match(await page.locator('#sheetContent').textContent(), /Density/); await page.locator('[data-action="close"]').click();
+  // A real small batch boils through visible controls. The lid keeps its mass,
+  // warns the player, and blocks bottling until cooling completes the phase loop.
+  const massBeforeBoiling = beforeReload.brew.particles.mass.reduce((sum, mass) => sum + mass, 0);
+  await page.locator('#heatBtn').click();
+  await page.waitForFunction(() => /ML STEAM/.test(document.querySelector('#labStatus').textContent), null, { timeout });
+  assert.equal(await page.locator('#bottleBtn').isDisabled(), true);
+  assert.match(await page.locator('#bottleBtn').textContent(), /Wait for condensation/);
+  assert.match(await page.locator('#labHint').textContent(), /Steam is trapped/);
+  await page.screenshot({ path: 'test-results/retained-steam.png', fullPage: true });
+  await page.locator('#coolBtn').click();
+  await page.waitForFunction(() => !/ML STEAM/.test(document.querySelector('#labStatus').textContent), null, { timeout });
+  for (let i = 0; i < 3; i++) await page.locator('#coolBtn').click();
+  const condensed = await readSave(page);
+  assert.equal(condensed.brew.history.evaporated, 0); assert.ok(condensed.brew.history.condensed > 0);
+  assert.ok(Math.abs(condensed.brew.particles.mass.reduce((sum, mass) => sum + mass, 0) - massBeforeBoiling) < .001);
+  assert.deepEqual(condensed.inventory, beforeReload.inventory);
+  assert.doesNotMatch(await page.locator('#bottleBtn').textContent(), /Wait for condensation/);
+  await page.screenshot({ path: 'test-results/condensed-brew.png', fullPage: true });
   await page.goto(new URL('sandbox.html?mode=2D', base).href);
   await page.waitForFunction(() => document.querySelector('#materialSelect')?.options.length > 0, null, { timeout });
   assert.equal(await page.locator('#scene2d').isVisible(), true); assert.equal(await page.locator('#scene').isVisible(), false);
@@ -108,5 +128,5 @@ try {
   assert.ok((await page.locator('#materialSelect').textContent()).length > 5);
   await page.screenshot({ path: 'test-results/original-sandbox.png', fullPage: true });
   assert.deepEqual(failedResponses, [], 'Missing deployment assets'); assert.deepEqual(errors, [], 'Browser initialization/runtime errors');
-  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
+  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, retained steam and condensation with conserved mass, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
 } finally { if (browser) await browser.close(); if (server) server.kill('SIGTERM'); }

@@ -22,8 +22,8 @@ function separatePair(ps,i,j,nx,ny,nz,amount,planar){const [wi,wj]=pairWeights(p
 export class FluidSolver {
   constructor(){this.neighborRadius=.48;this.restDistance=.26;this.reverseSweep=false;this.pairPhase=0;this.gasCounts=null;}
   ensureScratch(ps){if(!this.gasCounts||this.gasCounts.length<ps.capacity)this.gasCounts=new Uint16Array(ps.capacity);}
-  solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar){
-    const rest=particlePairRestDistance(ps,i,j,planar),supportRadius=Math.min(this.neighborRadius,Math.max(.30,rest*1.35)),[wi,wj]=pairWeights(ps,i,j);
+  solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar,interactionScale=1){
+    const rest=particlePairRestDistance(ps,i,j,planar),supportRadius=Math.min(this.neighborRadius*interactionScale,Math.max(.30*interactionScale,rest*1.35)),[wi,wj]=pairWeights(ps,i,j);
     const fi=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0,fj=ps.temperature[j]<ps.meltingTemperature[j]-ps.phaseHysteresis[j]?clamp(ps.phaseProgress[j],0,1):0,mobility=(1-fi*.86)*(1-fj*.86);
     const viscosity=(effectiveLiquidViscosity(ps,i)+effectiveLiquidViscosity(ps,j))*.5,kernel=clamp(1-d/supportRadius,0,1),viscous=clamp(viscosity*kernel*dt*4.5*mobility,0,.18);
     if(viscous>0){const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];ps.vx[i]+=dvx*viscous*wi;ps.vy[i]+=dvy*viscous*wi;if(!planar)ps.vz[i]+=dvz*viscous*wi;ps.vx[j]-=dvx*viscous*wj;ps.vy[j]-=dvy*viscous*wj;if(!planar)ps.vz[j]-=dvz*viscous*wj;}
@@ -49,8 +49,8 @@ export class FluidSolver {
       const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<=1e-12)return;const rest=particlePairRestDistance(ps,i,j,planar);if(d2>=rest*rest)return;const d=Math.sqrt(d2),amount=(rest-d)*.995;separatePair(ps,i,j,dx/d,dy/d,planar?0:dz/d,amount,planar);
     });
   }
-  step(ps,grid,gravity,env,rules,dt,iterations=2,profile=null){
-    const maxV=env.maxVelocity,planar=env.dimensionMode==='2D',searchRadius=clamp(profile?.fluidRadius??this.neighborRadius,.40,this.neighborRadius),pairStride=Math.max(1,profile?.fluidPairStride||1),pairPhase=this.pairPhase++%pairStride;this.reverseSweep=!this.reverseSweep;this.ensureScratch(ps);let hasHard=false;
+  step(ps,grid,gravity,env,rules,dt,iterations=2,profile=null,collideBoundary=null){
+    const maxV=env.maxVelocity,planar=env.dimensionMode==='2D',interactionScale=clamp(rules.interactionRadiusScale??1,.4,1),searchRadius=clamp(profile?.fluidRadius??this.neighborRadius,.40,this.neighborRadius)*interactionScale,pairStride=Math.max(1,profile?.fluidPairStride||1),pairPhase=this.pairPhase++%pairStride;this.reverseSweep=!this.reverseSweep;this.ensureScratch(ps);let hasHard=false;
     for(let i=0;i<ps.count;i++){
       ps.px[i]=ps.x[i];ps.py[i]=ps.y[i];ps.pz[i]=ps.z[i];hasHard=hasHard||(ps.incompressible?.[i]||0)>=.5;
       if(ps.phase[i]!==Phase.GAS){ps.vx[i]+=gravity.x*dt;ps.vy[i]+=gravity.y*dt;if(!planar)ps.vz[i]+=gravity.z*dt;}else if(planar)ps.vz[i]=0;
@@ -59,6 +59,7 @@ export class FluidSolver {
       ps.x[i]+=ps.vx[i]*dt;ps.y[i]+=ps.vy[i]*dt;if(planar){ps.z[i]=0;ps.vz[i]=0;}else ps.z[i]+=ps.vz[i]*dt;
     }
     this.collideBox(ps,env.box,planar);
+    collideBoundary?.();
     const r2=searchRadius*searchRadius;
     for(let it=0;it<iterations;it++){
       grid.rebuild(ps,env.box);this.gasCounts.fill(0,0,ps.count);
@@ -66,7 +67,7 @@ export class FluidSolver {
         const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<=1e-12||d2>r2)return;const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,nz=planar?0:dz/d,pi=ps.phase[i],pj=ps.phase[j];
         if(pi===Phase.GAS&&pj===Phase.GAS){const scale=pairStride,spread=(1-d/searchRadius)*(.018+.0125*(ps.compressibility[i]+ps.compressibility[j])),[wi,wj]=pairWeights(ps,i,j),amount=spread*2;ps.x[i]-=nx*amount*wi;ps.y[i]-=ny*amount*wi;if(!planar)ps.z[i]-=nz*amount*wi;ps.x[j]+=nx*amount*wj;ps.y[j]+=ny*amount*wj;if(!planar)ps.z[j]+=nz*amount*wj;this.gasCounts[i]=Math.min(65535,this.gasCounts[i]+scale);this.gasCounts[j]=Math.min(65535,this.gasCounts[j]+scale);return;}
         if(pi===Phase.GAS||pj===Phase.GAS){const gas=pi===Phase.GAS?i:j,sign=pi===Phase.GAS?-1:1,spread=(1-d/searchRadius)*(.018+.025*ps.compressibility[gas]);ps.x[gas]+=nx*spread*sign;ps.y[gas]+=ny*spread*sign;if(!planar)ps.z[gas]+=nz*spread*sign;return;}
-        if(pi===Phase.LIQUID&&pj===Phase.LIQUID){this.solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar);return;}
+        if(pi===Phase.LIQUID&&pj===Phase.LIQUID){this.solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar,interactionScale);return;}
         if(pi===Phase.SOLID&&pj===Phase.SOLID){this.solveSolidPair(ps,i,j,nx,ny,nz,d,dt,planar);return;}
         if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar);return;}
         if(pi===Phase.LIQUID&&pj===Phase.SOLID)this.solveSolidLiquidPair(ps,j,i,-nx,-ny,-nz,d,gravity,rules,planar);
@@ -74,6 +75,7 @@ export class FluidSolver {
       if(hasHard){grid.rebuild(ps,env.box);this.enforceHardPacking(ps,grid,searchRadius,planar);}
       for(let i=0;i<ps.count;i++)ps.localGasDensity[i]=ps.phase[i]===Phase.GAS?clamp(.18+this.gasCounts[i]*.075,0,1.8):0;
       this.collideBox(ps,env.box,planar);
+      collideBoundary?.();
     }
     for(let i=0;i<ps.count;i++){
       const rx=(ps.x[i]-ps.px[i])/dt,ry=(ps.y[i]-ps.py[i])/dt,rz=planar?0:(ps.z[i]-ps.pz[i])/dt;

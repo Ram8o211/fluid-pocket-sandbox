@@ -11,6 +11,7 @@ shop entry point, and no backend or production framework dependency is needed.
 | Physics | existing `src/simulation` and `src/reactions` | Particle state, momentum, fluid contact, thermal conduction, phases, electrical behavior, reactions and combustion |
 | World | `src/game/world.mjs` | Seed hashing, original MaterialGenerator reuse, validated starter diversity, names and rare unlocks |
 | Brew adapter | `src/game/brewing.mjs` | Cauldron walls, metered stock transfer, spoon impulses, thermal energy, sampling, exact liquid drain and full snapshots |
+| Vessel geometry | `src/game/cauldron.mjs` | Shared collision planes and rendered cutaway, radius clearance, fine particle quantity and pool limits |
 | Potion | `src/game/potion.mjs` | Mass-weighted MaterialSampler reuse and physical/derived measurement |
 | Customers | `src/game/orders.mjs` | Seeded personalities and attainable targets from bounded actual engine brews |
 | Assessment | `src/game/evaluation.mjs` | Pure weighted tolerance-aware scoring, hard constraints, quantity and pricing |
@@ -28,18 +29,26 @@ checks; UI modules have syntax lint and executable browser acceptance checks.
 ## Quantities and physical actions
 
 The engine uses normalized material units, not calibrated real chemistry. The
-guild labels temperature as °A. Each initially emitted particle represents one
-ml: its mass equals the ingredient's density. Stock is debited only for particles
+guild labels temperature as °A. Each initially emitted particle represents .25
+ml: its mass equals the ingredient's density times .25. Stock is debited only for particles
 successfully emitted. Inventory, remaining capacity and allocated particle slots
 bound a pour. Spatial and phase-dependent solvers continue to control the fluid.
 
 Flame and frost distribute a finite energy rate through weighted local contacts.
 Temperature changes by energy divided by particle mass and heat capacity; the
 existing ThermalSolver then conducts that heat. Heating also changes the
-effective viscosity used by FluidSolver, and PhaseSolver and CombustionSolver
-continue to determine freezing, boiling and combustion. Vapour that crosses the
-open cauldron rim is removed and recorded as evaporation. The cauldron has tapered
-walls, a floor and an open gas outlet; liquids and solids remain in the vessel.
+effective viscosity used by FluidSolver and accelerates compatible liquid contact
+mixing with a bounded temperature multiplier. PhaseSolver and CombustionSolver
+continue to determine freezing, boiling and combustion. The copper lid seals all
+phases inside the same convex cutaway used for rendering. Radius-aware collision
+planes run during fluid integration and packing, after rigid contacts, and after
+generated products. Clipping also contains particle rounding and reaction effects.
+
+Vapour is retained, continues to reserve capacity, and cools gradually through the
+lid. Frost accelerates that cooling; the existing hysteretic PhaseSolver converts
+gas back to liquid over time. Bottling waits while more than .01 ml remains as
+steam. The HUD shows trapped steam and the needed cooling action. Newly evaporated
+ingredients are never removed; legacy evaporation history remains in old saves.
 
 Dragging a spoon supplies nearby liquid with the drag's coherent velocity. Fast
 and slow circles, reversal and duration change local movement and contact rates.
@@ -66,7 +75,7 @@ cauldron clears it. Neither potency nor stability has an independent game slider
 
 Customer generation performs a bounded three-second real-engine trial using
 available ingredients and equipment. Targets are read from its bottle. A safe
-ambient trial is used if a prospective brew freezes or evaporates away. Different
+ambient trial is used if a prospective brew freezes or still contains steam. Different
 order indices and world seeds generate different requests; early requests have
 two requirements and later ones gain thermal, stability and magical priorities.
 The witness is feasibility evidence, not a recipe-matching scoring system.
@@ -95,7 +104,9 @@ Autosave runs after important actions, every eight seconds while brewing, and on
 visibility/page exit. Saves pin generated materials rather than relying on future
 generator changes. They include active order, stock, progression, discoveries,
 pending vial, full physical particle fields and brewing history. Restoring frozen
-particles reconstructs rigid membership. Thermal controls restart off. A corrupt
+particles reconstructs rigid membership. Trapped steam and phase progress survive
+reloads. Legacy one-ml particles are subdivided once without changing sampled mass,
+colour, temperature, stock, costs or progression. Thermal controls restart off. A corrupt
 primary save can recover a validated backup; future-version saves are preserved.
 Export/import is available in Settings. The separate sandbox save key is intact.
 
@@ -108,7 +119,9 @@ wood, stone, glass and copper share the same palette and pixel scale. There are
 no stock assets, external fonts or emoji controls.
 
 The game starts with a 200 ml budget and unlocks 320 and 440 ml cauldrons. A maximum
-768-particle allocation leaves headroom for solver-generated products. It uses a
+2,304-particle allocation leaves headroom above a full 1,760-particle large cauldron
+for solver-generated products. Game-only contact radii and grid cells are scaled
+to the finer packing; sandbox settings retain their existing defaults. It uses a
 40 Hz fixed physics step, at most three catch-up steps, existing solver scheduling,
 30 FPS battery rendering and AdaptiveQuality-based resolution/effect fallback.
 Rendering quality never changes stock quantities or assessment. Native Android

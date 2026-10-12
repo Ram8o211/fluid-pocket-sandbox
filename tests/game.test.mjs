@@ -82,15 +82,15 @@ test('bottling drains exact liquid quantity and conserves mass on repeated fract
   const third = brew.bottle(30); close(third.volume, 30); assert.equal(brew.engine.ps.count, 0);
   close(initial, vial.mass + second.mass + third.mass); close(vial.portions[0].ml, 30); close(second.portions[0].ml, 40);
 });
-test('bottle excludes gas and solids and does not fabricate missing quantity', () => {
+test('bottle excludes solids and does not fabricate missing liquid quantity', () => {
   const { state, brew } = setup(); brew.pour(1, 60, state.inventory);
-  for (let i = 0; i < 20; i++) brew.engine.ps.setPhase(i, i < 10 ? Phase.GAS : Phase.SOLID);
-  const sample = brew.bottle(60); close(sample.volume, 40); assert.equal(sample.liquidFraction, 1); assert.equal(brew.engine.ps.count, 20);
-  assert.deepEqual(sample.phases, [0, 40, 0]); close(sample.phaseMass[Phase.LIQUID], sample.mass);
+  for (let i = 0; i < 80; i++) brew.engine.ps.setPhase(i, Phase.SOLID);
+  const sample = brew.bottle(60); close(sample.volume, 40); assert.equal(sample.liquidFraction, 1); assert.equal(brew.engine.ps.count, 80);
+  assert.deepEqual(sample.phases, [0, 160, 0]); close(sample.phaseMass[Phase.LIQUID], sample.mass);
 });
-test('overheating creates actual vapour losses and cooling can solidify a brew', () => {
+test('overheating creates retained vapour and cooling can solidify a brew', () => {
   const hot = setup(); hot.brew.pour(1, 15, hot.state.inventory); hot.brew.setThermal(1); ticks(hot.brew, 400);
-  assert.ok(hot.brew.history.evaporated > 0 || hot.brew.engine.ps.phaseCounts()[Phase.GAS] > 0);
+  assert.equal(hot.brew.history.evaporated, 0); assert.ok(hot.brew.engine.ps.phaseCounts()[Phase.GAS] > 0);
   const cold = setup(); cold.brew.pour(1, 15, cold.state.inventory); cold.brew.setThermal(0, 1); ticks(cold.brew, 400);
   assert.ok(cold.brew.engine.ps.phaseCounts()[Phase.SOLID] > 0);
 });

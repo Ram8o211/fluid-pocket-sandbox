@@ -120,18 +120,20 @@ function renderTools() {
 function updateHUD() {
   if (!brew || !state) return;
   const volume = brew.liquidVolume;
+  const steam = brew.vaporVolume, condensing = steam > .01;
   $('volume').textContent = `${Math.round(volume)} / ${state.order.volume} ml`;
-  $('labStatus').textContent = state.pendingBottle ? 'VIAL READY' : state.stage === 'sale' ? 'COMMISSION COMPLETE' : `CAULDRON · ${brew.capacity} ML`;
-  $('labHint').textContent = state.pendingBottle ? 'Your potion is ready for its customer' : brew.engine.ps.count ? brew.heat ? 'The flame transfers heat into your brew' : brew.cool ? 'Frost draws heat from your brew' : 'Drag in circles to mix the liquid' : 'Choose a reagent, then pour';
-  $('bottleBtn').innerHTML = `${icon(state.stage === 'sale' ? 'arrow' : 'vial')}${state.stage === 'sale' ? 'Next customer' : state.pendingBottle ? 'Sell potion' : `Bottle ${state.order.volume} ml`}`;
-  $('bottleBtn').disabled = state.stage !== 'sale' && !state.pendingBottle && volume < 1;
+  $('labStatus').textContent = state.pendingBottle ? 'VIAL READY' : state.stage === 'sale' ? 'COMMISSION COMPLETE' : condensing ? `SEALED · ${steam.toFixed(1)} ML STEAM` : `SEALED CAULDRON · ${brew.capacity} ML`;
+  $('labHint').textContent = state.pendingBottle ? 'Your potion is ready for its customer' : condensing ? brew.heat ? 'Steam is trapped · turn off Flame to condense' : 'Steam is condensing · Frost helps it return faster' : brew.engine.ps.count ? brew.heat ? 'Warmth makes compatible reagents blend faster' : brew.cool ? 'Frost cools the brew and condenses trapped steam' : 'Drag in circles to mix · the lid keeps ingredients inside' : 'Choose a reagent, then pour through the lid';
+  $('bottleBtn').innerHTML = `${icon(state.stage === 'sale' ? 'arrow' : 'vial')}${state.stage === 'sale' ? 'Next customer' : state.pendingBottle ? 'Sell potion' : condensing ? 'Wait for condensation' : `Bottle ${state.order.volume} ml`}`;
+  $('bottleBtn').disabled = state.stage !== 'sale' && !state.pendingBottle && (volume < 1 || condensing);
+  $('bottleBtn').title = condensing ? 'Cool the trapped steam back into liquid before bottling.' : '';
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
 }
 const TUTORIAL = [
   'Welcome, apprentice! Your customer wants a 60 ml potion. Select a reagent, then tap Pour.',
   'Each tap pours 20 ml. Pour three times to fill the customer’s 60 ml vial.',
   'Now drag in circles inside the cauldron, or hold Stir. The spoon helps the reagents blend.',
-  'Tap Flame or Frost to feel their effect. A little is enough; tap through the levels to turn it off.',
+  'Flame speeds up mixing. The lid traps steam: turn Flame off or use Frost, then wait for condensation.',
   'Tap Inspect to use your thermometer and colour lens. The guild sells more instruments.',
   'Tap Bottle to seal the measured liquid in a vial. Only liquid can be bottled.',
   'Tap Sell in the vial panel. A close match earns more coins. Your shop saves automatically.'
@@ -189,7 +191,7 @@ function showInstruments() {
   latestInspection = { ...sample, portions: sample.portions || brew.portions.map(p => ({ ...p })) };
   if (state.tutorial >= 4 && state.tutorial < 6) { state.tutorial = 5; updateTutorial(); persist(); }
   audio.play('measure');
-  sheet('Measuring bench', `<div class="vial-preview"><img src="${bottleSprite(sample.color)}" alt="Your measured potion"><div><h3>${Math.round(sample.volume)} ml in ${state.pendingBottle ? 'your vial' : 'the cauldron'}</h3><p>A careful measurement makes a better brew.</p></div></div>${measuredRows(sample)}<div class="snapshot-info">${Math.round(sample.liquidFraction * 100)}% liquid · ${Math.round(sample.history.elapsed)} seconds brewed · ${sample.history.evaporated.toFixed(1)} ml evaporated</div><button class="secondary" data-action="save-inspection">Save this discovery</button><details><summary>How do these measurements work?</summary><p>Density is mass divided by volume. Texture includes temperature’s effect on viscosity. Stability measures variation between particles and their mixing affinity. Magic follows the reagent’s simulated reaction and electrical properties, homogeneity, and exposure to actual heat. °A is the guild’s normalized alchemical temperature scale.</p></details>`);
+  sheet('Measuring bench', `<div class="vial-preview"><img src="${bottleSprite(sample.color)}" alt="Your measured potion"><div><h3>${Math.round(state.pendingBottle ? sample.volume : brew.liquidVolume)} ml in ${state.pendingBottle ? 'your vial' : 'the cauldron'}</h3><p>A careful measurement makes a better brew.</p></div></div>${measuredRows(sample)}<div class="snapshot-info">${Math.round(sample.liquidFraction * 100)}% liquid · ${Math.round(sample.history.elapsed)} seconds brewed · ${state.pendingBottle ? 'Sealed vial' : `${brew.vaporVolume.toFixed(1)} ml steam under the lid`} · ${(sample.history.condensed || 0).toFixed(1)} ml recondensed</div><button class="secondary" data-action="save-inspection">Save this discovery</button><details><summary>How do these measurements work?</summary><p>Density is mass divided by volume. Texture includes temperature’s effect on viscosity. Warm compatible liquids blend faster on contact. The lid keeps steam inside; turn off Flame or use Frost and wait for liquid to return before bottling. Stability measures variation between particles and their mixing affinity. Magic follows the reagent’s simulated reaction and electrical properties, homogeneity, and exposure to actual heat. °A is the guild’s normalized alchemical temperature scale.</p></details>`);
 }
 function bottle() {
   if (state.stage === 'sale') { moveToNext(); return; }

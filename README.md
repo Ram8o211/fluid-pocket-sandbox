@@ -11,6 +11,11 @@ the resulting particle state. Use profits for supplies, instruments, larger
 cauldrons and rare reagents. Discoveries belong in your recipe book. Progress,
 orders, stock and the active cauldron save locally; Settings includes save export.
 
+The fitted lid retains steam and ingredients. Turn off Flame or use Frost, then
+wait for steam to condense before bottling. Warmth accelerates compatible mixing.
+Four fine particles represent each ml, and the visible walls and lid share their
+collision geometry, including clearance for each particle's full drawn radius.
+
 The first commission has an interactive tutorial. Hold Pour for repeated doses,
 drag bottles onto the cauldron, draw circles with the spoon or hold Stir. Tap
 Flame/Frost to cycle power; a copper furnace unlocks precise controls. The six

@@ -35,7 +35,7 @@ export function generateWorld(seed) {
       electricalConductivity: i >= 6 ? .55 + local() * .4 : raw.electricalConductivity,
       reactionHeat: (local() - .5) * .5,
       combustionTemperature: i < 4 ? .96 + local() * .2 : .72 + local() * .35,
-      particleRadius: .18 + local() * .02, incompressible: true,
+      particleRadius: .10 + local() * .01, incompressible: true,
       opacity: .72 + local() * .23
     });
     const price = Math.round((.055 + material.viscosity * .045 + material.electricalConductivity * .035 + (i >= 6 ? .07 : 0)) * 1000) / 1000;
