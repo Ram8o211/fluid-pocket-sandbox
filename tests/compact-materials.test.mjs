@@ -18,7 +18,7 @@ const liquids = () => [.65,1.5].map((density,i) => {
     boilingTemperature:1.05, combustionTemperature:1.4, reactionPotential:0, reactionHeat:0, phaseTransitionHysteresis:.02 }) };
 });
 
-test('stable density interfaces do not repel; only inverted touching liquids sort',()=>{
+test('stable density interfaces do not repel; inverted local neighbors can sort beyond direct contact',()=>{
   const b=new BrewingSession(liquids()), ps=b.engine.ps, gravity={x:0,y:-4.5,z:0};
   ps.add({x:0,y:0,z:0,mass:.25},b.engine.materials.get(2),Phase.LIQUID);
   ps.add({x:0,y:.11,z:0,mass:.25},b.engine.materials.get(1),Phase.LIQUID);
@@ -30,8 +30,13 @@ test('stable density interfaces do not repel; only inverted touching liquids sor
   b.engine.fluid.solveLiquidPair(ps,0,1,0,-1,0,rest*1.01,gravity,b.engine.rules,FIXED_STEP,true);
   assert.ok(ps.y[0]<rest*1.01);assert.ok(ps.y[1]>0,'lighter contact rises');
   ps.y[0]=rest*1.3;ps.y[1]=0;
-  b.engine.fluid.solveLiquidPair(ps,0,1,0,-1,0,rest*1.3,gravity,b.engine.rules,FIXED_STEP,true);
-  near(ps.y[0],rest*1.3);near(ps.y[1],0,'sorting cannot act across empty space');
+  b.engine.fluid.solveLiquidPair(ps,0,1,0,-1,0,rest*1.3,gravity,b.engine.rules,FIXED_STEP,true,.5);
+  assert.ok(ps.y[0]<rest*1.3,'inverted parcels separated by a small gap still sort');
+  assert.ok(ps.y[1]>0);
+  const beyond=b.engine.fluid.neighborRadius*.5+.02;
+  ps.y[0]=beyond;ps.y[1]=0;
+  b.engine.fluid.solveLiquidPair(ps,0,1,0,-1,0,beyond,gravity,b.engine.rules,FIXED_STEP,true,.5);
+  near(ps.y[0],beyond);near(ps.y[1],0,'sorting cannot act outside the neighbor search radius');
 });
 
 test('different density liquids settle into touching layers across the bowl and conserve mass',()=>{
@@ -45,6 +50,26 @@ test('different density liquids settle into touching layers across the bowl and 
       gap=Math.min(gap,Math.hypot(ps.x[i]-ps.x[j],ps.y[i]-ps.y[j])-effectiveParticleRadius(ps,i,true)-effectiveParticleRadius(ps,j,true));
     assert.ok(gap<.01,`air gap at column ${x}: ${gap}`);
   }
+  near(ps.totalMass(),mass);near(b.occupiedVolume,80);
+  assert.equal(ps.phaseCounts()[Phase.LIQUID],320);
+});
+
+test('new heavy liquid poured onto a settled light layer sinks and closes the interface',()=>{
+  const b=new BrewingSession(liquids()), ps=b.engine.ps;
+  b.pour(1,40,{1:100});
+  for(let n=0;n<260;n++)b.step();
+  b.pour(2,40,{2:100});
+  const mass=ps.totalMass();
+  // Reproduce the order-dependent inversion reported by post-merge review:
+  // the previous 1.15-diameter cutoff left the denser layer on top indefinitely.
+  for(let n=0;n<1600;n++)b.step();
+  const mean=id=>{let total=0,count=0;for(let i=0;i<ps.count;i++)if(ps.materialId[i]===id){total+=ps.y[i];count++;}return total/count;};
+  assert.ok(mean(2)<mean(1)-.08,`heavy layer stranded above light: heavy=${mean(2)} light=${mean(1)}`);
+  let contactGap=Infinity;
+  for(let i=0;i<ps.count;i++)if(ps.materialId[i]===1)
+    for(let j=0;j<ps.count;j++)if(ps.materialId[j]===2)
+      contactGap=Math.min(contactGap,Math.hypot(ps.x[i]-ps.x[j],ps.y[i]-ps.y[j])-particlePairRestDistance(ps,i,j,true));
+  assert.ok(contactGap<.015,`unphysical gap between reordered liquid layers: ${contactGap}`);
   near(ps.totalMass(),mass);near(b.occupiedVolume,80);
   assert.equal(ps.phaseCounts()[Phase.LIQUID],320);
 });
