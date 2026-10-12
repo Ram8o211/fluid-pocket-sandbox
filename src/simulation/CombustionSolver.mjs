@@ -69,19 +69,24 @@ export function phaseForMaterialAtTemperature(material,temp){
 }
 
 export class CombustionSolver{
-  constructor(){this.events=0;this.massConsumed=0;this.lastProducts=[];}
+  constructor(){this.events=0;this.massConsumed=0;this.lastProducts=[];this.previousTemperature=new Float32Array(0);this.neighbourHeat=new Float64Array(0);}
   resetFrame(){this.events=0;this.massConsumed=0;this.lastProducts=[];}
   step(ps,grid,materials,rules,env,dt,getProducts,onSolidCreated,pushEvent){
     this.resetFrame();const initialCount=ps.count,planar=env.dimensionMode==='2D';
+    if(this.previousTemperature.length<ps.capacity){this.previousTemperature=new Float32Array(ps.capacity);this.neighbourHeat=new Float64Array(ps.capacity);}
+    this.previousTemperature.set(ps.temperature.subarray(0,initialCount));this.neighbourHeat.fill(0);
+    const radius=.55*clamp(rules.interactionRadiusScale??1,.4,1);
     for(let i=initialCount-1;i>=0;i--){
       const threshold=ps.combustionTemperature[i];
-      if(!Number.isFinite(threshold)||ps.temperature[i]<threshold){ps.combustionProgress[i]=Math.max(0,ps.combustionProgress[i]-dt*.8);continue;}
+      if(!Number.isFinite(threshold)||this.previousTemperature[i]<threshold){ps.combustionProgress[i]=Math.max(0,ps.combustionProgress[i]-dt*.8);continue;}
       const excess=clamp((ps.temperature[i]-threshold)/Math.max(.08,1.2-threshold),0,1),rate=(.55+1.45*ps.volatility[i])*(.42+.58*excess)*(rules.combustionRate??1);
       ps.combustionProgress[i]=clamp(ps.combustionProgress[i]+dt*rate,0,1);
       const heatPower=(.14+.2*ps.volatility[i]+.08*Math.abs(ps.reactionPotential[i]))*(rules.combustionHeatScale??1);
       const heat=heatPower*dt*(.45+.55*excess);
       ps.temperature[i]=clamp(ps.temperature[i]+heat/Math.max(.15,ps.heatCapacity[i]),0,1.2);
-      grid.forEachNeighbor(ps,i,.62,j=>{const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);if(d>.62)return;const w=1-d/.62;ps.temperature[j]=clamp(ps.temperature[j]+heat*w*.34/Math.max(.15,ps.heatCapacity[j]),0,1.2);});
+      // Ignition reads the previous temperature field. Combustion heat reaches
+      // immediate neighbours now; those neighbours can ignite on the next tick.
+      grid.forEachNeighbor(ps,i,radius,j=>{if(j>=initialCount)return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);if(d>radius)return;const w=1-d/radius;this.neighbourHeat[j]+=heat*w*.34/Math.max(.15,ps.heatCapacity[j]);});
       if(ps.combustionProgress[i]<1)continue;
       const parent=materials.get(ps.materialId[i]);if(!parent){ps.combustionProgress[i]=0;continue;}
       const products=getProducts(parent);if(!products?.length){ps.combustionProgress[i]=0;continue;}
@@ -95,11 +100,13 @@ export class CombustionSolver{
         const def=products[p],fraction=p===produceCount-1?1-assignedMass/originalMass:def.fraction,mass=Math.max(1e-8,originalMass*fraction);assignedMass+=mass;
         const phase=phaseForMaterialAtTemperature(def.material,temp),angle=(i*2.399963+p*2.094395),spread=.055+.025*p,px=x+Math.cos(angle)*spread,py=y+Math.sin(angle)*spread,pz=planar?0:z+Math.sin(angle*.73)*spread;
         let index;
-        if(p===0){index=i;ps.assignMaterial(index,def.material,phase,temp);ps.mass[index]=mass;ps.x[index]=px;ps.y[index]=py;ps.z[index]=pz;ps.px[index]=px;ps.py[index]=py;ps.pz[index]=pz;ps.vx[index]=vx;ps.vy[index]=vy;ps.vz[index]=vz;}
+        if(p===0){index=i;ps.assignMaterial(index,def.material,phase,temp);ps.mass[index]=mass;ps.mixtureAmount[index]=mass/Math.max(.04,def.material.density);ps.x[index]=px;ps.y[index]=py;ps.z[index]=pz;ps.px[index]=px;ps.py[index]=py;ps.pz[index]=pz;ps.vx[index]=vx;ps.vy[index]=vy;ps.vz[index]=vz;}
         else index=ps.add({x:px,y:py,z:pz,vx,vy,vz,mass,temperature:temp},def.material,phase);
         if(index>=0&&phase===Phase.SOLID)onSolidCreated?.(index,planar);
       }
       this.events++;this.massConsumed+=originalMass;this.lastProducts=products.map(p=>p.material.id);pushEvent?.(x,y,z,clamp(.55+.45*excess,0,1),1);
     }
+    for(let i=0;i<initialCount;i++)ps.temperature[i]=clamp(ps.temperature[i]+this.neighbourHeat[i],0,1.2);
   }
 }
+

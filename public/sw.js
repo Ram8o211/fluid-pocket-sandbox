@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-v2';
+const CACHE = 'alchemist-shop-v3';
 const CORE = [
   './',
   './index.html',
@@ -11,6 +11,8 @@ const CORE = [
   './src/game/potion.mjs',
   './src/game/brewing.mjs',
   './src/game/cauldron.mjs',
+  './src/game/CauldronThermal.mjs',
+  './src/reactions/MixtureSolver.mjs',
   './src/game/orders.mjs',
   './src/game/evaluation.mjs',
   './src/game/economy.mjs',
@@ -60,4 +62,5 @@ self.addEventListener('fetch', event => {
     return response;
   })));
 });
+
 

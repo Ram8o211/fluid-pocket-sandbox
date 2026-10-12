@@ -12,7 +12,12 @@ cauldrons and rare reagents. Discoveries belong in your recipe book. Progress,
 orders, stock and the active cauldron save locally; Settings includes save export.
 
 The fitted lid retains steam and ingredients. Turn off Flame or use Frost, then
-wait for steam to condense before bottling. Warmth accelerates compatible mixing.
+wait for steam to condense before bottling. Flame and Frost enter through the
+bottom; temperature and phase changes spread through neighbouring particles.
+The lid warms with the pot, so a uniformly hot brew stays vapour until cooled.
+Compatible fluids smoothly converge to their full-mixture proportions, starting
+at local contacts; warmth and stirring accelerate this. Incompatible fluids stay
+separate, and colour blending continues after the first particles have mixed.
 Four fine particles represent each ml, and the visible walls and lid share their
 collision geometry, including clearance for each particle's full drawn radius.
 
@@ -127,4 +132,5 @@ The Node test suite covers phase placement from ambient temperature, solid subdi
 ## Deployment
 
 Vercel builds with `npm run build` and serves `dist/`. GitHub remains the source of truth; active development stays on `feature/procedural-fluid-sandbox-mvp` until browser/mobile QA is complete.
+
 
