@@ -80,7 +80,8 @@ export class LaboratoryRenderer extends PlanarRenderer {
       ctx.strokeStyle = '#312237'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + 35, y - 47); ctx.lineTo(x, y); ctx.stroke();
       ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#cea478'; ctx.lineWidth = 5; ctx.stroke();
       if (this.tool === 'pestle') { rect(x - 6, y - 5, 12, 13, '#75858d'); rect(x - 4, y - 5, 8, 3, '#ced6ce'); rect(x - 7, y + 5, 14, 3, '#4c5a65'); }
-      else { rect(x - 9, y - 4, 19, 12, '#e3b784'); rect(x - 6, y + 3, 13, 4, '#ae724d'); }
+      // A broad spoon bowl visually matches the expanded stirring footprint.
+      else { rect(x - 16, y - 6, 33, 15, '#e3b784'); rect(x - 12, y + 4, 25, 5, '#ae724d'); }
     }
     ctx.restore(); this.frame++;
   }
