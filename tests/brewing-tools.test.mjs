@@ -19,6 +19,33 @@ test('spoon touches only nearby liquid and pestle crushes only touched solid, pr
   const restored=make();restored.restore(b.snapshot());assert.equal(restored.engine.ps.solidSubdivision[3],1);assert.equal(restored.engine.ps.solidBodyId[3],0);assert.ok(restored.engine.ps.solidBodyId[4]>0);
 });
 
+test('wider spoon catches multiple liquid and powder grains per stroke without pulling distant matter', () => {
+  const b=make(),ps=b.engine.ps,indices=[];
+  for(const x of [-.38,-.16,0,.16,.39,.7])indices.push(add(b,x,0,x===.39?Phase.SOLID:Phase.LIQUID));
+  ps.solidSubdivision[4]=1;ps.powderContent[4]=1;
+  const gas=add(b,0,.1,Phase.GAS),frozen=add(b,0,-.1,Phase.SOLID);
+  ps.solidSubdivision[frozen]=0;
+  const mass=ps.totalMass();
+  assert.equal(b.stir({x:0,y:0},{x:4,y:0}),5,
+    'one stroke should affect all five nearby grains, including loose powder');
+  for(const i of indices.slice(0,5))assert.ok(ps.vx[i]>.05,`grain ${i} was missed by stirring`);
+  assert.equal(ps.vx[indices[5]],0,'distant liquid must remain unaffected');
+  assert.equal(ps.vx[gas],0,'vapour must remain unaffected');
+  assert.equal(ps.vx[frozen],0,'coherent frozen blocks cannot be stirred');
+  assert.equal(ps.totalMass(),mass);
+});
+
+test('fast spoon drag catches particles along the whole travelled path only once', () => {
+  const b=make(),ps=b.engine.ps;
+  for(const x of [-1.3,-.6,-.2,.2,.6,1.3])add(b,x,0);
+  const affected=b.stir({x:.6,y:0},{x:5,y:0},1/40,{x:-.6,y:0});
+  assert.equal(affected,4,'swept stirring must reach grains between pointer events');
+  for(let i=1;i<=4;i++)assert.ok(ps.vx[i]>0,`swept path missed grain ${i}`);
+  assert.equal(ps.vx[0],0);assert.equal(ps.vx[5],0);
+  assert.equal(b.stir({x:.6,y:0},{x:0,y:0},1/40,{x:-.6,y:0}),0,
+    'stationary movement must not cause additional impulses');
+});
+
 test('freezing granular liquid makes one touching coherent solid without coarse lattice gaps', () => {
   const b=make(),e=b.engine,ps=e.ps;e.gravity={x:0,y:0,z:0};e.env.ambientThermalExchange=0;
   for(let i=0;i<8;i++)add(b,(i%4)*.11,Math.floor(i/4)*.11,Phase.LIQUID,.15);
