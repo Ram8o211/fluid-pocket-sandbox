@@ -1,3 +1,3 @@
-@import url('/base.css');
-@import url('/desktop.css');
-@import url('/fixes.css');
+@import url('./public/base.css');
+@import url('./public/desktop.css');
+@import url('./public/fixes.css');
