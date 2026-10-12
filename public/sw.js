@@ -1,7 +1,22 @@
-const CACHE = 'fluid-pocket-v11';
+const CACHE = 'alchemist-shop-v1';
 const CORE = [
   './',
   './index.html',
+  './sandbox.html',
+  './public/game.css',
+  './public/icons/alchemist.svg',
+  './src/game/main.mjs',
+  './src/game/contracts.mjs',
+  './src/game/world.mjs',
+  './src/game/potion.mjs',
+  './src/game/brewing.mjs',
+  './src/game/orders.mjs',
+  './src/game/evaluation.mjs',
+  './src/game/economy.mjs',
+  './src/game/persistence.mjs',
+  './src/game/LaboratoryRenderer.mjs',
+  './src/game/art.mjs',
+  './src/game/audio.mjs',
   './styles.css',
   './public/base.css',
   './public/desktop.css',
@@ -17,7 +32,7 @@ self.addEventListener('install', event => {
 });
 self.addEventListener('activate', event => {
   event.waitUntil(Promise.all([
-    caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('fluid-pocket-') && key !== CACHE).map(key => caches.delete(key)))),
+    caches.keys().then(keys => Promise.all(keys.filter(key => (key.startsWith('fluid-pocket-') || key.startsWith('alchemist-shop-')) && key !== CACHE).map(key => caches.delete(key)))),
     self.clients.claim()
   ]));
 });
@@ -44,3 +59,4 @@ self.addEventListener('fetch', event => {
     return response;
   })));
 });
+
