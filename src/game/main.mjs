@@ -15,7 +15,7 @@ const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', 
 const audio = new ShopAudio();
 const adaptiveQuality = new AdaptiveQuality();
 let state = null, brew = null, renderer = null, loaded = null;
-let selected = 1, dose = 20, inShop = false, assist = false, pointer = null;
+let selected = 1, dose = 20, inShop = false, assist = false, pointer = null, tool = 'spoon';
 let last = performance.now(), accumulator = 0, lastHUD = 0, lastRender = 0;
 let toastTimer = 0, holdTimer = 0, holdInterval = 0, lastAutosave = 0, saveFailed = false;
 let latestInspection = null, selectedRecipe = null;
@@ -114,8 +114,10 @@ function renderTools() {
   $('coolBtn').innerHTML = `${icon('frost')}<span>Frost <small>${brew.cool ? `${Math.round(brew.cool * 100)}%` : 'OFF'}</small></span>`;
   $('coolBtn').classList.toggle('cold', brew.cool > 0); $('coolBtn').setAttribute('aria-label', `Adjust cooling, ${Math.round(brew.cool * 100)} percent`);
   $('stirBtn').innerHTML = `${icon('spoon')}<span>Stir <small>HOLD</small></span>`;
+  $('crushBtn').innerHTML = `${icon('spoon')}<span>Pestle <small>POWDER</small></span>`;
+  $('crushBtn').classList.toggle('active', tool === 'pestle'); $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle'));
   $('cleanBtn').innerHTML = `${icon('clean')}<span>Clean <small>CAULDRON</small></span>`;
-  for (const id of ['heatBtn', 'coolBtn', 'stirBtn', 'cleanBtn']) $(id).disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
+  for (const id of ['heatBtn', 'coolBtn', 'stirBtn', 'crushBtn', 'cleanBtn']) $(id).disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
 }
 function updateHUD() {
   if (!brew || !state) return;
@@ -127,6 +129,8 @@ function updateHUD() {
   $('bottleBtn').innerHTML = `${icon(state.stage === 'sale' ? 'arrow' : 'vial')}${state.stage === 'sale' ? 'Next customer' : state.pendingBottle ? 'Sell potion' : condensing ? 'Wait for condensation' : `Bottle ${state.order.volume} ml`}`;
   $('bottleBtn').disabled = state.stage !== 'sale' && !state.pendingBottle && (volume < 1 || condensing);
   $('bottleBtn').title = condensing ? 'Cool the trapped steam back into liquid before bottling.' : '';
+  $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle')); $('crushBtn').classList.toggle('active', tool === 'pestle');
+  if (tool === 'pestle' && !state.pendingBottle && !condensing) $('labHint').textContent = 'Tap or drag the pestle on frozen matter to make powder';
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
 }
 const TUTORIAL = [
@@ -265,7 +269,7 @@ function prepareRecipe(index) {
   closeSheet(); renderRack(); updateHUD(); persist(); notify('Portions poured. Stir and apply the recorded heat or frost.');
 }
 function showSettings() {
-  sheet('Shop settings', `<label class="setting-row">Gentle sound effects<input id="soundSetting" type="checkbox"${state.settings.sound ? ' checked' : ''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics === 'balanced' ? ' selected' : ''}>Crisp · balanced</option><option value="eco"${state.settings.graphics === 'eco' ? ' selected' : ''}>Low · battery saver</option></select></label><p class="quiet">Both presets use the same 2D physics and potion quantities. Battery saver renders fewer pixels at 30 frames per second.</p><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Replay tutorial</button><button data-action="menu">Main menu</button><a href="./sandbox.html?mode=2D">Original physics sandbox</a></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><h3>How to brew</h3><ol class="help-list"><li>Read the request. Ask for a clue if needed.</li><li>Tap a reagent. Tap or hold Pour, or drag its bottle onto the cauldron.</li><li>Drag in circles in the liquid. Hold Stir for assisted stirring; a keyboard can use Space or the arrow keys.</li><li>Tap Flame and Frost to cycle their power. Heat and cooling change energy, reactions and phases. The copper furnace unlocks fine controls.</li><li>Inspect, then bottle. The vial drains only liquid; steam and frozen matter stay behind.</li><li>Sell the sealed vial. Save useful formulas and invest in better tools.</li></ol><details><summary>Save and simulation details</summary><p>The world, stock, order, vial and full cauldron save on this browser. Opening a panel pauses the laboratory while you read. Leaving the tab pauses time; no ingredients are consumed offline. Temperature, phases and particle properties are restored. A frozen coherent body is rebuilt on load. Clear browser data only after exporting a save.</p></details>`);
+  sheet('Shop settings', `<label class="setting-row">Gentle sound effects<input id="soundSetting" type="checkbox"${state.settings.sound ? ' checked' : ''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics === 'balanced' ? ' selected' : ''}>Crisp · balanced</option><option value="eco"${state.settings.graphics === 'eco' ? ' selected' : ''}>Low · battery saver</option></select></label><p class="quiet">Both presets use the same 2D physics and potion quantities. Battery saver renders fewer pixels at 30 frames per second.</p><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Replay tutorial</button><button data-action="menu">Main menu</button><a href="./sandbox.html?mode=2D">Original physics sandbox</a></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><h3>How to brew</h3><ol class="help-list"><li>Read the request. Ask for a clue if needed.</li><li>Tap a reagent. Tap or hold Pour, or drag its bottle onto the cauldron.</li><li>Drag in circles in the liquid. Hold Stir for assisted stirring. Tap Pestle, then tap or drag on frozen matter to crush it into powder; a keyboard can use Space or the arrow keys.</li><li>Tap Flame and Frost to cycle their power. Heat and cooling change energy, reactions and phases. The copper furnace unlocks fine controls.</li><li>Inspect, then bottle. The vial drains only liquid; steam and frozen matter stay behind.</li><li>Sell the sealed vial. Save useful formulas and invest in better tools.</li></ol><details><summary>Save and simulation details</summary><p>The world, stock, order, vial and full cauldron save on this browser. Opening a panel pauses the laboratory while you read. Leaving the tab pauses time; no ingredients are consumed offline. Temperature, phases and particle properties are restored. A frozen coherent body is rebuilt on load. Clear browser data only after exporting a save.</p></details>`);
 }
 function exportSave() {
   const blob = new Blob([encodeSave(state, brew)], { type: 'application/json' }), url = URL.createObjectURL(blob), anchor = document.createElement('a');
@@ -290,7 +294,8 @@ function bindUI() {
   };
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('pourBtn').addEventListener(event, stopPour);
   $('pourBtn').onclick = event => { if (event.detail === 0) pour(); };
-  $('stirBtn').onpointerdown = event => { if (!state || state.pendingBottle || state.stage !== 'brewing') return; event.preventDefault(); $('stirBtn').setPointerCapture(event.pointerId); assist = true; audio.play(); updateHUD(); };
+  $('crushBtn').onclick = () => { tool = tool === 'pestle' ? 'spoon' : 'pestle'; assist = false; renderer.spoon = null; $('labHint').textContent = tool === 'pestle' ? 'Tap or drag the pestle on frozen matter to make powder' : 'Drag in the cauldron to stir'; updateHUD(); };
+  $('stirBtn').onpointerdown = event => { if (!state || state.pendingBottle || state.stage !== 'brewing') return; event.preventDefault(); $('stirBtn').setPointerCapture(event.pointerId); tool = 'spoon'; assist = true; audio.play(); updateHUD(); };
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('stirBtn').addEventListener(event, () => { assist = false; if (renderer) renderer.spoon = null; updateHUD(); });
   $('stirBtn').onkeydown = event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); assist = true; } };
   $('stirBtn').onkeyup = () => { assist = false; renderer.spoon = null; };
@@ -313,12 +318,15 @@ function bindUI() {
     if (!brew || state.pendingBottle || state.stage !== 'brewing') return;
     event.preventDefault(); $('labCanvas').setPointerCapture(event.pointerId);
     pointer = { id: event.pointerId, point: renderer.screenToWorld(event.clientX, event.clientY), time: performance.now() };
-    renderer.spoon = pointer.point;
+    if (tool === 'pestle') brew.crush(pointer.point);
+    renderer.tool = tool; renderer.spoon = pointer.point;
   };
   $('labCanvas').onpointermove = event => {
     if (!pointer || pointer.id !== event.pointerId) return;
     const now = performance.now(), point = renderer.screenToWorld(event.clientX, event.clientY), dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
-    brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt);
+    if (tool === 'pestle') brew.crush(point);
+    else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt);
+    renderer.tool = tool;
     renderer.spoon = point; pointer = { id: event.pointerId, point, time: now }; advanceTutorial();
   };
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('labCanvas').addEventListener(event, () => { pointer = null; if (renderer) renderer.spoon = null; });
@@ -391,7 +399,7 @@ function loop(now) {
     }
     accumulator = Math.min(accumulator + elapsed, FIXED_STEP * 3);
     while (accumulator >= FIXED_STEP) {
-      if (assist) { brew.assistStir(); const angle = brew.history.elapsed * 3.5; renderer.spoon = { x: Math.cos(angle) * 1.15, y: -.6 + Math.sin(angle) * .45 }; }
+      if (assist) { renderer.tool = 'spoon'; brew.assistStir(); const angle = brew.history.elapsed * 3.5; renderer.spoon = { x: Math.cos(angle) * 1.15, y: -.6 + Math.sin(angle) * .45 }; }
       brew.step(FIXED_STEP); accumulator -= FIXED_STEP;
     }
     if (now - lastAutosave > 8000) persist();

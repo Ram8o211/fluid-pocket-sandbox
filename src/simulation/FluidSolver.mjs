@@ -54,6 +54,14 @@ export class FluidSolver {
     for(let i=0;i<ps.count;i++){
       ps.px[i]=ps.x[i];ps.py[i]=ps.y[i];ps.pz[i]=ps.z[i];hasHard=hasHard||(ps.incompressible?.[i]||0)>=.5;
       if(ps.phase[i]!==Phase.GAS){ps.vx[i]+=gravity.x*dt;ps.vy[i]+=gravity.y*dt;if(!planar)ps.vz[i]+=gravity.z*dt;}else if(planar)ps.vz[i]=0;
+      if(ps.phase[i]===Phase.GAS&&env.gasThermalMotion){
+        // Deterministic thermal agitation breaks the perfectly flat lid layer.
+        // Zero-mean parcel kicks coexist with buoyancy and soft pressure.
+        const seed=(Math.imul(i+1,73856093)^Math.imul(this.pairPhase,19349663))>>>0;
+        const kick=(axis)=>{let n=(seed^Math.imul(axis,83492791))>>>0;n=Math.imul(n^(n>>>16),2246822519)>>>0;return (n/4294967296-.5)*2;};
+        const amplitude=env.gasThermalMotion*Math.sqrt(dt)*clamp(ps.temperature[i]+.25,.3,1.2);
+        ps.vx[i]+=kick(1)*amplitude;ps.vy[i]+=kick(2)*amplitude;if(!planar)ps.vz[i]+=kick(3)*amplitude;
+      }
       const damping=Math.exp(-dt*(ps.phase[i]===Phase.GAS?.15:.025));ps.vx[i]*=damping;ps.vy[i]*=damping;ps.vz[i]*=damping;
       const speed2=ps.vx[i]*ps.vx[i]+ps.vy[i]*ps.vy[i]+(planar?0:ps.vz[i]*ps.vz[i]);if(speed2>maxV*maxV){const k=maxV/Math.sqrt(speed2);ps.vx[i]*=k;ps.vy[i]*=k;if(!planar)ps.vz[i]*=k;}
       ps.x[i]+=ps.vx[i]*dt;ps.y[i]+=ps.vy[i]*dt;if(planar){ps.z[i]=0;ps.vz[i]=0;}else ps.z[i]+=ps.vz[i]*dt;
@@ -68,8 +76,8 @@ export class FluidSolver {
         // Vapour parcels represent overlapping gas volumes, not hard spheres.
         // Only very close contacts separate, with a time-scaled soft response.
         if(pi===Phase.GAS&&pj===Phase.GAS){
-          const contact=particlePairRestDistance(ps,i,j,planar)*.55;
-          if(d<contact){const q=1-d/contact,amount=q*q*.12*dt/Math.max(1,iterations);separatePair(ps,i,j,nx,ny,nz,amount,planar);}
+          const contact=particlePairRestDistance(ps,i,j,planar)*(env.gasContactScale??.55);
+          if(d<contact){const q=1-d/contact,amount=q*q*(env.gasContactStrength??.12)*dt/Math.max(1,iterations);separatePair(ps,i,j,nx,ny,nz,amount,planar);}
           this.gasCounts[i]=Math.min(65535,this.gasCounts[i]+pairStride);this.gasCounts[j]=Math.min(65535,this.gasCounts[j]+pairStride);return;
         }
         if(pi===Phase.GAS||pj===Phase.GAS){
@@ -95,7 +103,7 @@ export class FluidSolver {
         // correction into velocity can launch fine liquids off a supporting
         // floor every frame. Retain physical gravity, spoon and contact momentum
         // while allowing a bounded contribution from constraint displacement.
-        const constraintShare=liquid?clamp(env.liquidConstraintVelocityShare??1,0,1):.1,physicalShare=Math.max(freezing*.94,1-constraintShare);
+        const constraintShare=liquid?clamp(env.liquidConstraintVelocityShare??1,0,1):clamp(env.gasConstraintVelocityShare??.1,0,1),physicalShare=Math.max(freezing*.94,1-constraintShare);
         const physicalDown=ps.vx[i]*gravity.x+ps.vy[i]*gravity.y+ps.vz[i]*gravity.z;
         ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;
         if(liquid&&constraintShare<1&&physicalDown>=0){

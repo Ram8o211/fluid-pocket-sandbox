@@ -47,13 +47,16 @@ test('unsupported liquids retain the correct downward acceleration independent o
   }
 });
 
-test('a stirred liquid can rise and circulate, then settles after the spoon stops', () => {
+test('contact stirring moves a local parcel without lifting the bulk, then settles', () => {
   const brew = new BrewingSession(generateWorld('settling-test').ingredients);
   brew.pour(1, 60, { 1: 100 }); ticks(brew, 240); const resting = heights(brew);
-  ticks(brew, 80, true); const stirred = heights(brew);
-  assert.ok(stirred.mean > resting.mean + .1); assert.ok(brew.history.stirred > 0);
+  const ps=brew.engine.ps, point={x:ps.x[0],y:ps.y[0]};
+  const touched=brew.stir(point,{x:1,y:6},.05);
+  assert.ok(touched>0 && touched<ps.count/4);assert.ok(ps.vy[0]>0);
+  ticks(brew,80,true);const stirred=heights(brew);
+  assert.ok(stirred.mean < resting.mean + .1);assert.ok(brew.history.stirred>0);
   ticks(brew, 160); const settled = heights(brew);
-  assert.ok(settled.mean < stirred.mean - .15); assert.ok(settled.p95 < -.5);
+  assert.ok(settled.mean < -.8); assert.ok(settled.p95 < -.5);
   close(brew.liquidVolume, 60); bowl(brew);
 });
 

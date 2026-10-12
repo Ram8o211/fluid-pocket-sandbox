@@ -6,20 +6,20 @@ const LATTICE_SPACING=.34;
 function quantized(value,spacing){return Math.round(value/spacing)*spacing;}
 
 export class SolidSolver{
-  constructor(){this.nextBodyId=1;this.bodyOrigins=new Map();}
+  constructor(){this.compactFreezing=false;this.nextBodyId=1;this.bodyOrigins=new Map();}
   reset(){this.nextBodyId=1;this.bodyOrigins.clear();}
   onMelt(ps,i){ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
   initializeParticle(ps,i,planar=false,grid=null){
     if(ps.phase[i]!==Phase.SOLID)return 0;
     if(ps.solidSubdivision[i]>=.55){ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;return 0;}
     let bodyId=0,nearest=Infinity;
-    const inspect=j=>{if(j===i||ps.phase[j]!==Phase.SOLID||ps.solidBodyId[j]<=0||ps.materialId[j]!==ps.materialId[i])return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<BODY_JOIN_RADIUS*BODY_JOIN_RADIUS&&d2<nearest){bodyId=ps.solidBodyId[j];nearest=d2;}};
+    const inspect=j=>{if(j===i||ps.phase[j]!==Phase.SOLID||ps.solidBodyId[j]<=0||ps.materialId[j]!==ps.materialId[i])return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<(this.compactFreezing?.18*.18:BODY_JOIN_RADIUS*BODY_JOIN_RADIUS)&&d2<nearest){bodyId=ps.solidBodyId[j];nearest=d2;}};
     if(grid&&ps.cell[i]>=0)grid.forEachNeighbor(ps,i,BODY_JOIN_RADIUS,inspect);else for(let j=0;j<ps.count;j++)inspect(j);
     if(!bodyId){bodyId=this.nextBodyId++;this.bodyOrigins.set(bodyId,{x:ps.x[i],y:ps.y[i],z:planar?0:ps.z[i]});}
     let origin=this.bodyOrigins.get(bodyId);
     if(!origin){let found=-1;for(let k=0;k<ps.count;k++)if(ps.solidBodyId[k]===bodyId){found=k;break;}origin=found<0?{x:ps.x[i],y:ps.y[i],z:planar?0:ps.z[i]}:{x:ps.x[found]-ps.solidLocalX[found],y:ps.y[found]-ps.solidLocalY[found],z:planar?0:ps.z[found]-ps.solidLocalZ[found]};this.bodyOrigins.set(bodyId,origin);}
     ps.solidBodyId[i]=bodyId;
-    const rawX=ps.x[i]-origin.x,rawY=ps.y[i]-origin.y,rawZ=planar?0:ps.z[i]-origin.z,crystal=clamp(ps.crystallinity[i],0,1);
+    const rawX=ps.x[i]-origin.x,rawY=ps.y[i]-origin.y,rawZ=planar?0:ps.z[i]-origin.z,crystal=this.compactFreezing?0:clamp(ps.crystallinity[i],0,1);
     ps.solidLocalX[i]=rawX+(quantized(rawX,LATTICE_SPACING)-rawX)*crystal;ps.solidLocalY[i]=rawY+(quantized(rawY,LATTICE_SPACING)-rawY)*crystal;ps.solidLocalZ[i]=planar?0:rawZ+(quantized(rawZ,LATTICE_SPACING)-rawZ)*crystal;
     return bodyId;
   }
@@ -29,6 +29,27 @@ export class SolidSolver{
       if(ps.phase[i]!==Phase.SOLID)continue;
       if(ps.solidSubdivision[i]<.55&&ps.solidBodyId[i]<=0)this.initializeParticle(ps,i,planar,grid);
       const id=ps.solidBodyId[i];if(id>0){let g=groups.get(id);if(!g){g=[];groups.set(id,g);}g.push(i);}else this.settleGranularParticle(ps,grid,i,env,gravity,dt,planar);
+    }
+    if(this.compactFreezing){
+      // Weld only touching coherent solids. Remote islands and crushed powder
+      // stay independent; preserve current offsets when two freeze fronts meet.
+      const parent=new Map([...groups.keys()].map(id=>[id,id]));
+      const root=id=>{while(parent.get(id)!==id)id=parent.get(id);return id;};
+      grid.forEachPair(ps,.22,(i,j)=>{
+        const a=ps.solidBodyId[i],b=ps.solidBodyId[j];
+        if(ps.phase[i]!==Phase.SOLID||ps.phase[j]!==Phase.SOLID||!parent.has(a)||!parent.has(b)||ps.solidSubdivision[i]>=.55||ps.solidSubdivision[j]>=.55)return;
+        if(Math.hypot(ps.x[i]-ps.x[j],ps.y[i]-ps.y[j],planar?0:ps.z[i]-ps.z[j])>.18)return;
+        const ra=root(a),rb=root(b);if(ra!==rb)parent.set(rb,ra);
+      });
+      const merged=new Map();
+      for(const [id,indices] of groups){const r=root(id);if(!merged.has(r))merged.set(r,[]);merged.get(r).push(...indices);}
+      for(const [id,indices] of merged){
+        if(indices.some(i=>ps.solidBodyId[i]!==id)){
+          const first=indices[0],origin={x:ps.x[first],y:ps.y[first],z:planar?0:ps.z[first]};this.bodyOrigins.set(id,origin);
+          for(const i of indices){ps.solidBodyId[i]=id;ps.solidLocalX[i]=ps.x[i]-origin.x;ps.solidLocalY[i]=ps.y[i]-origin.y;ps.solidLocalZ[i]=planar?0:ps.z[i]-origin.z;}
+        }
+      }
+      groups.clear();for(const [id,indices] of merged)groups.set(id,indices);
     }
     for(const indices of groups.values()){
       if(!indices.length)continue;let cx=0,cy=0,cz=0,lvx=0,lvy=0,lvz=0,lx=0,ly=0,lz=0,rigid=0,crystal=0;

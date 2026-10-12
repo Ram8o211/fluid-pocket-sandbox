@@ -140,6 +140,16 @@ try {
   assert.deepEqual(condensed.inventory, beforeReload.inventory);
   assert.doesNotMatch(await page.locator('#bottleBtn').textContent(), /Wait for condensation/);
   await page.screenshot({ path: 'test-results/condensed-brew.png', fullPage: true });
+  // Freeze a real batch, then crush a touched portion using the visible pestle.
+  for (let i = 0; i < 3; i++) await page.locator('#coolBtn').click();
+  await page.waitForFunction(solid => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.phase.some(p => p === solid), Phase.SOLID, { timeout: 20000 });
+  await page.locator('#crushBtn').click();
+  assert.equal(await page.locator('#crushBtn').getAttribute('aria-pressed'), 'true');
+  const frozen = await readSave(page), target = frozen.brew.particles.phase.findIndex(p => p === Phase.SOLID);
+  const canvasBox = await page.locator('#labCanvas').boundingBox();
+  await page.mouse.click(canvasBox.x + (192 + frozen.brew.particles.x[target] * 40) / 384 * canvasBox.width, canvasBox.y + (158 - frozen.brew.particles.y[target] * 40) / 232 * canvasBox.height);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.solidSubdivision.some(v => v === 1), null, { timeout });
+  await page.screenshot({ path: 'test-results/pestle-powder.png', fullPage: true });
   await page.goto(new URL('sandbox.html?mode=2D', base).href);
   await page.waitForFunction(() => document.querySelector('#materialSelect')?.options.length > 0, null, { timeout });
   assert.equal(await page.locator('#scene2d').isVisible(), true); assert.equal(await page.locator('#scene').isVisible(), false);

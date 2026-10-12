@@ -75,9 +75,31 @@ export class LaboratoryRenderer extends PlanarRenderer {
     if (this.spoon) {
       const x = 192 + this.spoon.x * 40, y = 158 - this.spoon.y * 40;
       ctx.strokeStyle = '#312237'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + 35, y - 47); ctx.lineTo(x, y); ctx.stroke();
-      ctx.strokeStyle = '#cea478'; ctx.lineWidth = 5; ctx.stroke(); rect(x - 5, y - 2, 11, 8, '#e3b784'); rect(x - 3, y + 2, 7, 4, '#ae724d');
+      ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#cea478'; ctx.lineWidth = 5; ctx.stroke();
+      if (this.tool === 'pestle') { rect(x - 6, y - 5, 12, 13, '#75858d'); rect(x - 4, y - 5, 8, 3, '#ced6ce'); rect(x - 7, y + 5, 14, 3, '#4c5a65'); }
+      else { rect(x - 5, y - 2, 11, 8, '#e3b784'); rect(x - 3, y + 2, 7, 4, '#ae724d'); }
     }
     ctx.restore(); this.frame++;
+  }
+  drawEffects(ctx, t) {
+    const ps = this.sim.ps;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < ps.count; i++) {
+      if (ps.combustionProgress[i] <= 0 || ps.temperature[i] < ps.combustionTemperature[i]) continue;
+      const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
+      const radius = Math.max(1, effectiveParticleRadius(ps, i, true) * t.scale);
+      // Every active burning parcel emits its own small light, including in eco mode.
+      const flicker = .8 + .2 * Math.sin(this.sim.time * 19 + i * 2.4);
+      ctx.globalAlpha = (.12 + .1 * ps.combustionProgress[i]) * flicker;
+      ctx.fillStyle = '#ff793e'; ctx.fillRect(x-radius*2,y-radius*2,radius*4,radius*4);
+      ctx.globalAlpha = .65 * flicker; ctx.fillStyle = '#ffd687'; ctx.fillRect(x-1,y-2,2,3);
+    }
+    const events = this.sim.reactions;
+    for (let i = 0; i < events.eventCount; i++) {
+      const x = Math.round(t.cx + events.eventX[i] * t.scale), y = Math.round(t.cy - events.eventY[i] * t.scale);
+      ctx.globalAlpha = .3; ctx.fillStyle = '#ffd687'; ctx.fillRect(x-1,y-1,2,2);
+    }
+    ctx.restore();
   }
   drawFluid(ctx, t) {
     const ps = this.sim.ps, c = this.colorScratch, pixel = 1;

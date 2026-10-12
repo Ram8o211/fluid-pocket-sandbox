@@ -179,3 +179,9 @@ compiler, lint, all unit/integration tests, build/static smoke and a real portra
 browser. Pages repeats these checks and runs the complete browser flow against
 the published URL after deployment, retaining screenshots as workflow artifacts.
 
+
+### Contact tools and phase pacing
+
+The spoon applies velocity only to liquid parcels touching its 0.14-unit head (plus the parcel radius). Neighbour viscosity transfers that motion gradually. The Pestle button selects a local 0.18-unit crushing head: touched coherent solids lose their body membership and become granular powder, retaining mass, temperature and chemistry. Powder subdivision survives save/restore. Freezing sets liquid parcels to coherent solid and welds touching freeze fronts; it preserves their compact offsets instead of snapping fine parcels onto the sandbox's coarse crystal lattice.
+
+Shop evaporation and combustion run at 22% of the base transition rate; combustion heat is reduced to 30%. Condensation and melting retain their rates. Soft gas contact pressure and deterministic thermal agitation prevent vapor from forming a perfectly flat line beneath the sealed lid. Local concentration still controls cool condensation and material density still controls buoyancy. Every actively burning parcel renders a tiny warm light and bright core; completed reaction sparks are also particle-sized.

@@ -23,7 +23,7 @@ export function targetPhaseAt(ps,i,rules=null,env=null){
 }
 export function updatePhaseParticle(ps,i,dt,rules=null,env=null){
   const from=ps.phase[i],desired=targetPhaseAt(ps,i,rules,env);if(desired===from){ps.phaseProgress[i]=Math.max(0,ps.phaseProgress[i]-dt*2);return false;}
-  const speed=.65+ps.volatility[i]*1.4; ps.phaseProgress[i]=clamp(ps.phaseProgress[i]+dt*speed,0,1);
+  const speed=(.65+ps.volatility[i]*1.4)*(from===Phase.LIQUID&&desired===Phase.GAS?Math.max(.01,rules?.evaporationRate??1):1); ps.phaseProgress[i]=clamp(ps.phaseProgress[i]+dt*speed,0,1);
   if(ps.phaseProgress[i]>=1){
     // Phase changes preserve bulk momentum. Crystallinity, viscosity and solid
     // subdivision affect internal/contact dynamics, never gravitational fall speed.
