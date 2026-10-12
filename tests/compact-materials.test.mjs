@@ -94,13 +94,25 @@ test('powder contacts have zero restitution, dissipate slip and never attract se
   assert.ok(ps.vx[1]-ps.vx[0]>=-.000001,'no residual approaching velocity');
   assert.ok(ps.vx[1]-ps.vx[0]<.000001,'impact cannot generate separation speed');
   assert.ok(Math.abs(ps.vy[1]-ps.vy[0])<1.4,'friction must dissipate lateral slip');
-  // Moving grains must travel the last few percent of the gap before
-  // colliding; cancelling velocity early makes a suspended, hollow pile.
-  ps.x[0]=0;ps.x[1]=rest*1.04;ps.vx[0]=.6;ps.vx[1]=-.6;
+  // No phantom collision when the gap is too far to close this step.
+  ps.x[0]=0;ps.x[1]=rest*1.04;ps.vx[0]=.02;ps.vx[1]=-.02;
   ps.vy[0]=ps.vy[1]=0;
   b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest*1.04,FIXED_STEP,true,b.engine.rules);
   near(ps.x[0],0);near(ps.x[1],rest*1.04);
-  near(ps.vx[0],.6);near(ps.vx[1],-.6);
+  near(ps.vx[0],.02);near(ps.vx[1],-.02);
+  // An imminent collision reaches the actual surface, never pauses with
+  // an invisible gap or reverses into elastic recoil.
+  ps.x[0]=0;ps.x[1]=rest*1.04;ps.vx[0]=.6;ps.vx[1]=-.6;
+  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest*1.04,FIXED_STEP,true,b.engine.rules);
+  near(ps.x[1]-ps.x[0],rest);
+  assert.ok(Math.abs(ps.vx[1]-ps.vx[0])<.00001);
+  // High-speed grains can swap sides between samples. The swept hit must
+  // restore the first touching configuration and consume approach velocity.
+  ps.px[0]=-.1;ps.px[1]=.1;ps.py[0]=ps.py[1]=0;
+  ps.x[0]=.09;ps.x[1]=-.09;ps.vx[0]=7;ps.vx[1]=-7;
+  b.engine.fluid.solvePowderPair(ps,0,1,-1,0,0,.18,FIXED_STEP,true,b.engine.rules);
+  near(ps.x[1]-ps.x[0],rest);
+  assert.ok(Math.abs(ps.vx[1]-ps.vx[0])<.00001,'swept collision must be inelastic');
   // Leaving contact must not create a Hooke-law force, even for wet dough.
   ps.x[0]=0;ps.x[1]=rest*1.35;ps.vx[0]=ps.vx[1]=0;
   ps.vy[0]=ps.vy[1]=0;ps.powderContent[0]=ps.powderContent[1]=.55;
