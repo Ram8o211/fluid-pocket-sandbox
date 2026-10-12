@@ -1,3 +1,4 @@
+import { isCoherentSolid, wetPowderPair } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
 
@@ -43,13 +44,14 @@ export class MixtureSolver {
       ps.mixtureGroup[i] = group.id; ps.mixtureProgress[i] = this.previous[i] = 0;
     }
   }
-  contact(ps, i, j, contact, threshold) {
-    if (ps.phase[i] === Phase.SOLID || ps.phase[j] === Phase.SOLID) return 0;
+  contact(ps, i, j, contact, threshold, dt=0) {
+    if (isCoherentSolid(ps,i) || isCoherentSolid(ps,j)) return 0;
     const a = this.root(ps.mixtureGroup[i]), b = this.root(ps.mixtureGroup[j]);
     const delta = Math.max(a.max, b.max) - Math.min(a.min, b.min);
     // Preserve the original affinity envelope. A bridging third ingredient or
     // an averaged affinity cannot quietly admit incompatible source fluids.
     if (delta >= threshold || threshold <= 0) return 0;
+    wetPowderPair(ps,i,j,contact,dt);
     const joined = a.id !== b.id;
     if (joined) {
       const amount = a.amount + b.amount;
@@ -72,7 +74,7 @@ export class MixtureSolver {
       for (const k of reactive) group.target[k] += ps[MIX_PROPERTIES[k]][i] * ps.mixtureAmount[i] / Math.max(.00001, group.amount);
     }
     for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] === Phase.SOLID) continue;
+      if (isCoherentSolid(ps,i)) continue;
       const group = this.root(ps.mixtureGroup[i]);
       ps.mixtureGroup[i] = group.id;
       const progress = ps.mixtureProgress[i] + (1 - ps.mixtureProgress[i]) * (1 - Math.exp(-4 * this.signal[i] * dt));
@@ -82,7 +84,7 @@ export class MixtureSolver {
       const thermal = Math.exp(clamp(warmth * (rules.mixingTemperatureCoefficient ?? 0), 0, 1.4));
       const motion = 1 + Math.min(2, Math.hypot(ps.vx[i], ps.vy[i], ps.vz[i]) * .3);
       const fraction = 1 - Math.exp(-1.8 * Math.max(0, rules.baseMixingRate / 2.2) * progress * thermal * motion * dt);
-      for (let k = 0; k < MIX_PROPERTIES.length; k++) { const values = ps[MIX_PROPERTIES[k]]; values[i] += (group.target[k] - values[i]) * fraction; }
+      for (let k = 0; k < MIX_PROPERTIES.length; k++) { if (MIX_PROPERTIES[k]==='solidSubdivision' && ps.phase[i]===Phase.SOLID) continue; const values = ps[MIX_PROPERTIES[k]]; values[i] += (group.target[k] - values[i]) * fraction; }
       ps.density[i] = ps.effectiveDensityAt(i);
     }
   }

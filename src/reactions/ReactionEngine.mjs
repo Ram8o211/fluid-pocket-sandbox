@@ -1,4 +1,5 @@
 import { clamp, saturate } from '../simulation/math.mjs';
+import { isCoherentSolid } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 
 export function thermalMixingMultiplier(ps, i, j, coefficient = 0) {
@@ -21,8 +22,8 @@ export class ReactionEngine {
       if(materialId[i]===materialId[j] && !this.mixtures)return;
       const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],d2=dx*dx+dy*dy+dz*dz;if(d2>r2)return;
       const contact=saturate(1-Math.sqrt(d2)/radius),potentialDelta=Math.abs(ps.reactionPotential[i]-ps.reactionPotential[j]);
-      const mixtureCompatibility=this.mixtures ? (rules.baseMixingRate>0 ? this.mixtures.contact(ps,i,j,contact,rules.miscibilityThreshold) : 0) : undefined;
-      if(materialId[i]===materialId[j])return;
+      const mixtureCompatibility=this.mixtures ? (rules.baseMixingRate>0 ? this.mixtures.contact(ps,i,j,contact,rules.miscibilityThreshold,dt) : 0) : undefined;
+      if(materialId[i]===materialId[j]||isCoherentSolid(ps,i)||isCoherentSolid(ps,j))return;
       let reacted=false,thermalEvent=0,visual=0;
       if(potentialDelta>thermalThreshold){
         const excess=saturate((potentialDelta-thermalThreshold)/Math.max(.05,2-thermalThreshold)),heatBias=clamp((ps.reactionHeat[i]+ps.reactionHeat[j])*.5,-1,1),energy=heatBias*excess*contact*thermalStrength*dt*.18;
@@ -46,7 +47,8 @@ export class ReactionEngine {
   mixPair(ps,i,j,t,rules,onFuse=null){
     const mi=ps.mass[i],mj=ps.mass[j],total=Math.max(1e-6,mi+mj),wi=mi/total,wj=mj/total;
     const blend=(arr)=>{const mean=arr[i]*wi+arr[j]*wj;arr[i]+=(mean-arr[i])*t;arr[j]+=(mean-arr[j])*t;};
-    for(const arr of [ps.r,ps.g,ps.b,ps.opacity,ps.baseDensity,ps.viscosity,ps.cohesion,ps.miscibility,ps.particleRadius,ps.incompressible,ps.heatCapacity,ps.thermalConductivity,ps.meltingTemperature,ps.boilingTemperature,ps.volatility,ps.reactionPotential,ps.reactionHeat,ps.compressibility,ps.crystallinity,ps.solidSubdivision,ps.electricalConductivity,ps.combustionTemperature])blend(arr);
+    for(const arr of [ps.r,ps.g,ps.b,ps.opacity,ps.baseDensity,ps.viscosity,ps.cohesion,ps.miscibility,ps.particleRadius,ps.incompressible,ps.heatCapacity,ps.thermalConductivity,ps.meltingTemperature,ps.boilingTemperature,ps.volatility,ps.reactionPotential,ps.reactionHeat,ps.compressibility,ps.crystallinity,ps.electricalConductivity,ps.combustionTemperature])blend(arr);
+    if(ps.phase[i]!==Phase.SOLID&&ps.phase[j]!==Phase.SOLID)blend(ps.solidSubdivision);
     ps.density[i]=ps.effectiveDensityAt(i);ps.density[j]=ps.effectiveDensityAt(j);
     if(this.particleDistance(ps,i,j)<rules.canonicalizationDistance){const a=ps.materialId[i],b=ps.materialId[j],fused=onFuse?.(ps,i,j,a,b);const id=Number.isFinite(fused)&&fused>0?fused:Math.min(a,b);ps.materialId[i]=id;ps.materialId[j]=id;}
   }

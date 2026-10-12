@@ -1,4 +1,5 @@
 import { PlanarRenderer } from '../rendering/PlanarRenderer.mjs';
+import { isPowder } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { workshopBackground } from './art.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
@@ -77,7 +78,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
       ctx.strokeStyle = '#312237'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + 35, y - 47); ctx.lineTo(x, y); ctx.stroke();
       ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#cea478'; ctx.lineWidth = 5; ctx.stroke();
       if (this.tool === 'pestle') { rect(x - 6, y - 5, 12, 13, '#75858d'); rect(x - 4, y - 5, 8, 3, '#ced6ce'); rect(x - 7, y + 5, 14, 3, '#4c5a65'); }
-      else { rect(x - 5, y - 2, 11, 8, '#e3b784'); rect(x - 3, y + 2, 7, 4, '#ae724d'); }
+      else { rect(x - 9, y - 4, 19, 12, '#e3b784'); rect(x - 6, y + 3, 13, 4, '#ae724d'); }
     }
     ctx.restore(); this.frame++;
   }
@@ -107,7 +108,8 @@ export class LaboratoryRenderer extends PlanarRenderer {
       this.particleColor(ps, i, c);
       const x = Math.round((t.cx + ps.x[i] * t.scale) / pixel) * pixel, y = Math.round((t.cy - ps.y[i] * t.scale) / pixel) * pixel;
       const radius = Math.max(pixel, effectiveParticleRadius(ps, i, true) * t.scale);
-      const r = Math.ceil(radius / pixel) * pixel;
+      const dryGrain = isPowder(ps,i) && ps.powderContent[i] > .85;
+      const r = Math.ceil(radius * (dryGrain ? .65 : 1) / pixel) * pixel;
       ctx.globalAlpha = ps.phase[i] === Phase.GAS ? .24 : .93;
       ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
       ctx.fillRect(x - r, y - r + pixel, r * 2, Math.max(pixel, r * 2 - pixel * 2));

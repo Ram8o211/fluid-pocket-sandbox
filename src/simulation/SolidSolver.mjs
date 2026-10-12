@@ -8,7 +8,7 @@ function quantized(value,spacing){return Math.round(value/spacing)*spacing;}
 export class SolidSolver{
   constructor(){this.compactFreezing=false;this.nextBodyId=1;this.bodyOrigins=new Map();}
   reset(){this.nextBodyId=1;this.bodyOrigins.clear();}
-  onMelt(ps,i){ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
+  onMelt(ps,i){ps.powderContent[i]=0;ps.dissolutionProgress[i]=0;ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
   initializeParticle(ps,i,planar=false,grid=null){
     if(ps.phase[i]!==Phase.SOLID)return 0;
     if(ps.solidSubdivision[i]>=.55){ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;return 0;}
@@ -55,7 +55,7 @@ export class SolidSolver{
       if(!indices.length)continue;let cx=0,cy=0,cz=0,lvx=0,lvy=0,lvz=0,lx=0,ly=0,lz=0,rigid=0,crystal=0;
       for(const i of indices){cx+=ps.x[i];cy+=ps.y[i];cz+=ps.z[i];lvx+=ps.vx[i];lvy+=ps.vy[i];lvz+=ps.vz[i];lx+=ps.solidLocalX[i];ly+=ps.solidLocalY[i];lz+=ps.solidLocalZ[i];rigid+=1-ps.solidSubdivision[i];crystal+=ps.crystallinity[i];}
       const n=indices.length;cx/=n;cy/=n;cz/=n;lvx/=n;lvy/=n;lvz/=n;lx/=n;ly/=n;lz/=n;rigid=clamp(rigid/n,0,1);crystal=clamp(crystal/n,0,1);
-      const shapeStrength=clamp((.12+.55*rigid+.18*crystal)*dt*30,0,.78),velocityLock=clamp((1.5+8*rigid)*dt,0,.4);
+      const shapeStrength=this.compactFreezing?1:clamp((.12+.55*rigid+.18*crystal)*dt*30,0,.78),velocityLock=this.compactFreezing?1:clamp((1.5+8*rigid)*dt,0,.4);
       for(const i of indices){const tx=cx+(ps.solidLocalX[i]-lx),ty=cy+(ps.solidLocalY[i]-ly),tz=planar?0:cz+(ps.solidLocalZ[i]-lz);ps.x[i]+=(tx-ps.x[i])*shapeStrength;ps.y[i]+=(ty-ps.y[i])*shapeStrength;if(planar)ps.z[i]=0;else ps.z[i]+=(tz-ps.z[i])*shapeStrength;ps.vx[i]+=(lvx-ps.vx[i])*velocityLock;ps.vy[i]+=(lvy-ps.vy[i])*velocityLock;if(planar)ps.vz[i]=0;else ps.vz[i]+=(lvz-ps.vz[i])*velocityLock;}
     }
   }
