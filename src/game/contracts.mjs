@@ -4,7 +4,7 @@
  * .25 ml (mass = ingredient density × .25). Solvers may split/change that mass.
  *
  * @typedef {string} WorldSeed
- * @typedef {{id:number, name:string, material:object, price:number, starter:boolean, lore:string}} Ingredient
+ * @typedef {{id:number, name:string, material:object, price:number, starter:boolean, lore:string, form?:string}} Ingredient
  * @typedef {{volume:number, mass:number, color:string, density:number, viscosity:number, temperature:number, volatility:number, stability:number, potency:number, liquidFraction:number, composition:object, history:object, cost:{ingredients:number,energy:number}}} PotionSample
  * @typedef {{id:string, name:string, role:string, portraitSeed:number, dialogue:string}} Customer
  * @typedef {{property:string, target:number|string, tolerance:number, weight:number, hard:boolean}} Requirement
@@ -13,7 +13,7 @@
  * @typedef {{version:number, seed:WorldSeed, coins:number, reputation:number, completed:number, inventory:object, equipment:LaboratoryEquipment, discoveries:object[], order:CustomerOrder, pendingBottle:PotionSample|null, lastSale:object|null, tutorial:number, settings:object, brew:object|null}} ShopState
  * @typedef {{orderId:string, quality:number, payment:number, profit:number, expenses:number, reputationDelta:number, breakdown:object[], reaction:string}} SaleResult
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const FIXED_STEP = 1 / 40;
 export const ROOM_TEMPERATURE = .33;
 // Fixed reference for the empty atmosphere: above every supported material's

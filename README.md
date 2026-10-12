@@ -27,8 +27,10 @@ collision geometry, including clearance for each particle's full drawn radius.
 
 The first commission has an interactive tutorial. Hold Pour for repeated doses,
 drag bottles onto the cauldron, draw circles with the spoon or hold Stir. Tap
-Flame/Frost to cycle power; a copper furnace unlocks precise controls. The six
-starter ingredients and later guild reagents change with the world seed.
+Flame/Frost to cycle power; a copper furnace unlocks precise controls. Six starter
+liquids, two dry powder jars and later guild reagents change with the world seed.
+Powders are ready to add from the inventory; existing shops receive them on load.
+Density layers remain in contact, and full-size grains settle into compact piles.
 
 **Original sandbox:** https://ram8o211.github.io/fluid-pocket-sandbox/sandbox.html?mode=2D
 

@@ -1,5 +1,6 @@
 import { Phase } from './Phase.mjs';
 import { clamp } from './math.mjs';
+import { effectiveParticleRadius, particlePairRestDistance } from './FluidSolver.mjs';
 
 const BODY_JOIN_RADIUS=.62;
 const LATTICE_SPACING=.34;
@@ -60,14 +61,17 @@ export class SolidSolver{
     }
   }
   wallSupports(ps,i,env,gravity,planar){
-    const g=Math.hypot(gravity.x,gravity.y,planar?0:gravity.z)||1,gx=gravity.x/g,gy=gravity.y/g,gz=planar?0:gravity.z/g,m=.17,hx=env.box.width/2-.08,hy=env.box.height/2-.08,hz=env.box.depth/2-.08;
+    const g=Math.hypot(gravity.x,gravity.y,planar?0:gravity.z)||1,gx=gravity.x/g,gy=gravity.y/g,gz=planar?0:gravity.z/g,m=.002,pad=clamp(effectiveParticleRadius(ps,i,planar)*.62,.05,.16),hx=env.box.width/2-pad,hy=env.box.height/2-pad,hz=env.box.depth/2-pad;
     if(gx<-.16&&ps.x[i]<=-hx+m)return true;if(gx>.16&&ps.x[i]>=hx-m)return true;if(gy<-.16&&ps.y[i]<=-hy+m)return true;if(gy>.16&&ps.y[i]>=hy-m)return true;if(!planar){if(gz<-.16&&ps.z[i]<=-hz+m)return true;if(gz>.16&&ps.z[i]>=hz-m)return true;}return false;
   }
   settleGranularParticle(ps,grid,i,env,gravity,dt,planar){
     const subdivision=ps.solidSubdivision[i],friction=clamp(.18+.7*subdivision,0,1),radius=.34,gLen=Math.hypot(gravity.x,gravity.y,planar?0:gravity.z)||1,gx=gravity.x/gLen,gy=gravity.y/gLen,gz=planar?0:gravity.z/gLen;
     let supported=this.wallSupports(ps,i,env,gravity,planar),supportContacts=0;
     grid.forEachNeighbor(ps,i,radius,j=>{
-      if(ps.phase[j]!==Phase.SOLID||ps.solidSubdivision[j]<.42)return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);if(d>.31||d<1e-6)return;
+      if(ps.phase[j]!==Phase.SOLID||ps.solidSubdivision[j]<.42)return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);
+      // Fine grains are supported only at their actual surface contact. The old
+      // fixed .31 range held tiny grains several diameters above their neighbours.
+      if(d>particlePairRestDistance(ps,i,j,planar)*1.02||d<1e-6)return;
       const downhill=(dx*gx+dy*gy+dz*gz)/d,neighborG=ps.vx[j]*gx+ps.vy[j]*gy+(planar?0:ps.vz[j]*gz);
       if(downhill>.32&&(this.wallSupports(ps,j,env,gravity,planar)||Math.abs(neighborG)<.12)){supported=true;supportContacts++;}
       const lock=clamp(friction*dt*(supported?4.4:1.1),0,supported?.2:.045);ps.vx[i]+=(ps.vx[j]-ps.vx[i])*lock;ps.vy[i]+=(ps.vy[j]-ps.vy[i])*lock;if(!planar)ps.vz[i]+=(ps.vz[j]-ps.vz[i])*lock;

@@ -85,14 +85,17 @@ export class BrewingSession {
     const massBefore = ps.totalMass();
     const start = ps.count, x = ingredientId % 2 ? -1.2 : 1.2;
     const count = this.engine.emit(ingredientId, { x, y: .95, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
-    for (let i = start; i < ps.count; i++) { ps.mass[i] = ingredient.material.density * PARTICLE_ML; ps.mixtureAmount[i] = PARTICLE_ML; ps.vy[i] = -1.3; }
+    for (let i = start; i < ps.count; i++) {
+      ps.mass[i] = ingredient.material.density * PARTICLE_ML; ps.mixtureAmount[i] = PARTICLE_ML; ps.vy[i] = -1.3;
+      if (ingredient.form === 'powder') { ps.setPhase(i, Phase.SOLID); ps.solidSubdivision[i] = 1; ps.powderContent[i] = 1; }
+    }
     this.confineCauldron();
     const pouredMl = count * PARTICLE_ML;
     this.history.activation *= massBefore / Math.max(.001, ps.totalMass());
     inventory[ingredientId] = Math.max(0, (inventory[ingredientId] || 0) - pouredMl);
     this.cost.ingredients += pouredMl * ingredient.price;
     this.portions.push({ ingredientId, ml: pouredMl, time: this.history.elapsed });
-    this.lastPour = { x, color: ingredient.material.color, until: this.engine.time + .6 };
+    this.lastPour = { x, color: ingredient.material.color, form: ingredient.form, until: this.engine.time + .6 };
     return pouredMl;
   }
   setThermal(heat, cool = 0) {

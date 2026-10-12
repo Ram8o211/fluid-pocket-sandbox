@@ -25,7 +25,9 @@ export function simulateWitness(world, recipe, equipment = {}) {
 
 export function generateOrder(world, completed = 0, equipment = {}) {
   const rng = mulberry32(seedNumber(`${world.seed}:order:${completed}`));
-  const ingredients = availableIngredients(world, equipment), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
+  // Powder recipes require a solvent and longer dissolution. Keep generated
+  // single-reagent commissions feasible with the original liquid witness flow.
+  const ingredients = availableIngredients(world, equipment).filter(i => i.form !== 'powder'), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
   const primary = completed === 0 ? ingredients[0] : ingredients[Math.floor(rng() * ingredients.length)];
   const volume = completed === 0 ? 60 : difficulty < 3 ? 80 : 100;
   const compatible = ingredients.filter(i => i.id !== primary.id && Math.abs(i.material.miscibility - primary.material.miscibility) < .06);

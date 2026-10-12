@@ -49,9 +49,13 @@ try {
   assert.equal(await page.title(), "The Alchemist's Shop");
   const styled = await page.locator('#newWorldBtn').evaluate(element => getComputedStyle(element).backgroundColor);
   assert.notEqual(styled, 'rgba(0, 0, 0, 0)');
-  await page.locator('#worldSeed').fill('mobile-acceptance'); await page.locator('#newWorldBtn').click();
+  await page.locator('#worldSeed').fill('mobile-acceptance');
+  assert.equal(await page.locator('#worldSeed').inputValue(),'mobile-acceptance');
+  await page.locator('#newWorldBtn').click();
   await page.waitForSelector('body[data-game-state="brewing"]', { timeout });
-  const initial = await readSave(page); assert.equal(initial.coins, 80); assert.equal(initial.world.ingredients.filter(i => i.starter).length, 6);
+  const initial = await readSave(page); assert.equal(initial.coins, 80); assert.equal(initial.world.ingredients.filter(i => i.starter).length, 8);
+  assert.equal(initial.world.ingredients.filter(i => i.form === 'powder').length, 2);
+  assert.match(await page.locator('[data-ingredient="10"]').textContent(), /Powder · 240 ml/);
   await pourRecipe(page, initial.order.witness); await page.waitForTimeout(550);
   assert.match(await page.locator('#volume').textContent(), /60 \/ 60/);
   // Hold-assisted stirring and a real circular spoon gesture.
@@ -73,7 +77,9 @@ try {
   assert.equal(activeSave.brew.count, 240); assert.equal(activeSave.brew.particleMl, .25);
   assert.match(await page.locator('#labStatus').textContent(), /SEALED/);
   assert.ok(activeSave.brew.history.stirred > 0); assert.ok(activeSave.brew.history.heatEnergy > 0); assert.ok(activeSave.brew.history.coldEnergy > 0);
-  await page.locator('[data-action="save-inspection"]').click(); await page.locator('#discoveryName').fill('First travelling tonic'); await page.locator('[data-action="record-discovery"]').click();
+  await page.locator('[data-action="save-inspection"]').click(); await page.locator('#discoveryName').fill('First travelling tonic');
+  assert.equal(await page.locator('#discoveryName').inputValue(),'First travelling tonic');
+  await page.locator('[data-action="record-discovery"]').click();
   assert.match(await page.locator('#sheetContent').textContent(), /First travelling tonic/);
   await page.locator('[data-action="close"]').click();
   await mkdir('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/mobile-workshop.png', fullPage: true });
@@ -150,6 +156,30 @@ try {
   await page.mouse.click(canvasBox.x + (192 + frozen.brew.particles.x[target] * 40) / 384 * canvasBox.width, canvasBox.y + (158 - frozen.brew.particles.y[target] * 40) / 232 * canvasBox.height);
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.solidSubdivision.some(v => v === 1), null, { timeout });
   await page.screenshot({ path: 'test-results/pestle-powder.png', fullPage: true });
+  // Both starter powders are usable without grinding a frozen liquid first.
+  await page.locator('#cleanBtn').click();await page.locator('[data-action="confirm-clean"]').click();
+  await page.locator('[data-ingredient="10"]').click();await clickDose(page,20);
+  assert.match(await page.locator('#pourBtn').textContent(),/Add 20 ml/);
+  await page.locator('#pourBtn').click();await page.waitForTimeout(2200);
+  await page.locator('#menuBtn').click();
+  const dryPowder=await readSave(page);
+  assert.equal(dryPowder.inventory[10],220);assert.equal(dryPowder.brew.count,80);
+  assert.ok(dryPowder.brew.particles.phase.every(p=>p===Phase.SOLID));
+  assert.ok(dryPowder.brew.particles.powderContent.every(p=>p===1));
+  assert.ok(dryPowder.brew.particles.solidSubdivision.every(p=>p>=.55));
+  await page.reload();await page.locator('#continueBtn').click();
+  assert.equal((await readSave(page)).inventory[10],220,'Reload cannot grant consumed powder again');
+  await page.locator('#settingsBtn').click();await page.locator('#graphicsSetting').selectOption('eco');await page.locator('[data-action="close"]').click();
+  await page.screenshot({path:'test-results/default-powder-eco.png',fullPage:true});
+  await page.locator('#settingsBtn').click();await page.locator('#graphicsSetting').selectOption('balanced');await page.locator('[data-action="close"]').click();
+  await page.screenshot({path:'test-results/default-powder.png',fullPage:true});
+  await page.locator('#inventoryBtn').click();assert.match(await page.locator('#sheetContent').textContent(),/powder/);
+  await page.locator('[data-restock="10"]').click();await page.locator('[data-action="close"]').click();
+  assert.equal((await readSave(page)).inventory[10],280);
+  await page.locator('#cleanBtn').click();await page.locator('[data-action="confirm-clean"]').click();
+  await page.locator('[data-ingredient="5"]').click();await clickDose(page,40);await page.locator('#pourBtn').click();await page.waitForTimeout(1200);
+  await page.locator('[data-ingredient="1"]').click();await page.locator('#pourBtn').click();await page.waitForTimeout(2600);
+  await page.screenshot({path:'test-results/density-layer-contact.png',fullPage:true});
   await page.goto(new URL('sandbox.html?mode=2D', base).href);
   await page.waitForFunction(() => document.querySelector('#materialSelect')?.options.length > 0, null, { timeout });
   assert.equal(await page.locator('#scene2d').isVisible(), true); assert.equal(await page.locator('#scene').isVisible(), false);
@@ -157,5 +187,5 @@ try {
   assert.ok((await page.locator('#materialSelect').textContent()).length > 5);
   await page.screenshot({ path: 'test-results/original-sandbox.png', fullPage: true });
   assert.deepEqual(failedResponses, [], 'Missing deployment assets'); assert.deepEqual(errors, [], 'Browser initialization/runtime errors');
-  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, gravity-driven liquid settling, vapour rising to the lid, retained steam and condensation with conserved mass, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
+  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, liquid settling, retained steam and condensation, pestle, default dry powder, both graphics presets, powder refill and save/restore, touch, mobile/desktop and original sandbox.`);
 } finally { if (browser) await browser.close(); if (server) server.kill('SIGTERM'); }

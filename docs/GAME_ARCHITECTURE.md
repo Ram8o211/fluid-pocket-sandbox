@@ -16,7 +16,7 @@ shop entry point, and no backend or production framework dependency is needed.
 | Customers | `src/game/orders.mjs` | Seeded personalities and attainable targets from bounded actual engine brews |
 | Assessment | `src/game/evaluation.mjs` | Pure weighted tolerance-aware scoring, hard constraints, quantity and pricing |
 | Shop | `src/game/economy.mjs` | Stock, coins, costs, single-use sales, reputation, purchases, unlocks and discoveries |
-| Persistence | `src/game/persistence.mjs` | Version 2 schema, v1 migration, validation, backup and future-save protection |
+| Persistence | `src/game/persistence.mjs` | Version 3 schema, v1/v2 migration, validation, backup and future-save protection |
 | Art | `src/game/art.mjs`, `LaboratoryRenderer.mjs` | Original pixel sprites, seeded portraits, workshop and existing planar rendering contract |
 | Interaction | `src/game/main.mjs` | State transitions, touch/keyboard controls, tutorial, panels, sound and autosave |
 
@@ -189,5 +189,9 @@ Shop evaporation and combustion run at 22% of the base transition rate; combusti
 ### Powder, solvent and compact block mechanics
 
 Frozen coherent bodies use exact relative offsets and collide with the bowl as a whole. Crushing removes body membership and creates dry grain content; dry grains use near-full contact separation, normal damping, and tangential friction rather than liquid viscosity. Spoon contact radius is 0.24 units plus parcel radius, and it affects liquid, dough and powder without directly dragging coherent blocks.
+
+Density sorting acts only on inverted contacts: an already ordered heavy/light interface receives no separating impulse. The range fades at 1.15 pair diameters. Granular support and wall friction use mass-scaled contact radii instead of a fixed support distance, so fine grains cannot rest above an air gap. The laboratory draws full pixel footprints with colour flecks for grain texture at both resolutions.
+
+Worlds start with six liquids and two dry powder jars (IDs 10–11); guild reagent IDs 7–9 keep their unlocks. Powders share the existing affinity, dough, dissolution, stirring, heating and inventory rules. Their measured bulk quantities use the same ml capacity units. The rack labels powders and uses an Add action. Save version 3 appends missing powders and 240 ml stock to v1/v2 shops once, preserving pinned ingredients, order targets and particle snapshots. Generated customer witnesses continue to use liquid recipes until powder-and-solvent witnesses are supported.
 
 Powder content is a conserved local dry-material mass fraction. Compatible touching condensed parcels exchange it gradually using the same original affinity envelope as other mixing properties. Limited solvent produces cohesive, yielding dough; high solvent dilution below 18% dry content requires sustained dissolution before solid grains become liquid. Residual liquid rheology returns below 15% dry content. Gas shares compatible chemical/color mixing but never supplies liquid solvent. Coherent blocks remain excluded from mixing until crushed or melted. Powder content and dissolution progress are saved, validated, and migrated for older saves. Thermal melting remains a separate phase process.
