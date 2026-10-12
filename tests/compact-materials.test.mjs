@@ -188,6 +188,22 @@ test('sand avalanches down steep single-grain supports but wet dough resists',()
   near(ps.vy[0],-.3);
 });
 
+test('3D sand remains still when supported on opposite depth-facing sides',()=>{
+  const b=new BrewingSession(generateWorld('sand-depth-support').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10);
+  ps.add({x:0,y:0,z:0,mass:.25},material,Phase.SOLID);
+  ps.add({x:.07,y:0,z:-.10,mass:.25},material,Phase.SOLID);
+  const gravity={x:0,y:0,z:-4.5};
+  e.grid.setDimensionMode('3D');e.grid.rebuild(ps,e.env.box);
+  e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
+  assert.ok(ps.vx[0]<-.001,'an unbraced 3D contact should allow a downhill grain to slide');
+  ps.add({x:-.07,y:0,z:-.10,mass:.25},material,Phase.SOLID);
+  ps.vx[0]=ps.vy[0]=ps.vz[0]=0;
+  e.grid.rebuild(ps,e.env.box);
+  e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
+  assert.ok(Math.abs(ps.vx[0])<.00001 && Math.abs(ps.vy[0])<.00001,
+    'equal supports on opposite sides should hold a balanced 3D grain at rest');
+});
+
 test('all potion materials use fine pixel footprints at both graphics resolutions',()=>{
   const b=new BrewingSession(generateWorld('fine-pixels').ingredients),ps=b.engine.ps;
   const liquid=b.engine.materials.get(1),powder=b.engine.materials.get(10);

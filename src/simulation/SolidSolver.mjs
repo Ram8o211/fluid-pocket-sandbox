@@ -77,7 +77,8 @@ export class SolidSolver{
     const gx=gravity.x/gLen,gy=gravity.y/gLen,gz=planar?0:gravity.z/gLen;
     const powder=ps.powderContent[i],wet=doughStrength(powder),mu=.50+wet*.55;
     const onFloor=this.wallSupports(ps,i,env,gravity,planar);
-    let leftSupport=false,rightSupport=false,nearestSupport=-1,bestDot=0,contacts=0;
+    let braced=false,nearestSupport=-1,bestDot=0,contacts=0;
+    const tangents=[];
     grid.forEachNeighbor(ps,i,.27,j=>{
       if(ps.phase[j]!==Phase.SOLID || ps.solidSubdivision[j]<.42)return;
       const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);
@@ -89,9 +90,16 @@ export class SolidSolver{
       // Transmit the load only from a resting grain or a wall-supported one.
       if(!this.wallSupports(ps,j,env,gravity,planar)&&Math.abs(neighborDown)>.13)return;
       contacts++;
-      const side=dx*gy-dy*gx;
-      if(side>.012)leftSupport=true;
-      if(side<-.012)rightSupport=true;
+      // Classify opposing contacts in the tangent plane perpendicular to
+      // gravity, including the depth axis in 3D. Two braces from opposing
+      // directions can hold a grain without an artificial avalanche.
+      const tx=dx-along*d*gx,ty=dy-along*d*gy,tz=planar?0:dz-along*d*gz;
+      const length=Math.hypot(tx,ty,tz);
+      if(length>.012){
+        for(const previous of tangents)
+          if(tx*previous.x+ty*previous.y+tz*previous.z<-.35*length*previous.length)braced=true;
+        tangents.push({x:tx,y:ty,z:tz,length});
+      }
       if(along>bestDot){bestDot=along;nearestSupport=j;}
     });
     if(!onFloor&&contacts===0)return;
@@ -110,7 +118,7 @@ export class SolidSolver{
     // One off-centre contact cannot hold an arbitrarily steep sand wall.
     // The tangential component of gravity drives a small surface avalanche.
     // Two supports on opposite sides provide a stable packed arch.
-    if(onFloor||nearestSupport<0||(leftSupport&&rightSupport))return;
+    if(onFloor||nearestSupport<0||braced)return;
     const dx=ps.x[nearestSupport]-ps.x[i],dy=ps.y[nearestSupport]-ps.y[i],dz=planar?0:ps.z[nearestSupport]-ps.z[i];
     const d=Math.hypot(dx,dy,dz);if(d<1e-7)return;
     const nx=dx/d,ny=dy/d,nz=planar?0:dz/d;
