@@ -80,9 +80,10 @@ test('combustion heats immediate neighbours before those neighbours ignite on th
   assert.ok(ps.temperature[2] > .5999);
 });
 
-test('20/80 compatible proportions drive every property to one global target after a local contact front', () => {
+test('20/80 measured amounts drive every property to one target even with unequal ingredient densities', () => {
   const ps = new ParticleSystem(10), grid = new SpatialGrid(10), reactions = new ReactionEngine(); reactions.mixtures = new MixtureSolver();
-  for (let i = 0; i < 10; i++) ps.add({ x: i < 2 ? -1.5 : 1.5, y: 0, z: 0, mass: 1, temperature: .33 }, ingredients[i < 2 ? 0 : 1].material);
+  const a = material({ density: .5 }), b = material({ ...ingredients[1].material, density: 1.5 });
+  for (let i = 0; i < 10; i++) { const m = i < 2 ? a : b; ps.add({ x: i < 2 ? -1.5 : 1.5, y: 0, z: 0, mass: m.density, temperature: .33 }, m); }
   const expected = MIX_PROPERTIES.map(key => ps[key][0] * .2 + ps[key][2] * .8);
   ps.x[1] = 0; ps.x[2] = .1;
   grid.setDimensionMode('2D'); grid.rebuild(ps, box); reactions.step(ps, grid, rules, .025);
@@ -93,7 +94,8 @@ test('20/80 compatible proportions drive every property to one global target aft
   grid.rebuild(ps, box);
   for (let frame = 0; frame < 1200; frame++) reactions.step(ps, grid, rules, .025);
   for (let i = 0; i < ps.count; i++) for (let k = 0; k < MIX_PROPERTIES.length; k++) close(ps[MIX_PROPERTIES[k]][i], expected[k], .002);
-  close(ps.r[0], .8, .002); close(ps.totalMass(), 10);
+  close(ps.r[0], .8, .002); close(ps.baseDensity[0], 1.3, .002); close(ps.totalMass(), 13);
+  close([...ps.mass].reduce((v, m, i) => v + m / ps.density[i], 0), 10, .002);
 });
 
 test('an incompatible source cannot enter a mixture through an intermediate affinity', () => {
@@ -118,7 +120,7 @@ test('partial mixing, weighted targets, and warm copper survive reload, bottling
   const ps = restored.engine.ps;
   for (let i = 0; i < ps.count; i++) close(ps.r[i], .9, .003);
   close(ps.totalMass(), 10); close(restored.liquidVolume, 10);
-  const legacy = brew.snapshot(); delete legacy.thermal; delete legacy.mixtures; delete legacy.particles.mixtureGroup; delete legacy.particles.mixtureProgress;
+  const legacy = brew.snapshot(); delete legacy.thermal; delete legacy.mixtures; delete legacy.particles.mixtureGroup; delete legacy.particles.mixtureProgress; delete legacy.particles.mixtureAmount;
   const upgraded = new BrewingSession(ingredients); upgraded.restore(legacy);
   close(upgraded.engine.ps.totalMass(), brew.engine.ps.totalMass()); upgraded.step();
 });

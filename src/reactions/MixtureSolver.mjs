@@ -25,21 +25,21 @@ export class MixtureSolver {
   beginFrame(ps) {
     if (this.previous.length < ps.capacity) { this.previous = new Float32Array(ps.capacity); this.signal = new Float32Array(ps.capacity); }
     this.previous.set(ps.mixtureProgress.subarray(0, ps.count)); this.signal.fill(0, 0, ps.count);
-    for (const group of this.groups.values()) group.mass = 0;
+    for (const group of this.groups.values()) group.amount = 0;
     // Count remaining parcels before adding fresh stock; partial bottling and
     // combustion must affect the next mixture's proportions immediately.
-    for (let i = 0; i < ps.count; i++) { const group = this.root(ps.mixtureGroup[i]); if (group) { ps.mixtureGroup[i] = group.id; group.mass += ps.mass[i]; } }
+    for (let i = 0; i < ps.count; i++) { const group = this.root(ps.mixtureGroup[i]); if (group) { ps.mixtureGroup[i] = group.id; group.amount += ps.mixtureAmount[i]; } }
     for (let i = 0; i < ps.count; i++) {
       if (this.root(ps.mixtureGroup[i])) continue;
       let group = this.root(this.materialGroups.get(ps.materialId[i]));
-      if (!group || group.mass === 0) {
+      if (!group || group.amount === 0) {
         const id = this.nextId++;
-        group = { id, parent: id, mass: 0, min: ps.miscibility[i], max: ps.miscibility[i], target: MIX_PROPERTIES.map(() => 0) };
+        group = { id, parent: id, amount: 0, min: ps.miscibility[i], max: ps.miscibility[i], target: MIX_PROPERTIES.map(() => 0) };
         this.groups.set(id, group); this.materialGroups.set(ps.materialId[i], id);
       }
-      const mass = group.mass + ps.mass[i];
-      for (let k = 0; k < MIX_PROPERTIES.length; k++) group.target[k] = (group.target[k] * group.mass + ps[MIX_PROPERTIES[k]][i] * ps.mass[i]) / mass;
-      group.mass = mass; group.min = Math.min(group.min, ps.miscibility[i]); group.max = Math.max(group.max, ps.miscibility[i]);
+      const amount = group.amount + ps.mixtureAmount[i];
+      for (let k = 0; k < MIX_PROPERTIES.length; k++) group.target[k] = (group.target[k] * group.amount + ps[MIX_PROPERTIES[k]][i] * ps.mixtureAmount[i]) / amount;
+      group.amount = amount; group.min = Math.min(group.min, ps.miscibility[i]); group.max = Math.max(group.max, ps.miscibility[i]);
       ps.mixtureGroup[i] = group.id; ps.mixtureProgress[i] = this.previous[i] = 0;
     }
   }
@@ -52,9 +52,9 @@ export class MixtureSolver {
     if (delta >= threshold || threshold <= 0) return 0;
     const joined = a.id !== b.id;
     if (joined) {
-      const mass = a.mass + b.mass;
-      for (let k = 0; k < MIX_PROPERTIES.length; k++) a.target[k] = (a.target[k] * a.mass + b.target[k] * b.mass) / mass;
-      a.mass = mass; a.min = Math.min(a.min, b.min); a.max = Math.max(a.max, b.max); b.parent = a.id;
+      const amount = a.amount + b.amount;
+      for (let k = 0; k < MIX_PROPERTIES.length; k++) a.target[k] = (a.target[k] * a.amount + b.target[k] * b.amount) / amount;
+      a.amount = amount; a.min = Math.min(a.min, b.min); a.max = Math.max(a.max, b.max); b.parent = a.id;
     }
     const distinct = joined || ps.materialId[i] !== ps.materialId[j]
       || Math.abs(ps.r[i] - ps.r[j]) + Math.abs(ps.g[i] - ps.g[j]) + Math.abs(ps.b[i] - ps.b[j]) > .001;
@@ -69,7 +69,7 @@ export class MixtureSolver {
     for (const group of this.groups.values()) if (group.id === group.parent) for (const k of reactive) group.target[k] = 0;
     for (let i = 0; i < ps.count; i++) {
       const group = this.root(ps.mixtureGroup[i]);
-      for (const k of reactive) group.target[k] += ps[MIX_PROPERTIES[k]][i] * ps.mass[i] / Math.max(.00001, group.mass);
+      for (const k of reactive) group.target[k] += ps[MIX_PROPERTIES[k]][i] * ps.mixtureAmount[i] / Math.max(.00001, group.amount);
     }
     for (let i = 0; i < ps.count; i++) {
       if (ps.phase[i] === Phase.SOLID) continue;
@@ -94,7 +94,7 @@ export class MixtureSolver {
     if (!saved) { ps.mixtureGroup.fill(0); ps.mixtureProgress.fill(0); return; }
     if (!Number.isInteger(saved.nextId) || saved.nextId < 1 || !Array.isArray(saved.groups) || !Array.isArray(saved.materialGroups)) throw new Error('Invalid saved mixtures.');
     for (const g of saved.groups) {
-      if (!Number.isInteger(g.id) || g.id < 1 || g.id >= saved.nextId || this.groups.has(g.id) || !Number.isInteger(g.parent) || !Number.isFinite(g.mass) || g.mass < 0 || !Number.isFinite(g.min) || !Number.isFinite(g.max) || g.min < 0 || g.max > 1 || g.max < g.min || !Array.isArray(g.target) || g.target.length !== MIX_PROPERTIES.length || g.target.some(v => !Number.isFinite(v))) throw new Error('Invalid saved mixture target.');
+      if (!Number.isInteger(g.id) || g.id < 1 || g.id >= saved.nextId || this.groups.has(g.id) || !Number.isInteger(g.parent) || !Number.isFinite(g.amount) || g.amount < 0 || !Number.isFinite(g.min) || !Number.isFinite(g.max) || g.min < 0 || g.max > 1 || g.max < g.min || !Array.isArray(g.target) || g.target.length !== MIX_PROPERTIES.length || g.target.some(v => !Number.isFinite(v))) throw new Error('Invalid saved mixture target.');
       this.groups.set(g.id, { ...g, target: [...g.target] });
     }
     for (const [material, id] of saved.materialGroups) {

@@ -23,7 +23,7 @@ High compatibility plus high property distance produces strong flash/impulse fee
 Each contacting pair moves local particle properties toward a mass-weighted mean. The engine does not mutate a shared global material definition during contact, preventing remote matter from changing. When local particle vectors become sufficiently close, the pair may canonicalize to one material ID.
 
 The shop additionally enables `MixtureSolver`: first physical contact joins
-compatible source families and fixes their target using the mass of the entire
+compatible source families and fixes their target using measured amounts of the entire
 remaining mixture. Contact activation propagates locally from neighbours using a
 previous-frame field; colour and all mixing channels relax smoothly toward that
 target, including after local material IDs canonicalize. An inactive remote

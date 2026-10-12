@@ -8,7 +8,7 @@ import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress'];
+const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount'];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -55,7 +55,7 @@ export class BrewingSession {
     const ps = this.engine.ps; let ml = 0;
     // Trapped steam still reserves ingredient capacity: boiling cannot create
     // room for a refill which would overflow when it condenses.
-    for (let i = 0; i < ps.count; i++) ml += ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
+    for (let i = 0; i < ps.count; i++) ml += ps.mixtureAmount[i];
     return ml;
   }
   get vaporVolume() {
@@ -72,7 +72,7 @@ export class BrewingSession {
     const massBefore = ps.totalMass();
     const start = ps.count, x = ingredientId % 2 ? -1.2 : 1.2;
     const count = this.engine.emit(ingredientId, { x, y: .95, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
-    for (let i = start; i < ps.count; i++) { ps.mass[i] = ingredient.material.density * PARTICLE_ML; ps.vy[i] = -1.3; }
+    for (let i = start; i < ps.count; i++) { ps.mass[i] = ingredient.material.density * PARTICLE_ML; ps.mixtureAmount[i] = PARTICLE_ML; ps.vy[i] = -1.3; }
     this.confineCauldron();
     const pouredMl = count * PARTICLE_ML;
     this.history.activation *= massBefore / Math.max(.001, ps.totalMass());
@@ -145,7 +145,7 @@ export class BrewingSession {
     const cost = { ingredients: this.cost.ingredients * fraction, energy: this.cost.energy * fraction };
     const sample = measurePotion(this.engine, selections, this.history, cost);
     const bottledPortions = this.portions.map(p => ({ ...p, ml: p.ml * fraction }));
-    for (let n = selections.length - 1; n >= 0; n--) { const { index, mass } = selections[n]; ps.mass[index] -= mass; if (ps.mass[index] < .00001) ps.removeAt(index); }
+    for (let n = selections.length - 1; n >= 0; n--) { const { index, mass } = selections[n]; ps.mixtureAmount[index] *= 1 - fraction; ps.mass[index] -= mass; if (ps.mass[index] < .00001) ps.removeAt(index); }
     this.cost.ingredients -= cost.ingredients; this.cost.energy -= cost.energy;
     this.portions = this.portions.map(p => ({ ...p, ml: p.ml * (1 - fraction) })).filter(p => p.ml > .001);
     this.heat = this.cool = 0; this.bottles++;
@@ -171,13 +171,17 @@ export class BrewingSession {
     const ps = this.engine.ps;
     for (const key of SAVE_FIELDS) {
       const values = saved.particles[key];
-      if (values === undefined && (key === 'mixtureGroup' || key === 'mixtureProgress')) { ps[key].fill(0); continue; }
+      if (values === undefined && (key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount')) { ps[key].fill(0); continue; }
       if (!Array.isArray(values) || values.length !== saved.count || values.some(v => !Number.isFinite(v))) throw new Error('Invalid saved particle data.');
       ps[key].set(values);
     }
     for (let i = 0; i < saved.count; i++) if (ps.mass[i] <= 0 || ![0, 1, 2].includes(ps.phase[i])) throw new Error('Invalid saved particle mass or phase.');
     for (const material of saved.materials) this.engine.registerMaterial({ ...material, particleRadius: clamp(material.particleRadius, .10, .11) });
     ps.count = saved.count;
+    for (let i = 0; i < ps.count; i++) {
+      if (saved.particles.mixtureAmount === undefined) ps.mixtureAmount[i] = ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
+      if (ps.mixtureAmount[i] <= 0) throw new Error('Invalid saved mixture amount.');
+    }
     if (saved.particleMl !== PARTICLE_ML) this.refineLegacyParticles();
     ps.px.set(ps.x); ps.py.set(ps.y);
     this.history = { ...HISTORY(), ...saved.history }; this.cost = { ...saved.cost };
@@ -196,6 +200,7 @@ export class BrewingSession {
       const volume = ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
       const pieces = Math.min(Math.max(1, Math.round(volume / PARTICLE_ML)), 1 + ps.capacity - ps.count);
       const mass = ps.mass[i] / pieces, x = ps.x[i], y = ps.y[i];
+      ps.mixtureAmount[i] /= pieces;
       ps.particleRadius[i] = clamp(ps.particleRadius[i], .10, .11);
       ps.mass[i] = mass;
       for (let part = 1; part < pieces; part++) {

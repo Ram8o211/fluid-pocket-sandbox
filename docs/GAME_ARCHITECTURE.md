@@ -72,14 +72,17 @@ and slow circles, reversal and duration change local movement and contact rates.
 Holding Stir supplies the same physical impulse through a circular path for
 players who prefer an accessible control. It never directly adjusts homogeneity.
 
-MixtureSolver holds a mass-weighted composition target for each compatible fluid
+MixtureSolver holds an amount-weighted composition target for each compatible fluid
 family. It includes the full remaining amount of each source, not just whichever
 two parcels touch first. A contact front locally activates smooth colour/property
 relaxation toward that target, continuing after canonical material IDs match.
 Warmth and spoon-induced motion accelerate relaxation. The original minimum and
 maximum affinities gate a whole family: dilution or an intermediate fluid cannot
 admit an incompatible source. Targets and contact progress survive saves; new
-pours update targets using remaining mass after bottling or combustion. Reactive
+pours update targets using remaining measured amounts after bottling or combustion.
+Each parcel retains its source amount in ml as density changes, so a 20/80 ml
+blend stays a 20/80 blend even when the ingredients have different densities.
+Partial drains scale that amount alongside mass. Reactive
 potential/heat targets follow consumption so homogenization cannot restore fuel.
 Combustion likewise shares heat only with immediate neighbours, with ignition
 reading a temperature snapshot to prevent particle-order-dependent instant chains.

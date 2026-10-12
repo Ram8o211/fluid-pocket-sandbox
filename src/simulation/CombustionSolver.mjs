@@ -100,7 +100,7 @@ export class CombustionSolver{
         const def=products[p],fraction=p===produceCount-1?1-assignedMass/originalMass:def.fraction,mass=Math.max(1e-8,originalMass*fraction);assignedMass+=mass;
         const phase=phaseForMaterialAtTemperature(def.material,temp),angle=(i*2.399963+p*2.094395),spread=.055+.025*p,px=x+Math.cos(angle)*spread,py=y+Math.sin(angle)*spread,pz=planar?0:z+Math.sin(angle*.73)*spread;
         let index;
-        if(p===0){index=i;ps.assignMaterial(index,def.material,phase,temp);ps.mass[index]=mass;ps.x[index]=px;ps.y[index]=py;ps.z[index]=pz;ps.px[index]=px;ps.py[index]=py;ps.pz[index]=pz;ps.vx[index]=vx;ps.vy[index]=vy;ps.vz[index]=vz;}
+        if(p===0){index=i;ps.assignMaterial(index,def.material,phase,temp);ps.mass[index]=mass;ps.mixtureAmount[index]=mass/Math.max(.04,def.material.density);ps.x[index]=px;ps.y[index]=py;ps.z[index]=pz;ps.px[index]=px;ps.py[index]=py;ps.pz[index]=pz;ps.vx[index]=vx;ps.vy[index]=vy;ps.vz[index]=vz;}
         else index=ps.add({x:px,y:py,z:pz,vx,vy,vz,mass,temperature:temp},def.material,phase);
         if(index>=0&&phase===Phase.SOLID)onSolidCreated?.(index,planar);
       }
