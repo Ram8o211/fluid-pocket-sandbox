@@ -1,3 +1,4 @@
+import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { SimulationEngine } from '../simulation/SimulationEngine.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
@@ -19,6 +20,14 @@ export class BrewingSession {
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
     this.engine.env.environmentDensity = ROOM_DENSITY;
     this.engine.env.gasBuoyancyUsesMaterialDensity = true;
+    this.engine.env.gasContactScale = 1.7;
+    this.engine.env.gasContactStrength = 1.2;
+    this.engine.env.gasConstraintVelocityShare = .22;
+    this.engine.env.gasThermalMotion = 2.2;
+    this.engine.solid.compactFreezing = true;
+    this.engine.rules.evaporationRate = .22;
+    this.engine.rules.combustionRate = .22;
+    this.engine.rules.combustionHeatScale = .3;
     this.engine.env.ambientTemperature = ROOM_TEMPERATURE;
     this.engine.env.gravityStrength = 4.5; this.engine.setGravity(0, -1, 0);
     // Bulk reagents are electrically neutral fluids. Conductivity still drives
@@ -92,17 +101,29 @@ export class BrewingSession {
   stir(point, velocity, dt = FIXED_STEP) {
     const ps = this.engine.ps, speed = Math.hypot(velocity.x, velocity.y);
     if (speed < .02 || !Number.isFinite(speed)) return 0;
-    const vx = clamp(velocity.x, -6, 6), vy = clamp(velocity.y, -6, 6), radius = 1.55;
+    const vx = clamp(velocity.x, -6, 6), vy = clamp(velocity.y, -6, 6), radius = .14;
     let affected = 0;
     for (let i = 0; i < ps.count; i++) {
       if (ps.phase[i] !== Phase.LIQUID) continue;
       const distance = Math.hypot(ps.x[i] - point.x, ps.y[i] - point.y);
-      if (distance >= radius) continue;
-      const amount = (1 - distance / radius) * Math.min(.45, Math.max(.015, dt) * 8);
+      const contact = radius + effectiveParticleRadius(ps, i, true);
+      if (distance >= contact) continue;
+      const amount = (1 - distance / contact) * Math.min(.45, Math.max(.015, dt) * 8);
       ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
       affected++;
     }
     if (affected) this.history.stirred += Math.min(6, speed) * dt;
+    return affected;
+  }
+  crush(point) {
+    const ps = this.engine.ps; let affected = 0;
+    for (let i = 0; i < ps.count; i++) {
+      if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .95) continue;
+      if (Math.hypot(ps.x[i] - point.x, ps.y[i] - point.y) > .18 + effectiveParticleRadius(ps, i, true)) continue;
+      ps.solidSubdivision[i] = 1; ps.solidBodyId[i] = 0;
+      ps.solidLocalX[i] = ps.solidLocalY[i] = ps.solidLocalZ[i] = 0;
+      ps.vx[i] *= .3; ps.vy[i] = Math.min(0, ps.vy[i]); affected++;
+    }
     return affected;
   }
   assistStir(dt = FIXED_STEP) {
