@@ -9,12 +9,13 @@ import { updateThermal } from './ThermalSolver.mjs';
 import { updateElectrical } from './ElectricalSolver.mjs';
 import { updatePhaseParticle } from './PhaseSolver.mjs';
 import { applyBuoyancy } from './BuoyancySolver.mjs';
+import { updateGasDensity } from './GasDensitySolver.mjs';
 import { Phase } from './Phase.mjs';
 import { clamp } from './math.mjs';
 import { materialFromParticlePair, sampleMaterialAt } from '../materials/MaterialSampler.mjs';
 
-export const DEFAULT_RULES={miscibilityThreshold:.12,interactionRadiusScale:1,baseMixingRate:2.2,mixingTemperatureCoefficient:0,mixingExponent:1.7,condensationDensityThreshold:.62,condensationCoolingCoefficient:.38,thermalDiffusionRate:.7,reactionStrength:1.15,thermalShockStrength:1.1,canonicalizationDistance:.025,thermalReactionThreshold:.72,thermalReactionStrength:1.15,electrostaticStrength:2.4,electricalConductionRate:2.2,jouleHeating:.025,combustionRate:1,combustionHeatScale:1};
-export const DEFAULT_ENV={environmentDensity:.52,ambientTemperature:.33,ambientThermalExchange:1,gravityStrength:5.4,buoyancyStrength:8.5,maxVelocity:7,liquidConstraintVelocityShare:1,dimensionMode:'3D',box:{width:5.4,height:7.2,depth:4.2}};
+export const DEFAULT_RULES={miscibilityThreshold:.12,interactionRadiusScale:1,baseMixingRate:2.2,mixingTemperatureCoefficient:0,mixingExponent:1.7,densityDrivenCondensation:false,condensationDensityThreshold:.62,condensationCoolingCoefficient:.38,thermalDiffusionRate:.7,reactionStrength:1.15,thermalShockStrength:1.1,canonicalizationDistance:.025,thermalReactionThreshold:.72,thermalReactionStrength:1.15,electrostaticStrength:2.4,electricalConductionRate:2.2,jouleHeating:.025,combustionRate:1,combustionHeatScale:1};
+export const DEFAULT_ENV={environmentDensity:.52,gasBuoyancyUsesMaterialDensity:false,ambientTemperature:.33,ambientThermalExchange:1,gravityStrength:5.4,buoyancyStrength:8.5,maxVelocity:7,liquidConstraintVelocityShare:1,dimensionMode:'3D',box:{width:5.4,height:7.2,depth:4.2}};
 export const DEFAULT_BOX_BY_MODE=Object.freeze({'3D':Object.freeze({width:5.4,height:7.2,depth:4.2}),'2D':Object.freeze({width:18,height:24,depth:4.2})});
 
 function cleanBox(box,fallback){return {width:clamp(Number(box?.width)||fallback.width,3,60),height:clamp(Number(box?.height)||fallback.height,3,60),depth:clamp(Number(box?.depth)||fallback.depth,3,18)};}
@@ -65,9 +66,10 @@ export class SimulationEngine{
   step(dt){
     if(this.paused)return;dt=clamp(dt,1/120,1/24);this.time+=dt;this.stepIndex++;const planar=this.env.dimensionMode==='2D',profile=performanceProfileFor(this.ps.count,this.env.dimensionMode);this.performance=profile;const fluidIterations=Math.min(this.iterations,profile.fluidIterations);
     this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider);this.molds.collide(this.ps,planar);this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);
+    if(this.rules.densityDrivenCondensation)updateGasDensity(this.ps,this.grid,this.rules,this.env);
     for(let i=0;i<this.ps.count;i++)applyBuoyancy(this.ps,i,this.gravity,this.env,dt);
     if(this.stepIndex%profile.thermalStride===0)updateThermal(this.ps,this.grid,this.rules,this.env,dt*profile.thermalStride);
-    let changes=0,hasSolid=false;for(let i=0;i<this.ps.count;i++){const change=updatePhaseParticle(this.ps,i,dt);if(change){changes++;if(change.from===Phase.SOLID&&change.to===Phase.LIQUID)this.solid.onMelt(this.ps,i);else if(change.to===Phase.SOLID)this.solid.initializeParticle(this.ps,i,planar,this.grid);}if(this.ps.phase[i]===Phase.SOLID)hasSolid=true;}
+    let changes=0,hasSolid=false;for(let i=0;i<this.ps.count;i++){const change=updatePhaseParticle(this.ps,i,dt,this.rules,this.env);if(change){changes++;if(change.from===Phase.SOLID&&change.to===Phase.LIQUID)this.solid.onMelt(this.ps,i);else if(change.to===Phase.SOLID)this.solid.initializeParticle(this.ps,i,planar,this.grid);}if(this.ps.phase[i]===Phase.SOLID)hasSolid=true;}
     let positionsDirty=false;if(hasSolid){this.solid.step(this.ps,this.grid,this.env,this.gravity,dt);this.fluid.collideBox(this.ps,this.env.box,planar);positionsDirty=true;}if(this.molds.molds.length||this.molds.barriers.size){this.molds.collide(this.ps,planar);positionsDirty=true;}if(positionsDirty){this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);}
     if(this.stepIndex%profile.electricalStride===0)updateElectrical(this.ps,this.grid,this.rules,dt*profile.electricalStride);
     if(this.stepIndex%profile.reactionStride===0)this.reactions.step(this.ps,this.grid,this.rules,dt*profile.reactionStride,(ps,i,j,a,b)=>this.resolveFusion(ps,i,j,a,b));else this.reactions.clearFrame();

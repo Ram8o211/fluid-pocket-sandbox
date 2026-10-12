@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-v3';
+const CACHE = 'alchemist-shop-v4';
 const CORE = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const CORE = [
   './src/game/brewing.mjs',
   './src/game/cauldron.mjs',
   './src/game/CauldronThermal.mjs',
+  './src/simulation/GasDensitySolver.mjs',
   './src/reactions/MixtureSolver.mjs',
   './src/game/orders.mjs',
   './src/game/evaluation.mjs',
