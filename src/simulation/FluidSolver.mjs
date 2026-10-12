@@ -3,6 +3,11 @@ import { clamp } from './math.mjs';
 import { stratificationImpulse } from './DensityStratification.mjs';
 
 const MAX_PARTICLE_RADIUS=.20;
+// Warm liquids flow more easily; cold liquids thicken. Room-temperature behavior
+// remains unchanged, including the sandbox's existing material controls.
+export function effectiveLiquidViscosity(ps,i) {
+  return clamp(ps.viscosity[i] * Math.exp(1.6 * (.33 - ps.temperature[i])), 0, 1);
+}
 export function effectiveParticleRadius(ps,i,planar=false){
   const base=clamp(Number(ps.particleRadius?.[i])||.13,.065,MAX_PARTICLE_RADIUS),mass=Math.max(.001,ps.mass[i]||1);
   return base*(planar?Math.sqrt(mass):Math.cbrt(mass));
@@ -20,7 +25,7 @@ export class FluidSolver {
   solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar){
     const rest=particlePairRestDistance(ps,i,j,planar),supportRadius=Math.min(this.neighborRadius,Math.max(.30,rest*1.35)),[wi,wj]=pairWeights(ps,i,j);
     const fi=ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0,fj=ps.temperature[j]<ps.meltingTemperature[j]-ps.phaseHysteresis[j]?clamp(ps.phaseProgress[j],0,1):0,mobility=(1-fi*.86)*(1-fj*.86);
-    const viscosity=clamp((ps.viscosity[i]+ps.viscosity[j])*.5,0,1),kernel=clamp(1-d/supportRadius,0,1),viscous=clamp(viscosity*kernel*dt*4.5*mobility,0,.18);
+    const viscosity=(effectiveLiquidViscosity(ps,i)+effectiveLiquidViscosity(ps,j))*.5,kernel=clamp(1-d/supportRadius,0,1),viscous=clamp(viscosity*kernel*dt*4.5*mobility,0,.18);
     if(viscous>0){const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];ps.vx[i]+=dvx*viscous*wi;ps.vy[i]+=dvy*viscous*wi;if(!planar)ps.vz[i]+=dvz*viscous*wi;ps.vx[j]-=dvx*viscous*wj;ps.vy[j]-=dvy*viscous*wj;if(!planar)ps.vz[j]-=dvz*viscous*wj;}
     if(d<rest){const hard=Math.max(ps.incompressible?.[i]||0,ps.incompressible?.[j]||0),q=(rest-d)/rest,soft=(1-clamp(hard,0,1)*.92),perParticle=q*q*(.018+.03*(1-viscosity))*mobility*soft,total=perParticle*2;if(total>0)separatePair(ps,i,j,nx,ny,nz,total,planar);}
     else if(d<supportRadius){const sameMaterial=ps.materialId[i]===ps.materialId[j],delta=Math.abs(ps.miscibility[i]-ps.miscibility[j]),threshold=Math.max(.01,rules.miscibilityThreshold),compatibility=sameMaterial?1:clamp(1-delta/threshold,0,1);if(compatibility>0){const cohesion=clamp((ps.cohesion[i]+ps.cohesion[j])*.5,0,1),span=Math.max(.001,supportRadius-rest),perParticle=(d-rest)/span*cohesion*compatibility*.0025*mobility,total=perParticle*2;ps.x[i]+=nx*total*wi;ps.y[i]+=ny*total*wi;if(!planar)ps.z[i]+=nz*total*wi;ps.x[j]-=nx*total*wj;ps.y[j]-=ny*total*wj;if(!planar)ps.z[j]-=nz*total*wj;}}
@@ -87,3 +92,4 @@ export class FluidSolver {
     }
   }
 }
+

@@ -1,2 +1,7 @@
-import { spawnSync } from 'node:child_process';import { existsSync } from 'node:fs';
-const args=['-p','jsconfig.json'];const r=spawnSync('tsc',args,{stdio:'inherit',shell:true});if(r.error||r.status===127){console.warn('tsc not available; falling back to syntax lint');const f=spawnSync(process.execPath,['scripts/lint.mjs'],{stdio:'inherit'});process.exit(f.status||0);}process.exit(r.status||0);
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+// Fail clearly if dev dependencies are missing; syntax lint is not a type check.
+const compiler = require.resolve('typescript/bin/tsc');
+const result = spawnSync(process.execPath, [compiler, '-p', 'jsconfig.json'], { stdio: 'inherit' });
+process.exit(result.status ?? 1);

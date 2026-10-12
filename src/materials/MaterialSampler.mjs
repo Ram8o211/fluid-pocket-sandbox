@@ -36,6 +36,13 @@ export function materialFromParticlePair(ps,i,j,id,name,metadata={}){
   return weightedParticleMaterial(ps,[{index:i,weight:1},{index:j,weight:1}],id,name,metadata)?.material||null;
 }
 
+// A gameplay adapter can sample an exact drain without approximating it with a
+// spatial brush. Weight=1 reads a complete particle; fractional weights read mass
+// destined for a vial. All material interpretation still uses the same sampler.
+export function sampleParticleSet(ps, weightedIndices, id=1, name='Sampled material') {
+  return weightedParticleMaterial(ps, weightedIndices, id, name);
+}
+
 export function sampleMaterialAt(ps,point,radius=.75,id=1,name='Sampled material'){
   const r2=radius*radius,weighted=[];let count=0;
   for(let i=0;i<ps.count;i++){
@@ -45,3 +52,4 @@ export function sampleMaterialAt(ps,point,radius=.75,id=1,name='Sampled material
   const result=weightedParticleMaterial(ps,weighted,id,name,{sampled:true,reusable:false});
   return result?{...result,count,indices:weighted.map(v=>v.index),radius,point:{...point}}:null;
 }
+

@@ -1,18 +1,12 @@
 {
-  "name": "Fluid Pocket Sandbox",
-  "short_name": "Fluid Pocket",
+  "name": "The Alchemist’s Shop",
+  "short_name": "Alchemy Shop",
+  "description": "A 2D medieval fantasy shop of emergent potion brewing.",
   "start_url": "../",
+  "scope": "../",
   "display": "standalone",
-  "background_color": "#07101c",
-  "theme_color": "#07101c",
-  "orientation": "any",
-  "icons": [
-    {
-      "src": "./icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ],
-  "scope": "../"
+  "orientation": "portrait-primary",
+  "background_color": "#29212f",
+  "theme_color": "#29212f",
+  "icons": [{"src":"./icons/alchemist.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
 }
