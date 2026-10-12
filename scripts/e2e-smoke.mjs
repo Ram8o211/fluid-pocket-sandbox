@@ -31,9 +31,10 @@ try {
     if (!html.includes(marker)) throw new Error('Missing UI marker ' + marker);
   }
   if (/(?:src|href)="\/(?!\/)/.test(html)) throw new Error('Root-relative HTML asset breaks project Pages');
+  if (!html.includes('id="embedded-pages-fallback"')) throw new Error('Missing inline CSS fallback');
   const style = await readFile('styles.css', 'utf8');
   if (/url\(['"]?\//.test(style)) throw new Error('Root-relative CSS import breaks project Pages');
-  if (!html.includes('href="./styles.css"') || !html.includes('src="./src/app/main.mjs"'))
+  if (!html.includes('href="./styles.css) || !html.includes('src="./src/app/main.mjs))
     throw new Error('App entry points do not use project-relative URLs');
   const manifest = JSON.parse(await readFile('public/manifest.webmanifest', 'utf8'));
   if (manifest.start_url !== '../' || manifest.scope !== '../')
