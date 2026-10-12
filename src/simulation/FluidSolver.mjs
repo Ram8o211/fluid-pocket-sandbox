@@ -23,11 +23,15 @@ function separatePair(ps,i,j,nx,ny,nz,amount,planar){const [wi,wj]=pairWeights(p
 export class FluidSolver {
   constructor(){this.neighborRadius=.48;this.restDistance=.26;this.reverseSweep=false;this.pairPhase=0;this.gasCounts=null;}
   ensureScratch(ps){if(!this.gasCounts||this.gasCounts.length<ps.capacity)this.gasCounts=new Uint16Array(ps.capacity);}
-  sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility,planar){
-    // Sort only inverted contacts. Once the heavier parcel is below the lighter
-    // one, gravity and packing support the interface without opening an air gap.
+  sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility,planar,interactionScale=1){
+    // Only reverse-density neighbors get a downward sorting impulse. A cutoff
+    // near the particle diameter strands a fresh heavy layer on top of a
+    // settled light layer: exchanging the layers requires a few grain widths
+    // of reach. Fade the impulse to zero at the *existing* neighbor radius.
+    // Correctly ordered neighbors receive no force, keeping interfaces closed.
     const inverted=(ps.density[i]-ps.density[j])*(nx*gravity.x+ny*gravity.y+nz*gravity.z);
-    const contact=clamp((rest*1.15-d)/(rest*.3),0,1);
+    const reach=this.neighborRadius*interactionScale;
+    const contact=clamp((reach-d)/Math.max(.001,reach-rest),0,1);
     if(inverted<=0||contact<=0)return;
     const imp=stratificationImpulse(ps.density[i],ps.density[j],gravity,.0015*mobility*contact),[wi,wj]=pairWeights(ps,i,j);
     ps.x[i]+=imp.x*2*wi;ps.y[i]+=imp.y*2*wi;if(!planar)ps.z[i]+=imp.z*2*wi;
@@ -40,7 +44,7 @@ export class FluidSolver {
     if(viscous>0){const dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];ps.vx[i]+=dvx*viscous*wi;ps.vy[i]+=dvy*viscous*wi;if(!planar)ps.vz[i]+=dvz*viscous*wi;ps.vx[j]-=dvx*viscous*wj;ps.vy[j]-=dvy*viscous*wj;if(!planar)ps.vz[j]-=dvz*viscous*wj;}
     if(d<rest){const hard=Math.max(ps.incompressible?.[i]||0,ps.incompressible?.[j]||0),q=(rest-d)/rest,soft=(1-clamp(hard,0,1)*.92),perParticle=q*q*(.018+.03*(1-viscosity))*mobility*soft,total=perParticle*2;if(total>0)separatePair(ps,i,j,nx,ny,nz,total,planar);}
     else if(d<supportRadius){const sameMaterial=ps.materialId[i]===ps.materialId[j],delta=Math.abs(ps.miscibility[i]-ps.miscibility[j]),threshold=Math.max(.01,rules.miscibilityThreshold),compatibility=sameMaterial?1:clamp(1-delta/threshold,0,1);if(compatibility>0){const cohesion=clamp((ps.cohesion[i]+ps.cohesion[j])*.5,0,1),span=Math.max(.001,supportRadius-rest),perParticle=(d-rest)/span*cohesion*compatibility*.0025*mobility,total=perParticle*2;ps.x[i]+=nx*total*wi;ps.y[i]+=ny*total*wi;if(!planar)ps.z[i]+=nz*total*wi;ps.x[j]-=nx*total*wj;ps.y[j]-=ny*total*wj;if(!planar)ps.z[j]-=nz*total*wj;}}
-    if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=rules.miscibilityThreshold)this.sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility,planar);
+    if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=rules.miscibilityThreshold)this.sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility,planar,interactionScale);
   }
   solvePowderPair(ps,i,j,nx,ny,nz,d,dt,planar,rules){
     const rest=particlePairRestDistance(ps,i,j,planar)*.95,[wi,wj]=pairWeights(ps,i,j),a=ps.powderContent[i],b=ps.powderContent[j];
@@ -63,10 +67,10 @@ export class FluidSolver {
     if(d<target){const q=(target-d)/target,rep=granular?(target-d)*.9:q*q*.006*2;separatePair(ps,i,j,nx,ny,nz,rep,planar);}
     if(granular&&d<target*1.55){const friction=clamp((.018+.07*(subI+subJ)*.5)*(1-d/(target*1.55)),0,.085),[wi,wj]=pairWeights(ps,i,j),dvx=ps.vx[j]-ps.vx[i],dvy=ps.vy[j]-ps.vy[i],dvz=planar?0:ps.vz[j]-ps.vz[i];ps.vx[i]+=dvx*friction*wi;ps.vy[i]+=dvy*friction*wi;if(!planar)ps.vz[i]+=dvz*friction*wi;ps.vx[j]-=dvx*friction*wj;ps.vy[j]-=dvy*friction*wj;if(!planar)ps.vz[j]-=dvz*friction*wj;}
   }
-  solveSolidLiquidPair(ps,solid,liquid,nxFromSolid,nyFromSolid,nzFromSolid,d,gravity,rules,planar){
+  solveSolidLiquidPair(ps,solid,liquid,nxFromSolid,nyFromSolid,nzFromSolid,d,gravity,rules,planar,interactionScale=1){
     const rest=particlePairRestDistance(ps,solid,liquid,planar),freezing=ps.temperature[liquid]<ps.meltingTemperature[liquid]-ps.phaseHysteresis[liquid]?clamp(ps.phaseProgress[liquid],0,1):0,mobility=1-freezing*.86,hard=Math.max(ps.incompressible?.[solid]||0,ps.incompressible?.[liquid]||0),soft=1-clamp(hard,0,1)*.92;
     if(d<rest){const q=(rest-d)/rest,rep=q*q*(.018+.03*(1-ps.viscosity[liquid]))*mobility*soft*2;if(rep>0)separatePair(ps,solid,liquid,nxFromSolid,nyFromSolid,nzFromSolid,rep,planar);}
-    if(ps.materialId[solid]!==ps.materialId[liquid]&&Math.abs(ps.miscibility[solid]-ps.miscibility[liquid])>=rules.miscibilityThreshold)this.sortDensityContact(ps,solid,liquid,nxFromSolid,nyFromSolid,nzFromSolid,d,rest,gravity,mobility,planar);
+    if(ps.materialId[solid]!==ps.materialId[liquid]&&Math.abs(ps.miscibility[solid]-ps.miscibility[liquid])>=rules.miscibilityThreshold)this.sortDensityContact(ps,solid,liquid,nxFromSolid,nyFromSolid,nzFromSolid,d,rest,gravity,mobility,planar,interactionScale);
   }
   enforceHardPacking(ps,grid,searchRadius,planar){
     grid.forEachPair(ps,searchRadius,(i,j)=>{
@@ -113,8 +117,8 @@ export class FluidSolver {
         if((isPowder(ps,i)||isPowder(ps,j)||ps.powderContent[i]>.15||ps.powderContent[j]>.15)&&!isCoherentSolid(ps,i)&&!isCoherentSolid(ps,j)){this.solvePowderPair(ps,i,j,nx,ny,nz,d,dt,planar,rules);return;}
         if(pi===Phase.LIQUID&&pj===Phase.LIQUID){this.solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar,interactionScale);return;}
         if(pi===Phase.SOLID&&pj===Phase.SOLID){this.solveSolidPair(ps,i,j,nx,ny,nz,d,dt,planar);return;}
-        if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar);return;}
-        if(pi===Phase.LIQUID&&pj===Phase.SOLID)this.solveSolidLiquidPair(ps,j,i,-nx,-ny,-nz,d,gravity,rules,planar);
+        if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar,interactionScale);return;}
+        if(pi===Phase.LIQUID&&pj===Phase.SOLID)this.solveSolidLiquidPair(ps,j,i,-nx,-ny,-nz,d,gravity,rules,planar,interactionScale);
       },pairStride,(pairPhase+it)%pairStride);
       if(hasHard){grid.rebuild(ps,env.box);this.enforceHardPacking(ps,grid,searchRadius,planar);}
       for(let i=0;i<ps.count;i++)ps.localGasDensity[i]=ps.phase[i]===Phase.GAS?clamp(.18+this.gasCounts[i]*.075,0,1.8):0;
