@@ -102,17 +102,30 @@ export class BrewingSession {
   setThermal(heat, cool = 0) {
     this.heat = clamp(Number(heat) || 0, 0, 1); this.cool = this.heat > 0 ? 0 : clamp(Number(cool) || 0, 0, 1);
   }
-  stir(point, velocity, dt = FIXED_STEP) {
+  stir(point, velocity, dt = FIXED_STEP, fromPoint = point) {
     const ps = this.engine.ps, speed = Math.hypot(velocity.x, velocity.y);
     if (speed < .02 || !Number.isFinite(speed)) return 0;
-    const vx = clamp(velocity.x, -6, 6), vy = clamp(velocity.y, -6, 6), radius = .24;
+    // Wider spoon catches a meaningful cross-section of both liquids and
+    // loose powders. Sweep its footprint along the entire touch movement:
+    // frame-rate-dependent pointer gaps must not leave un-stirred strips.
+    const vx = clamp(velocity.x, -6, 6), vy = clamp(velocity.y, -6, 6), radius = .42;
+    const sx = Number.isFinite(fromPoint?.x) ? fromPoint.x : point.x;
+    const sy = Number.isFinite(fromPoint?.y) ? fromPoint.y : point.y;
+    const dx = point.x - sx, dy = point.y - sy, lengthSquared = dx * dx + dy * dy;
     let affected = 0;
     for (let i = 0; i < ps.count; i++) {
       if (ps.phase[i] !== Phase.LIQUID && !(ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] >= .55)) continue;
-      const distance = Math.hypot(ps.x[i] - point.x, ps.y[i] - point.y);
+      const projection = lengthSquared > 1e-8
+        ? clamp(((ps.x[i] - sx) * dx + (ps.y[i] - sy) * dy) / lengthSquared, 0, 1)
+        : 1;
+      const closestX = sx + projection * dx, closestY = sy + projection * dy;
+      const distance = Math.hypot(ps.x[i] - closestX, ps.y[i] - closestY);
       const contact = radius + effectiveParticleRadius(ps, i, true);
       if (distance >= contact) continue;
-      const amount = (1 - distance / contact) * Math.min(.45, Math.max(.015, dt) * 8);
+      // Smooth nonzero peripheral influence allows several grains to move
+      // together while keeping strong impulses centered under the spoon.
+      const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
+      const amount = falloff * Math.min(.52, Math.max(.015, dt) * 9);
       ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
       affected++;
     }
