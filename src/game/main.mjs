@@ -128,7 +128,7 @@ function updateHUD() {
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
 }
 const TUTORIAL = [
-  'Welcome, apprentice! Your customer wants a 60 ml potion. Select the first bottle, then tap Pour.',
+  'Welcome, apprentice! Your customer wants a 60 ml potion. Select a reagent, then tap Pour.',
   'Each tap pours 20 ml. Pour three times to fill the customer’s 60 ml vial.',
   'Now drag in circles inside the cauldron, or hold Stir. The spoon helps the reagents blend.',
   'Tap Flame or Frost to feel their effect. A little is enough; tap through the levels to turn it off.',
@@ -140,7 +140,7 @@ function updateTutorial() {
   if (!state) return;
   const step = state.tutorial;
   $('tutorial').hidden = step >= TUTORIAL.length;
-  $('tutorialText').textContent = TUTORIAL[step] || '';
+  $('tutorialText').textContent = (TUTORIAL[step] || '').replaceAll('60 ml', `${state.order.volume} ml`).replace('three times', state.order.volume === 60 ? 'three times' : state.order.volume === 80 ? 'four times' : 'five times');
 }
 function advanceTutorial() {
   if (!state || state.tutorial >= TUTORIAL.length) return;

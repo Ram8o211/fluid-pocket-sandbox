@@ -30,6 +30,8 @@ export function performanceProfileFor(count,dimensionMode='3D'){
 }
 
 export class SimulationEngine{
+  /** @type {Record<string,{width:number,height:number,depth:number}>} */
+  boxByMode;
   constructor(capacity=1800){this.ps=new ParticleSystem(capacity);this.grid=new SpatialGrid(capacity,64);this.fluid=new FluidSolver();this.solid=new SolidSolver();this.molds=new MoldSystem();this.reactions=new ReactionEngine();this.combustion=new CombustionSolver();this.materials=new Map();this.rules=structuredClone(DEFAULT_RULES);this.env=structuredClone(DEFAULT_ENV);this.boxByMode={'3D':{...DEFAULT_BOX_BY_MODE['3D']},'2D':{...DEFAULT_BOX_BY_MODE['2D']}};this.gravity={x:0,y:-this.env.gravityStrength,z:0};this.paused=false;this.time=0;this.stepIndex=0;this.performance=performanceProfileFor(0,'3D');this.stats={reactions:0,combustions:0,combustionMass:0,gridCells:0,phaseChanges:0,generatedMaterials:0,performanceTier:'FULL'};this.iterations=2;this.compositeCache=new Map();this.combustionProductCache=new Map();this.emergentIdCursor=10000;}
   registerMaterial(m){this.materials.set(m.id,m);this.emergentIdCursor=Math.max(this.emergentIdCursor,m.id>=10000?m.id+1:this.emergentIdCursor);}
   allocateEmergentId(){while(this.materials.has(this.emergentIdCursor))this.emergentIdCursor++;return this.emergentIdCursor++;}
@@ -73,3 +75,4 @@ export class SimulationEngine{
   sanitize(clampBox=true){const ps=this.ps,planar=this.env.dimensionMode==='2D',x=ps.x,y=ps.y,z=ps.z,vx=ps.vx,vy=ps.vy,vz=ps.vz,temp=ps.temperature,density=ps.density,potential=ps.electricPotential;for(let i=0;i<ps.count;i++){if(!Number.isFinite(x[i]))x[i]=0;if(!Number.isFinite(y[i]))y[i]=0;if(!Number.isFinite(z[i]))z[i]=0;if(!Number.isFinite(vx[i]))vx[i]=0;if(!Number.isFinite(vy[i]))vy[i]=0;if(!Number.isFinite(vz[i]))vz[i]=0;if(!Number.isFinite(temp[i]))temp[i]=0;if(!Number.isFinite(density[i]))density[i]=0;if(!Number.isFinite(potential[i]))potential[i]=0;if(!Number.isFinite(ps.incompressible[i]))ps.incompressible[i]=0;temp[i]=clamp(temp[i],0,1.2);density[i]=clamp(density[i],.04,2.5);potential[i]=clamp(potential[i],-1.5,1.5);ps.incompressible[i]=clamp(ps.incompressible[i],0,1);if(planar){z[i]=ps.pz[i]=0;vz[i]=0;}}if(clampBox)ps.clampToBox(this.env.box);}
   reset(){this.ps.clear();this.time=0;this.stepIndex=0;this.performance=performanceProfileFor(0,this.env.dimensionMode);this.reactions.clearFrame();this.pruneEmergentMaterials();this.stats.generatedMaterials=0;this.stats.performanceTier='FULL';this.solid.reset();this.molds.clear();this.combustion.resetFrame();this.combustionProductCache.clear();this.stats.combustions=0;this.stats.combustionMass=0;}
 }
+

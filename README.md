@@ -1,3 +1,57 @@
+# The Alchemist’s Shop
+
+A playable medieval fantasy potion shop built on Fluid Pocket Sandbox’s real
+particle engine. The game is entirely **2D**, mobile first, and statically hosted.
+
+**Play:** https://ram8o211.github.io/fluid-pocket-sandbox/
+
+Open a seeded world, welcome a customer, pour measured reagents, stir, heat or
+cool the brew, inspect it, bottle it and sell it. Quality and payment come from
+the resulting particle state. Use profits for supplies, instruments, larger
+cauldrons and rare reagents. Discoveries belong in your recipe book. Progress,
+orders, stock and the active cauldron save locally; Settings includes save export.
+
+The first commission has an interactive tutorial. Hold Pour for repeated doses,
+drag bottles onto the cauldron, draw circles with the spoon or hold Stir. Tap
+Flame/Frost to cycle power; a copper furnace unlocks precise controls. The six
+starter ingredients and later guild reagents change with the world seed.
+
+**Original sandbox:** https://ram8o211.github.io/fluid-pocket-sandbox/sandbox.html?mode=2D
+
+The original 2D/3D simulation, material editor and experimental controls remain
+available independently. The shop imports only the planar rendering path.
+
+## Development and verification
+
+```sh
+npm ci
+npm run dev
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run e2e
+npx playwright install --with-deps chromium --only-shell
+npm run test:browser
+npm run benchmark:game
+```
+
+`test:browser` plays two orders through visible controls, checks physics actions,
+a recipe and equipment purchase, restores an active cauldron, checks portrait and
+desktop layouts and opens the original sandbox. It writes QA screenshots to the
+ignored `test-results/` directory. Set `SITE_URL` to run the same acceptance flow
+on a deployed site; `BROWSER_PATH` can select an already-installed Chromium.
+TypeScript and Playwright are development-only dependencies; the game has no
+runtime dependency downloads or server requirements.
+
+See [game architecture](docs/GAME_ARCHITECTURE.md) for contracts, quantity
+conservation, fantasy measurements, scoring, progression and save migrations.
+Physics is deliberately normalized and inspired by chemistry rather than a
+calibrated model of real potion substances. Android hardware benchmarking remains
+future validation. There is no cloud sync or native APK in this static MVP.
+
+## Original Fluid Pocket Sandbox documentation
+
 # Fluid Pocket Sandbox
 
 Fluid Pocket Sandbox is a mobile-first procedural-matter sandbox with switchable 3D and lightweight 2D modes, designed for Chrome on Android. The phone acts conceptually as the container: changing the gravity vector with device orientation (or a touch fallback) changes how liquids, gases, and particle-cluster solids move inside a transparent box.
@@ -68,3 +122,4 @@ The Node test suite covers phase placement from ambient temperature, solid subdi
 ## Deployment
 
 Vercel builds with `npm run build` and serves `dist/`. GitHub remains the source of truth; active development stays on `feature/procedural-fluid-sandbox-mvp` until browser/mobile QA is complete.
+

@@ -25,6 +25,8 @@ export class DeviceOrientationProvider {
   getGravity(){const x=clamp(this.fx,-.95,.95),z=clamp(this.fz,-.95,.95),y=-Math.sqrt(Math.max(.04,1-Math.min(.96,x*x+z*z)));return {x,y,z};}
 }
 export class GravityController {
+  /** @type {ManualGravityProvider|DeviceOrientationProvider} */
+  active;
   constructor(){this.manual=new ManualGravityProvider();this.device=new DeviceOrientationProvider();this.active=this.manual;}
   async enableDevice(){if(await this.device.enable()){this.active=this.device;return true;}return false;}
   useManual(){this.device.disable();this.active=this.manual;this.manual.reset();}
@@ -34,3 +36,4 @@ export class GravityController {
   calibrate(){this.active.calibrate();}
   reset(){this.active.reset();}
 }
+

@@ -39,9 +39,11 @@ export class BrewingSession {
     const ps = this.engine.ps;
     const quantity = Math.max(0, Math.floor(Math.min(requestedMl, inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, ps.capacity - ps.count) + .00001));
     if (!quantity) return 0;
+    const massBefore = ps.totalMass();
     const start = ps.count, x = ingredientId % 2 ? -1.2 : 1.2;
     const count = this.engine.emit(ingredientId, { x, y: 1.12, z: 0 }, quantity, ROOM_TEMPERATURE, .65);
     for (let i = start; i < ps.count; i++) { ps.mass[i] = ingredient.material.density; ps.vy[i] = -1.3; }
+    this.history.activation *= massBefore / Math.max(.001, ps.totalMass());
     inventory[ingredientId] = Math.max(0, (inventory[ingredientId] || 0) - count);
     this.cost.ingredients += count * ingredient.price;
     this.portions.push({ ingredientId, ml: count, time: this.history.elapsed });
@@ -128,7 +130,9 @@ export class BrewingSession {
     this.cost.ingredients -= cost.ingredients; this.cost.energy -= cost.energy;
     this.portions = this.portions.map(p => ({ ...p, ml: p.ml * (1 - fraction) })).filter(p => p.ml > .001);
     this.heat = this.cool = 0; this.bottles++;
-    return { ...sample, id: `vial-${this.bottles}-${Math.round(this.history.elapsed * 1000)}`, portions: bottledPortions };
+    const id = `vial-${this.bottles}-${Math.round(this.history.elapsed * 1000)}`;
+    if (ps.count === 0) { this.engine.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 }; }
+    return { ...sample, id, portions: bottledPortions };
   }
   clean() {
     const wasted = { ...this.cost, volume: this.occupiedVolume };
@@ -144,6 +148,7 @@ export class BrewingSession {
     if (!saved) return;
     if (!Number.isInteger(saved.count) || saved.count < 0 || saved.count > this.engine.ps.capacity) throw new Error('Invalid saved cauldron.');
     if (!saved.particles || !saved.materials?.length) throw new Error('Incomplete saved cauldron.');
+    if (!saved.cost || Object.values(saved.cost).some(v => !Number.isFinite(v) || Number(v) < 0) || !saved.history || Object.values(saved.history).some(v => !Number.isFinite(v) || Number(v) < 0)) throw new Error('Invalid saved brewing history.');
     const ps = this.engine.ps;
     for (const key of SAVE_FIELDS) {
       const values = saved.particles[key];

@@ -32,11 +32,12 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const secondary = completed >= 2 && compatible.length ? compatible[Math.floor(rng() * compatible.length)] : null;
   const heat = difficulty >= 3 && rng() > .45 ? .45 : 0;
   const cool = difficulty >= 2 && !heat && rng() > .55 ? .35 : 0;
-  const recipe = { portions: secondary ? [{ ingredientId: primary.id, ml: Math.ceil(volume * .55) }, { ingredientId: secondary.id, ml: Math.ceil(volume * .55) }] : [{ ingredientId: primary.id, ml: volume }], volume, ticks: 120, thermalTicks: heat || cool ? 65 : 0, heat, cool, stir: Boolean(secondary) };
-  let sample = simulateWitness(world, recipe, equipment);
+  const recipe = { portions: secondary ? [{ ingredientId: primary.id, ml: Math.ceil(volume * .55 / 10) * 10 }, { ingredientId: secondary.id, ml: Math.ceil(volume * .55 / 10) * 10 }] : [{ ingredientId: primary.id, ml: volume }], volume, ticks: 120, thermalTicks: heat || cool ? 65 : 0, heat, cool, stir: Boolean(secondary) };
+  let sample = null;
+  try { sample = simulateWitness(world, recipe, equipment); } catch { /* A completely evaporated trial needs a safe fallback. */ }
   // If a rare reagent flashes to vapour, validate a safe ambient single-liquid
   // fallback rather than issue an order that lost its required vial quantity.
-  if (sample.volume < volume - .001 || sample.liquidFraction < .98) {
+  if (!sample || sample.volume < volume - .001 || sample.liquidFraction < .98) {
     recipe.portions = [{ ingredientId: ingredients[0].id, ml: volume }];
     recipe.heat = recipe.cool = recipe.thermalTicks = 0; recipe.stir = false;
     sample = simulateWitness(world, recipe, equipment);

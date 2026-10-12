@@ -1,9 +1,9 @@
 {
   "name": "fluid-pocket-sandbox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Mobile-first emergent procedural matter sandbox",
+  "description": "The Alchemist\u2019s Shop: a 2D emergent potion-brewing game",
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "typecheck": "node scripts/typecheck.mjs",
@@ -11,9 +11,15 @@
     "test": "node --test tests/*.test.mjs",
     "benchmark": "node scripts/benchmark.mjs",
     "build": "node scripts/build.mjs",
-    "e2e": "node scripts/e2e-smoke.mjs"
+    "e2e": "node scripts/e2e-smoke.mjs",
+    "test:browser": "node scripts/browser-test.mjs",
+    "benchmark:game": "node scripts/benchmark-game.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1",
+    "typescript": "5.9.3"
   }
 }
