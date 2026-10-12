@@ -52,6 +52,9 @@ export function saveShop(storage, state, brew) {
   const text = encodeSave(state, brew), previous = storage.getItem(SAVE_KEY);
   if (previous) { try { decodeSave(previous); storage.setItem(BACKUP_KEY, previous); } catch { /* Keep the last good backup. */ } }
   storage.setItem(SAVE_KEY, text);
+  // Return the exact independent snapshot written to storage. The menu must
+  // resume this physical state rather than an older state.brew reference.
+  return JSON.parse(text);
 }
 
 export function loadShop(storage) {

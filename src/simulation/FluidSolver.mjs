@@ -80,7 +80,27 @@ export class FluidSolver {
     for(let i=0;i<ps.count;i++){
       const rx=(ps.x[i]-ps.px[i])/dt,ry=(ps.y[i]-ps.py[i])/dt,rz=planar?0:(ps.z[i]-ps.pz[i])/dt;
       if(ps.phase[i]===Phase.SOLID){if(planar)ps.vz[i]=0;}
-      else{const freezing=ps.phase[i]===Phase.LIQUID&&ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0,physicalShare=freezing*.94;ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;}
+      else{
+        const liquid=ps.phase[i]===Phase.LIQUID,freezing=liquid&&ps.temperature[i]<ps.meltingTemperature[i]-ps.phaseHysteresis[i]?clamp(ps.phaseProgress[i],0,1):0;
+        // Dense packing moves positions to remove overlaps. Feeding all of that
+        // correction into velocity can launch fine liquids off a supporting
+        // floor every frame. Retain physical gravity, spoon and contact momentum
+        // while allowing a bounded contribution from constraint displacement.
+        const constraintShare=liquid?clamp(env.liquidConstraintVelocityShare??1,0,1):1,physicalShare=Math.max(freezing*.94,1-constraintShare);
+        const physicalDown=ps.vx[i]*gravity.x+ps.vy[i]*gravity.y+ps.vz[i]*gravity.z;
+        ps.vx[i]=rx*(1-physicalShare)+ps.vx[i]*physicalShare;ps.vy[i]=ry*(1-physicalShare)+ps.vy[i]*physicalShare;ps.vz[i]=planar?0:rz*(1-physicalShare)+ps.vz[i]*physicalShare;
+        if(liquid&&constraintShare<1&&physicalDown>=0){
+          const projectedDown=rx*gravity.x+ry*gravity.y+rz*gravity.z;
+          if(projectedDown<physicalDown){
+            // Supporting liquid/floor contacts arrest downward motion; they do
+            // not turn falling momentum into a new upward launch. Use the
+            // supported displacement directly, avoiding hidden falling speed
+            // inside a stationary packed layer. Spoon-driven rising remains free.
+            const gravity2=gravity.x*gravity.x+gravity.y*gravity.y+gravity.z*gravity.z;
+            if(gravity2>1e-8){const currentDown=ps.vx[i]*gravity.x+ps.vy[i]*gravity.y+ps.vz[i]*gravity.z,k=(Math.max(0,projectedDown)-currentDown)/gravity2;ps.vx[i]+=gravity.x*k;ps.vy[i]+=gravity.y*k;if(!planar)ps.vz[i]+=gravity.z*k;}
+          }
+        }
+      }
     }
   }
   collideBox(ps,box,planar=false){
