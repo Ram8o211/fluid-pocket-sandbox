@@ -134,3 +134,16 @@ test('a tiny dilute vapour remainder eventually condenses passively and empty co
   close(empty.thermal.floor, ROOM_TEMPERATURE, .002); close(empty.thermal.lid, ROOM_TEMPERATURE, .002);
   assert.equal(empty.engine.ps.count, 0); assert.equal(empty.cost.energy, 0);
 });
+
+test('separated gas parcels do not repel across the neighbour radius, while close contacts stay soft', () => {
+  for (const separation of [.25, .02]) {
+    const brew = setup(), e = brew.engine, ps = e.ps;
+    e.gravity = { x: 0, y: 0, z: 0 }; e.rules.thermalDiffusionRate = 0; e.env.ambientThermalExchange = 0;
+    for (const x of [-separation / 2, separation / 2]) ps.add({ x, y: 0, z: 0, mass: .25, temperature: .95 }, material({}), Phase.GAS);
+    e.step(FIXED_STEP);
+    const distance = ps.x[1] - ps.x[0];
+    if (separation === .25) close(distance, separation);
+    else { assert.ok(distance > separation); assert.ok(distance < separation + .005, 'Contact must not explosively spread gas'); }
+    assert.ok(Math.abs(ps.vx[0]) < .02, 'Contact correction must not launch vapour sideways');
+  }
+});
