@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { Phase } from '../src/simulation/Phase.mjs';
 
 // Both local and live verification drive visible controls. A throw fails CI.
 // Save reads are assertions and deterministic test guidance, never state writes.
@@ -123,6 +124,12 @@ try {
   assert.equal(await page.locator('#bottleBtn').isDisabled(), true);
   assert.match(await page.locator('#bottleBtn').textContent(), /Wait for condensation/);
   assert.match(await page.locator('#labHint').textContent(), /Steam is trapped/);
+  // Continue heating until the actual persisted vapour reaches the lid. This
+  // catches a dense cloud that has lost its lift despite still being labelled gas.
+  await page.waitForFunction(gasPhase => {
+    const particles = JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles;
+    return particles?.phase.some((phase, i) => phase === gasPhase && particles.y[i] > .8 && particles.localGasDensity[i] > 0);
+  }, Phase.GAS, { timeout });
   await page.screenshot({ path: 'test-results/retained-steam.png', fullPage: true });
   await page.locator('#coolBtn').click();
   await page.waitForFunction(() => !/ML STEAM/.test(document.querySelector('#labStatus').textContent), null, { timeout });
@@ -140,5 +147,5 @@ try {
   assert.ok((await page.locator('#materialSelect').textContent()).length > 5);
   await page.screenshot({ path: 'test-results/original-sandbox.png', fullPage: true });
   assert.deepEqual(failedResponses, [], 'Missing deployment assets'); assert.deepEqual(errors, [], 'Browser initialization/runtime errors');
-  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, gravity-driven liquid settling, retained steam and condensation with conserved mass, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
+  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, gravity-driven liquid settling, vapour rising to the lid, retained steam and condensation with conserved mass, measurements, sales, recipe, upgrade, full save/restore, touch, mobile/desktop and original 2D sandbox.`);
 } finally { if (browser) await browser.close(); if (server) server.kill('SIGTERM'); }
