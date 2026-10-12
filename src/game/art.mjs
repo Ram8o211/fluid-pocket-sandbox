@@ -20,6 +20,19 @@ export function bottleSprite(colour = '#74d7c9', style = 0) {
   const url = canvas.toDataURL(); cache.set(key, url); return url;
 }
 
+export function powderSprite(colour = '#dfcb91', style = 0) {
+  const key = `powder:${colour}:${style}`; if (cache.has(key)) return cache.get(key);
+  const canvas = surface(24, 32), ctx = canvas.getContext('2d');
+  const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  rect(4, 5, 16, 5, '#38283b'); rect(5, 6, 14, 3, '#b78a54');
+  rect(3, 10, 18, 20, '#362e47'); rect(4, 11, 16, 17, '#7d8b97');
+  rect(5, 18, 14, 10, colour); rect(7, 16, 10, 2, colour); rect(9, 14, 6, 2, colour);
+  for (let n = 0; n < 9; n++) rect(6 + (n * 5 + style) % 12, 19 + (n * 3) % 8, 1, 1, '#79685e');
+  rect(5, 12, 2, 5, '#d4eee7'); rect(9, 20, 7, 4, '#d9c49a');
+  rect(10, 21, 1, 1, '#6f5144'); rect(13, 22, 1, 1, '#6f5144'); rect(14, 21, 1, 1, '#6f5144');
+  const url = canvas.toDataURL(); cache.set(key, url); return url;
+}
+
 export function portraitSprite(seed, mood = 'neutral') {
   const key = `portrait:${seed}:${mood}`; if (cache.has(key)) return cache.get(key);
   const rng = mulberry32(seed), canvas = surface(48, 48), ctx = canvas.getContext('2d');

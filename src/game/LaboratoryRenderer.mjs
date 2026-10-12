@@ -71,7 +71,9 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.restore();
     if (this.brew.lastPour && this.sim.time < this.brew.lastPour.until) {
       const x = 192 + this.brew.lastPour.x * 40;
-      rect(x - 8, 76, 16, 13, '#c1cfc2'); rect(x - 5, 79, 10, 9, this.brew.lastPour.color); rect(x - 3, 90, 6, 14, this.brew.lastPour.color);
+      rect(x - 8, 76, 16, 13, '#c1cfc2'); rect(x - 5, 79, 10, 9, this.brew.lastPour.color);
+      if (this.brew.lastPour.form === 'powder') { for (let n=0;n<5;n++) rect(x - 3 + (n%3)*2, 90 + (n*5+this.frame)%14, 2, 2, this.brew.lastPour.color); }
+      else rect(x - 3, 90, 6, 14, this.brew.lastPour.color);
     }
     if (this.spoon) {
       const x = 192 + this.spoon.x * 40, y = 158 - this.spoon.y * 40;
@@ -109,11 +111,13 @@ export class LaboratoryRenderer extends PlanarRenderer {
       const x = Math.round((t.cx + ps.x[i] * t.scale) / pixel) * pixel, y = Math.round((t.cy - ps.y[i] * t.scale) / pixel) * pixel;
       const radius = Math.max(pixel, effectiveParticleRadius(ps, i, true) * t.scale);
       const dryGrain = isPowder(ps,i) && ps.powderContent[i] > .85;
-      const r = Math.ceil(radius * (dryGrain ? .65 : 1) / pixel) * pixel;
+      const r = Math.ceil(radius / pixel) * pixel;
       ctx.globalAlpha = ps.phase[i] === Phase.GAS ? .24 : .93;
       ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
-      ctx.fillRect(x - r, y - r + pixel, r * 2, Math.max(pixel, r * 2 - pixel * 2));
-      ctx.fillRect(x - r + pixel, y - r, Math.max(pixel, r * 2 - pixel * 2), r * 2);
+      // A full pixel footprint covers packed contacts at both resolutions. Grain
+      // texture comes from colour flecks rather than transparent gaps in the pile.
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      if (dryGrain) { ctx.fillStyle = `rgb(${Math.round(c.r*.82)},${Math.round(c.g*.82)},${Math.round(c.b*.82)})`; ctx.fillRect(x + (i%2 ? 0 : -pixel), y - pixel, pixel, pixel); }
       if (ps.phase[i] === Phase.SOLID) { ctx.fillStyle = '#c1d9d2'; ctx.globalAlpha = .45; ctx.fillRect(x, y, pixel, pixel); }
       else if (ps.phase[i] === Phase.LIQUID && i % 16 === 0) { ctx.fillStyle = '#e6f9e1'; ctx.globalAlpha = .17; ctx.fillRect(x, y - r, pixel, pixel); }
     }

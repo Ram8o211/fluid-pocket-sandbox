@@ -6,12 +6,13 @@ import { saveShop, loadShop, encodeSave, decodeSave } from './persistence.mjs';
 import { propertyDescription } from './potion.mjs';
 import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
-import { icon, bottleSprite, portraitSprite, workshopBackground } from './art.mjs';
+import { icon, bottleSprite, powderSprite, portraitSprite, workshopBackground } from './art.mjs';
 import { ShopAudio } from './audio.mjs';
 import { AdaptiveQuality } from '../performance/AdaptiveQuality.mjs';
 
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const ingredientSprite = i => i.form === 'powder' ? powderSprite(i.material.color, i.id) : bottleSprite(i.material.color, i.id);
 const audio = new ShopAudio();
 const adaptiveQuality = new AdaptiveQuality();
 let state = null, brew = null, renderer = null, loaded = null;
@@ -100,12 +101,13 @@ function renderAll() {
 }
 function renderRack() {
   const rack = $('ingredientRack'), scroll = rack.scrollLeft, ingredients = availableIngredients(state.world, state.equipment);
-  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}" aria-pressed="${i.id === selected}"><img src="${bottleSprite(i.material.color, i.id)}" alt=""><span>${escape(i.name)}</span><small>${Math.floor(state.inventory[i.id] || 0)} ml</small></button>`).join('');
+  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}${i.form === 'powder' ? ', powder' : ''}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${i.form === 'powder' ? 'Powder · ' : ''}${Math.floor(state.inventory[i.id] || 0)} ml</small></button>`).join('');
   rack.scrollLeft = scroll;
   const ingredient = ingredients.find(i => i.id === selected) || ingredients[0]; selected = ingredient.id;
-  $('selectedName').textContent = ingredient.name;
-  $('pourBtn').innerHTML = `${icon('vial')}Pour ${dose} ml`;
-  $('pourBtn').setAttribute('aria-label', `Pour ${dose} ml of ${ingredient.name}`);
+  $('selectedName').textContent = ingredient.name + (ingredient.form === 'powder' ? ' · powder' : '');
+  const action = ingredient.form === 'powder' ? 'Add' : 'Pour';
+  $('pourBtn').innerHTML = `${icon('vial')}${action} ${dose} ml`;
+  $('pourBtn').setAttribute('aria-label', `${action} ${dose} ml of ${ingredient.name}`);
   $('pourBtn').disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
 }
 function renderTools() {
@@ -233,7 +235,7 @@ function showInventory() {
   const rows = availableIngredients(state.world, state.equipment).map(i => {
     const cost = Math.ceil(i.price * 60);
     const trade = Math.floor(i.price * 60 * .55);
-    return `<div class="stock-row"><img src="${bottleSprite(i.material.color, i.id)}" alt=""><div class="stock-info"><strong>${escape(i.name)}</strong><p>${Math.floor(state.inventory[i.id] || 0)} ml in stock · ${cost} coins per 60 ml</p><p>${escape(i.lore)}</p><button data-trade="${i.id}"${(state.inventory[i.id] || 0) < 60 ? ' disabled' : ''}>Trade 60 ml · +${trade} coins</button></div><button data-restock="${i.id}"${state.coins < cost ? ' disabled' : ''}>Refill<br>${cost} coins</button></div>`;
+    return `<div class="stock-row"><img src="${ingredientSprite(i)}" alt=""><div class="stock-info"><strong>${escape(i.name)}${i.form === 'powder' ? ' · powder' : ''}</strong><p>${Math.floor(state.inventory[i.id] || 0)} ml in stock · ${cost} coins per 60 ml</p><p>${escape(i.lore)}</p><button data-trade="${i.id}"${(state.inventory[i.id] || 0) < 60 ? ' disabled' : ''}>Trade 60 ml · +${trade} coins</button></div><button data-restock="${i.id}"${state.coins < cost ? ' disabled' : ''}>Refill<br>${cost} coins</button></div>`;
   }).join('');
   sheet('Reagent supplies', `<p>Refill measured bottles at the village apothecary. Consumed stock stays consumed when you clean or leave the shop.</p>${rows}<details><summary>Apprentice emergency fund</summary><p>If your total coins and remaining stock are worth less than 15 coins, the guild offers a 25 coin loan. You repay 30 coins from future sales. Only one loan can be outstanding.</p><button data-action="loan">Request guild loan</button><p>Outstanding debt: ${state.debt || 0} coins</p></details>`);
 }

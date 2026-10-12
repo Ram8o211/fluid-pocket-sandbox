@@ -1,5 +1,5 @@
 import { SAVE_VERSION } from './contracts.mjs';
-import { generateWorld } from './world.mjs';
+import { generateWorld, generateStarterPowders } from './world.mjs';
 import { newShop } from './economy.mjs';
 import { PROPERTIES } from './contracts.mjs';
 
@@ -11,7 +11,16 @@ export function migrateSave(raw) {
   if (raw.version > SAVE_VERSION) throw new Error('This save belongs to a newer game. It has been preserved.');
   if (raw.version === 1) {
     const defaults = newShop(raw.world || generateWorld(raw.seed));
-    return { ...defaults, ...raw, version: SAVE_VERSION, soldOrderIds: raw.soldOrderIds || [], debt: raw.debt || 0, settings: { ...defaults.settings, ...raw.settings } };
+    raw = { ...defaults, ...raw, version: 2, soldOrderIds: raw.soldOrderIds || [], debt: raw.debt || 0, settings: { ...defaults.settings, ...raw.settings } };
+  }
+  if (raw.version === 2) {
+    if (!raw.world?.ingredients?.length || !raw.inventory) throw new Error('Missing world ingredients or stock.');
+    const added = generateStarterPowders(raw.world.seed).filter(p => !raw.world.ingredients.some(i => i.id === p.id));
+    // Keep pinned liquids, customer targets and the physical brew intact. Grant
+    // only newly added stock; reloading never refills powders already consumed.
+    const world = { ...raw.world, ingredients: [...raw.world.ingredients, ...added] };
+    const inventory = { ...raw.inventory, ...Object.fromEntries(added.map(i => [i.id, 240])) };
+    raw = { ...raw, version: SAVE_VERSION, world, inventory };
   }
   if (raw.version !== SAVE_VERSION) throw new Error('Unsupported shop save. It has been preserved.');
   return raw;

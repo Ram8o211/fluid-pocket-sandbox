@@ -6,7 +6,7 @@ import { generateOrder, simulateWitness } from '../src/game/orders.mjs';
 import { assessPotion, toleranceSimilarity, priceSale } from '../src/game/evaluation.mjs';
 import { newShop, completeSale, nextCustomer, restock, buyUpgrade, recordDiscovery, guildLoan } from '../src/game/economy.mjs';
 import { encodeSave, decodeSave, saveShop, loadShop, SAVE_KEY } from '../src/game/persistence.mjs';
-import { FIXED_STEP } from '../src/game/contracts.mjs';
+import { FIXED_STEP, SAVE_VERSION } from '../src/game/contracts.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { effectiveLiquidViscosity } from '../src/simulation/FluidSolver.mjs';
 
@@ -19,7 +19,7 @@ test('world seeds reproduce all ingredient properties, names and costs', () => {
   assert.deepEqual(world, generateWorld('test-guild'));
   assert.notDeepEqual(world.ingredients, generateWorld('another-guild').ingredients);
 });
-test('120 generated worlds always contain six safe, diverse starters and compatible mixtures', () => {
+test('120 generated worlds always contain six safe liquids, two powders and compatible mixtures', () => {
   for (let seed = 0; seed < 120; seed++) assert.ok(validateWorld(generateWorld('world-' + seed).ingredients).valid);
 });
 test('pour transfers exact ml and mass, debits stock, and caps capacity', () => {
@@ -180,7 +180,7 @@ test('the Continue snapshot contains the latest particle positions and does not 
 });
 test('save migrations preserve progress, recover a good backup, reject corrupt and future data', () => {
   const { state, brew } = setup(); const text = encodeSave(state, brew), raw = JSON.parse(text); raw.version = 1;
-  assert.equal(decodeSave(JSON.stringify(raw)).version, 2);
+  assert.equal(decodeSave(JSON.stringify(raw)).version, SAVE_VERSION);
   const store = new Map(), storage = { getItem: k => store.get(k) || null, setItem: (k, v) => store.set(k, v) };
   saveShop(storage, state, brew); state.coins = 75; saveShop(storage, state, brew);
   store.set(SAVE_KEY, '{broken'); assert.equal(loadShop(storage).state.coins, 80);
