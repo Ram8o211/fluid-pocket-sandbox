@@ -102,7 +102,7 @@ export class BrewingSession {
   setThermal(heat, cool = 0) {
     this.heat = clamp(Number(heat) || 0, 0, 1); this.cool = this.heat > 0 ? 0 : clamp(Number(cool) || 0, 0, 1);
   }
-  stir(point, velocity, dt = FIXED_STEP, fromPoint = point) {
+  stir(point, velocity, dt = FIXED_STEP, fromPoint = point, intensity = 1) {
     const ps = this.engine.ps, speed = Math.hypot(velocity.x, velocity.y);
     if (speed < .02 || !Number.isFinite(speed)) return 0;
     // Wider spoon catches a meaningful cross-section of both liquids and
@@ -125,7 +125,7 @@ export class BrewingSession {
       // Smooth nonzero peripheral influence allows several grains to move
       // together while keeping strong impulses centered under the spoon.
       const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
-      const amount = falloff * Math.min(.52, Math.max(.015, dt) * 9);
+      const amount = falloff * Math.min(.52, Math.max(.015, dt) * 9) * clamp(intensity, 0, 1);
       ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
       affected++;
     }
@@ -145,7 +145,10 @@ export class BrewingSession {
   }
   assistStir(dt = FIXED_STEP) {
     const angle = this.history.elapsed * 3.5, radius = 1.15;
-    this.stir({ x: Math.cos(angle) * radius, y: -.6 + Math.sin(angle) * .45 }, { x: -Math.sin(angle) * radius * 3.5, y: Math.cos(angle) * .45 * 3.5 }, dt);
+    // Continuous automatic stirring touches more particles with the wider spoon.
+    // Scale down its per-particle impulse to avoid pumping the entire liquid
+    // mass upward, while direct pointer stirring retains full control.
+    this.stir({ x: Math.cos(angle) * radius, y: -.6 + Math.sin(angle) * .45 }, { x: -Math.sin(angle) * radius * 3.5, y: Math.cos(angle) * .45 * 3.5 }, dt, undefined, .16);
   }
   step(dt = FIXED_STEP) {
     const ps = this.engine.ps;
