@@ -204,6 +204,25 @@ test('3D sand remains still when supported on opposite depth-facing sides',()=>{
     'equal supports on opposite sides should hold a balanced 3D grain at rest');
 });
 
+test('3D supports on the same downhill side cannot pin a sand grain',()=>{
+  const b=new BrewingSession(generateWorld('sand-support-cone').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10);
+  ps.add({x:0,y:0,z:0,mass:.25},material,Phase.SOLID);
+  ps.add({x:.04,y:-.09,z:.07,mass:.25},material,Phase.SOLID);
+  ps.add({x:.04,y:-.09,z:-.07,mass:.25},material,Phase.SOLID);
+  const gravity={x:0,y:-4.5,z:0};
+  e.grid.setDimensionMode('3D');e.grid.rebuild(ps,e.env.box);
+  e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
+  assert.ok(ps.vx[0]<-.001,
+    'two oblique contacts on the same downhill side must not hold sand at rest');
+  // A genuine third contact on the opposite side encloses the load.
+  ps.add({x:-.08,y:-.09,z:0,mass:.25},material,Phase.SOLID);
+  ps.vx[0]=ps.vy[0]=ps.vz[0]=0;
+  e.grid.rebuild(ps,e.env.box);
+  e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
+  assert.ok(Math.hypot(ps.vx[0],ps.vz[0])<.00001,
+    'a support triangle surrounding gravity must stabilize the grain');
+});
+
 test('all potion materials use fine pixel footprints at both graphics resolutions',()=>{
   const b=new BrewingSession(generateWorld('fine-pixels').ingredients),ps=b.engine.ps;
   const liquid=b.engine.materials.get(1),powder=b.engine.materials.get(10);
