@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-v10';
+const CACHE = 'alchemist-shop-v11';
 const CORE = [
   './',
   './index.html',
