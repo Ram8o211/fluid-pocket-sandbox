@@ -94,6 +94,13 @@ test('powder contacts have zero restitution, dissipate slip and never attract se
   assert.ok(ps.vx[1]-ps.vx[0]>=-.000001,'no residual approaching velocity');
   assert.ok(ps.vx[1]-ps.vx[0]<.000001,'impact cannot generate separation speed');
   assert.ok(Math.abs(ps.vy[1]-ps.vy[0])<1.4,'friction must dissipate lateral slip');
+  // Moving grains must travel the last few percent of the gap before
+  // colliding; cancelling velocity early makes a suspended, hollow pile.
+  ps.x[0]=0;ps.x[1]=rest*1.04;ps.vx[0]=.6;ps.vx[1]=-.6;
+  ps.vy[0]=ps.vy[1]=0;
+  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest*1.04,FIXED_STEP,true,b.engine.rules);
+  near(ps.x[0],0);near(ps.x[1],rest*1.04);
+  near(ps.vx[0],.6);near(ps.vx[1],-.6);
   // Leaving contact must not create a Hooke-law force, even for wet dough.
   ps.x[0]=0;ps.x[1]=rest*1.35;ps.vx[0]=ps.vx[1]=0;
   ps.vy[0]=ps.vy[1]=0;ps.powderContent[0]=ps.powderContent[1]=.55;
