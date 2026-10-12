@@ -77,8 +77,13 @@ export class SolidSolver{
     const gx=gravity.x/gLen,gy=gravity.y/gLen,gz=planar?0:gravity.z/gLen;
     const powder=ps.powderContent[i],wet=doughStrength(powder),mu=.50+wet*.55;
     const onFloor=this.wallSupports(ps,i,env,gravity,planar);
-    let braced=false,nearestSupport=-1,bestDot=0,contacts=0;
-    const tangents=[];
+    let nearestSupport=-1,bestDot=0,contacts=0;
+    const angles=[];
+    // Resolve the plane orthogonal to gravity into two in-plane axes.
+    // In 2D, the second in-plane coordinate is identically zero.
+    let ax=Math.abs(gz)>.9?1:-gy,ay=Math.abs(gz)>.9?0:gx,az=0;
+    const al=Math.hypot(ax,ay,az);ax/=al;ay/=al;
+    const bx=gy*az-gz*ay,by=gz*ax-gx*az,bz=gx*ay-gy*ax;
     grid.forEachNeighbor(ps,i,.27,j=>{
       if(ps.phase[j]!==Phase.SOLID || ps.solidSubdivision[j]<.42)return;
       const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);
@@ -95,11 +100,7 @@ export class SolidSolver{
       // directions can hold a grain without an artificial avalanche.
       const tx=dx-along*d*gx,ty=dy-along*d*gy,tz=planar?0:dz-along*d*gz;
       const length=Math.hypot(tx,ty,tz);
-      if(length>.012){
-        for(const previous of tangents)
-          if(tx*previous.x+ty*previous.y+tz*previous.z<-.35*length*previous.length)braced=true;
-        tangents.push({x:tx,y:ty,z:tz,length});
-      }
+      if(length>.012)angles.push(Math.atan2(tx*bx+ty*by+tz*bz,tx*ax+ty*ay+tz*az));
       if(along>bestDot){bestDot=along;nearestSupport=j;}
     });
     if(!onFloor&&contacts===0)return;
@@ -115,9 +116,14 @@ export class SolidSolver{
     ps.vy[i]=longitudinal*gy+(ps.vy[i]-longitudinal*gy)*damp;
     if(!planar)ps.vz[i]=longitudinal*gz+(ps.vz[i]-longitudinal*gz)*damp;
 
-    // One off-centre contact cannot hold an arbitrarily steep sand wall.
-    // The tangential component of gravity drives a small surface avalanche.
-    // Two supports on opposite sides provide a stable packed arch.
+    // A grain is braced only when the *full* tangent-plane support cone
+    // encloses the downward load. Merely obtuse contacts can share the same
+    // downhill side in 3D, so the old negative-dot-product test was unsafe.
+    // An angular gap larger than 180 degrees means a free downhill direction.
+    angles.sort((a,b)=>a-b);
+    let maxGap=angles.length>1?angles[0]+Math.PI*2-angles[angles.length-1]:Math.PI*2;
+    for(let k=1;k<angles.length;k++)maxGap=Math.max(maxGap,angles[k]-angles[k-1]);
+    const braced=angles.length>1&&maxGap<=Math.PI+.03;
     if(onFloor||nearestSupport<0||braced)return;
     const dx=ps.x[nearestSupport]-ps.x[i],dy=ps.y[nearestSupport]-ps.y[i],dz=planar?0:ps.z[nearestSupport]-ps.z[i];
     const d=Math.hypot(dx,dy,dz);if(d<1e-7)return;
