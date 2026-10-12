@@ -1,5 +1,46 @@
-const CACHE='fluid-pocket-v9';
-const CORE=['/','/index.html','/styles.css','/base.css','/desktop.css','/fixes.css','/src/app/main.mjs','/manifest.webmanifest','/icons/icon.svg'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',e=>e.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const url=new URL(e.request.url);if(url.origin!==location.origin)return;const freshFirst=e.request.mode==='navigate'||/\.(?:mjs|js|css|html)$/.test(url.pathname);if(freshFirst){e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy)).catch(()=>{});return r;}).catch(()=>caches.match(e.request)));return;}e.respondWith(caches.match(e.request).then(hit=>hit||fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy)).catch(()=>{});return r;})));});
+const CACHE = 'fluid-pocket-v11';
+const CORE = [
+  './',
+  './index.html',
+  './styles.css',
+  './public/base.css',
+  './public/desktop.css',
+  './public/fixes.css',
+  './public/manifest.webmanifest',
+  './public/icons/icon.svg',
+  './src/app/main.mjs',
+  './sw.js',
+  './public/sw.js'
+].map(path => new URL(path, self.registration.scope).href);
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', event => {
+  event.waitUntil(Promise.all([
+    caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('fluid-pocket-') && key !== CACHE).map(key => caches.delete(key)))),
+    self.clients.claim()
+  ]));
+});
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== location.origin || !url.pathname.startsWith(new URL(self.registration.scope).pathname)) return;
+  const networkFirst = event.request.mode === 'navigate' || /\.(?:mjs|js|css|html)$/.test(url.pathname);
+  if (networkFirst) {
+    event.respondWith(fetch(event.request).then(response => {
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(() => {});
+      }
+      return response;
+    }).catch(() => caches.match(event.request)));
+    return;
+  }
+  event.respondWith(caches.match(event.request).then(hit => hit || fetch(event.request).then(response => {
+    if (response.ok) {
+      const copy = response.clone();
+      caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(() => {});
+    }
+    return response;
+  })));
+});
