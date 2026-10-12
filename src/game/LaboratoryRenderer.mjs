@@ -40,7 +40,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
       const frame = Math.floor(this.frame / 5);
       for (let i = 0; i < 9; i++) { const h = 5 + ((i * 11 + frame * 7) % 17) * this.brew.heat; rect(157 + i * 8, 224 - h, 6, h, i % 2 ? '#e78544' : '#b94e38'); rect(159 + i * 8, 223 - h * .55, 2, h * .55 + 2, '#ffd185'); }
     }
-    if (this.brew.cool) { rect(327, 193, 16, 14, '#8cdbe2'); rect(331, 189, 8, 21, '#bbf4ec'); rect(323, 196, 24, 6, '#8cdbe2'); }
+    if (this.brew.cool) { rect(180, 222, 24, 6, '#8cdbe2'); rect(187, 216, 10, 14, '#bbf4ec'); rect(184, 220, 16, 6, '#8cdbe2'); }
     // Capacity ruler is a measurement, not a replacement fluid graphic.
     rect(82, 147, 2, 49, '#b59a78');
     for (let i = 0; i < 5; i++) rect(78, 148 + i * 11, 6, 2, '#d0b387');
@@ -57,13 +57,17 @@ export class LaboratoryRenderer extends PlanarRenderer {
     rect(128, 84, 128, 2, '#e0b675'); rect(184, 74, 16, 9, '#332a32');
     rect(187, 73, 10, 4, '#d7ad68'); rect(99, 98, 186, 2, '#e0b675');
     for (const x of [144, 240]) { rect(x - 7, 89, 14, 9, '#463441'); rect(x - 4, 90, 8, 5, '#a7b9a9'); }
-    if (this.brew.vaporVolume > .01) {
-      // Droplets are visible inside the cutaway, under the cooling lid.
-      for (let i = 0; i < 6; i++) {
-        const x = 113 + i * 30, y = 114 + ((this.frame + i * 11) % 19);
-        rect(x, y, 1, 3, '#a7d9d1');
-      }
+    // Condensation effects follow real local gas -> liquid progress. A hot pot
+    // must not keep drawing a cold-lid drizzle merely because steam is present.
+    const ps = this.sim.ps;
+    ctx.save(); traceCauldron(ctx, { cx: 192, cy: 158, scale: 40 }); ctx.clip();
+    let drops = 0;
+    for (let i = 0; i < ps.count && drops < 6; i++) {
+      if (ps.phase[i] !== Phase.GAS || ps.phaseProgress[i] <= 0 || ps.temperature[i] >= ps.boilingTemperature[i] - ps.phaseHysteresis[i]) continue;
+      const x = 192 + ps.x[i] * 40, y = 158 - ps.y[i] * 40;
+      rect(x, y + ((this.frame + i * 11) % 5), 1, 3, '#a7d9d1'); drops++;
     }
+    ctx.restore();
     if (this.brew.lastPour && this.sim.time < this.brew.lastPour.until) {
       const x = 192 + this.brew.lastPour.x * 40;
       rect(x - 8, 76, 16, 13, '#c1cfc2'); rect(x - 5, 79, 10, 9, this.brew.lastPour.color); rect(x - 3, 90, 6, 14, this.brew.lastPour.color);
@@ -92,3 +96,4 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.globalAlpha = 1;
   }
 }
+

@@ -25,6 +25,19 @@ export function insideCauldron(x, y, padding = 0) {
   return PLANES.every(p => (x - p.x) * p.nx + (y - p.y) * p.ny >= padding - .000002);
 }
 
+// Only the upward-facing lower bowl touches the flame/Frost plate. The upper
+// walls and lid cannot apply the source directly to falling or remote parcels.
+export function cauldronBottomContact(ps, i) {
+  const padding = cauldronParticlePadding(ps, i);
+  let contact = 0;
+  for (const p of PLANES) {
+    if (p.ny < .6) continue;
+    const gap = (ps.x[i] - p.x) * p.nx + (ps.y[i] - p.y) * p.ny - padding;
+    contact = Math.max(contact, Math.max(0, Math.min(1, 1 - gap / .10)));
+  }
+  return contact;
+}
+
 export function confineCauldronParticle(ps, i) {
   const padding = cauldronParticlePadding(ps, i);
   // Repeated projections resolve contact with two planes at tapered corners.
@@ -54,3 +67,4 @@ export function traceCauldron(ctx, transform) {
   });
   ctx.closePath();
 }
+

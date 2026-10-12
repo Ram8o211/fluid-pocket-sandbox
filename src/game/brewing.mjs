@@ -4,9 +4,11 @@ import { clamp } from '../simulation/math.mjs';
 import { measurePotion } from './potion.mjs';
 import { CAPACITY_ML, FIXED_STEP, ROOM_TEMPERATURE } from './contracts.mjs';
 import { confineCauldronParticle, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
+import { CauldronThermal } from './CauldronThermal.mjs';
+import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity'];
+const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress'];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -22,6 +24,11 @@ export class BrewingSession {
     // their small, low-mass parcels against gravity.
     this.engine.rules.electrostaticStrength = 0;
     this.engine.env.liquidConstraintVelocityShare = .15;
+    this.engine.env.ambientThermalExchange = 0;
+    this.engine.rules.condensationCoolingCoefficient = 0;
+    this.engine.rules.thermalDiffusionRate = 1.2;
+    this.thermal = new CauldronThermal();
+    this.engine.reactions.mixtures = new MixtureSolver();
     this.engine.iterations = 1;
     this.engine.boundaryCollider = () => this.confineCauldron();
     this.engine.rules.mixingTemperatureCoefficient = 3.5;
@@ -104,19 +111,10 @@ export class BrewingSession {
       const previousCount = ps.count;
       this.previousPhases.set(ps.phase.subarray(0, previousCount));
       const power = (this.heat * 3.2 - this.cool * 3.8) * (1 + (this.equipment.furnace || 0) * .35);
-      if (power) {
-        let sum = 0; const weights = [];
-        for (let i = 0; i < ps.count; i++) { const proximity = this.heat ? 1 - (ps.y[i] + 1.4) / 3 : (ps.y[i] + 1.6) / 3.2; weights[i] = ps.mass[i] * (.15 + .85 * clamp(proximity, 0, 1)); sum += weights[i]; }
-        let appliedEnergy = 0;
-        for (let i = 0; i < ps.count; i++) {
-          const energy = power * dt * weights[i] / Math.max(.0001, sum), capacity = Math.max(.02, ps.mass[i] * ps.heatCapacity[i]);
-          const before = ps.temperature[i]; ps.temperature[i] = clamp(before + energy / capacity, .01, 1.2);
-          appliedEnergy += (ps.temperature[i] - before) * capacity;
-        }
-        if (appliedEnergy > 0) this.history.heatEnergy += appliedEnergy; else this.history.coldEnergy -= appliedEnergy;
-        this.cost.energy += Math.abs(appliedEnergy) * .025;
-      }
-      this.coolLid(dt);
+      const thermal = this.thermal.step(ps, power, dt);
+      if (thermal.supplied > 0) this.history.heatEnergy += thermal.supplied; else this.history.coldEnergy -= thermal.supplied;
+      this.history.lidCoolingEnergy += thermal.lidCooling;
+      this.cost.energy += Math.abs(thermal.supplied) * .025;
       this.engine.step(dt);
       for (let i = 0; i < previousCount; i++) if (this.previousPhases[i] === Phase.GAS && ps.phase[i] === Phase.LIQUID) this.history.condensed += ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
       let mass = 0, activation = 0;
@@ -129,17 +127,6 @@ export class BrewingSession {
   confineCauldron() {
     const ps = this.engine.ps;
     for (let i = 0; i < ps.count; i++) confineCauldronParticle(ps, i);
-  }
-  coolLid(dt) {
-    const ps = this.engine.ps;
-    for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] !== Phase.GAS || ps.temperature[i] <= ROOM_TEMPERATURE) continue;
-      const proximity = clamp((ps.y[i] - .1) / 1.1, 0, 1);
-      const fraction = 1 - Math.exp(-(.18 + proximity * .8) * (1 + this.cool * 1.5) * dt);
-      const cooling = (ps.temperature[i] - ROOM_TEMPERATURE) * fraction;
-      ps.temperature[i] -= cooling;
-      this.history.lidCoolingEnergy += cooling * ps.mass[i] * ps.heatCapacity[i];
-    }
   }
   inspect() {
     const ps = this.engine.ps;
@@ -163,18 +150,18 @@ export class BrewingSession {
     this.portions = this.portions.map(p => ({ ...p, ml: p.ml * (1 - fraction) })).filter(p => p.ml > .001);
     this.heat = this.cool = 0; this.bottles++;
     const id = `vial-${this.bottles}-${Math.round(this.history.elapsed * 1000)}`;
-    if (ps.count === 0) { this.engine.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 }; }
+    if (ps.count === 0) { this.engine.reset(); this.thermal.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 }; }
     return { ...sample, id, portions: bottledPortions };
   }
   clean() {
     const wasted = { ...this.cost, volume: this.occupiedVolume };
-    this.engine.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 };
+    this.engine.reset(); this.thermal.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 };
     this.portions = []; this.actions = []; this.heat = this.cool = 0;
     return wasted;
   }
   snapshot() {
     const ps = this.engine.ps;
-    return { particleMl: PARTICLE_ML, count: ps.count, particles: Object.fromEntries(SAVE_FIELDS.map(k => [k, Array.from(ps[k].subarray(0, ps.count))])), materials: [...this.engine.materials.values()], history: { ...this.history }, cost: { ...this.cost }, portions: this.portions.map(p => ({ ...p })), bottles: this.bottles, time: this.engine.time, stepIndex: this.engine.stepIndex };
+    return { particleMl: PARTICLE_ML, count: ps.count, particles: Object.fromEntries(SAVE_FIELDS.map(k => [k, Array.from(ps[k].subarray(0, ps.count))])), materials: [...this.engine.materials.values()], thermal: this.thermal.snapshot(), mixtures: this.engine.reactions.mixtures.snapshot(), history: { ...this.history }, cost: { ...this.cost }, portions: this.portions.map(p => ({ ...p })), bottles: this.bottles, time: this.engine.time, stepIndex: this.engine.stepIndex };
   }
   restore(saved) {
     if (!saved) return;
@@ -184,6 +171,7 @@ export class BrewingSession {
     const ps = this.engine.ps;
     for (const key of SAVE_FIELDS) {
       const values = saved.particles[key];
+      if (values === undefined && (key === 'mixtureGroup' || key === 'mixtureProgress')) { ps[key].fill(0); continue; }
       if (!Array.isArray(values) || values.length !== saved.count || values.some(v => !Number.isFinite(v))) throw new Error('Invalid saved particle data.');
       ps[key].set(values);
     }
@@ -196,6 +184,8 @@ export class BrewingSession {
     this.portions = (saved.portions || []).map(p => ({ ...p })); this.bottles = saved.bottles || 0;
     this.engine.time = saved.time || 0; this.engine.stepIndex = saved.stepIndex || 0;
     this.engine.sanitize(); this.confineCauldron();
+    this.thermal.restore(saved.thermal, ps);
+    this.engine.reactions.mixtures.restore(saved.mixtures, ps);
     // Reconstruct rigid body membership if a save contained frozen liquid.
     this.engine.grid.rebuild(ps, this.engine.env.box);
     for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.SOLID) this.engine.solid.initializeParticle(ps, i, true, this.engine.grid);
@@ -218,3 +208,4 @@ export class BrewingSession {
     }
   }
 }
+

@@ -1,7 +1,7 @@
 import { Phase } from './Phase.mjs';
 import { clamp, hexToRgb } from './math.mjs';
 
-const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId'];
+const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId'];
 
 export class ParticleSystem {
   constructor(capacity=1800){
@@ -18,12 +18,14 @@ export class ParticleSystem {
     this.solidLocalX=new Float32Array(capacity);this.solidLocalY=new Float32Array(capacity);this.solidLocalZ=new Float32Array(capacity);
     this.savedDepth=new Float32Array(capacity);this.savedVz=new Float32Array(capacity);this.hasSavedDepth=new Uint8Array(capacity);
     this.materialId=new Int32Array(capacity);this.phase=new Int32Array(capacity);this.cell=new Int32Array(capacity);this.solidBodyId=new Int32Array(capacity);
+    this.mixtureGroup=new Int32Array(capacity);this.mixtureProgress=new Float32Array(capacity);
   }
   add(p,material,phase=Number(Phase.LIQUID)){
     if(this.count>=this.capacity)return -1; const i=this.count++;
     this.x[i]=this.px[i]=p.x; this.y[i]=this.py[i]=p.y; this.z[i]=this.pz[i]=p.z;
     this.vx[i]=p.vx||0; this.vy[i]=p.vy||0; this.vz[i]=p.vz||0; this.mass[i]=p.mass||1;
     this.materialId[i]=material.id; this.temperature[i]=p.temperature??.33; this.phase[i]=phase; this.phaseProgress[i]=0;
+    this.mixtureGroup[i]=0;this.mixtureProgress[i]=0;
     this.baseDensity[i]=material.density; this.density[i]=this.effectiveDensity(material,phase); const [r,g,b]=hexToRgb(material.color); this.r[i]=r;this.g[i]=g;this.b[i]=b;this.opacity[i]=material.opacity;
     this.viscosity[i]=material.viscosity;this.cohesion[i]=material.cohesion;this.miscibility[i]=material.miscibility;this.particleRadius[i]=material.particleRadius;this.incompressible[i]=material.incompressible?1:0;this.heatCapacity[i]=material.heatCapacity;this.thermalConductivity[i]=material.thermalConductivity;
     this.meltingTemperature[i]=material.meltingTemperature;this.boilingTemperature[i]=material.boilingTemperature;this.phaseHysteresis[i]=material.phaseTransitionHysteresis;this.volatility[i]=material.volatility;this.reactionPotential[i]=material.reactionPotential;this.reactionHeat[i]=material.reactionHeat;this.compressibility[i]=material.compressibility;
@@ -34,6 +36,7 @@ export class ParticleSystem {
   assignMaterial(i,material,phase=this.phase[i],temperature=this.temperature[i]){
     if(i<0||i>=this.count)return false;
     this.materialId[i]=material.id;this.temperature[i]=temperature;this.phase[i]=phase;this.phaseProgress[i]=0;this.combustionProgress[i]=0;
+    this.mixtureGroup[i]=0;this.mixtureProgress[i]=0;
     this.baseDensity[i]=material.density;this.density[i]=this.effectiveDensity(material,phase);const [r,g,b]=hexToRgb(material.color);this.r[i]=r;this.g[i]=g;this.b[i]=b;this.opacity[i]=material.opacity;
     this.viscosity[i]=material.viscosity;this.cohesion[i]=material.cohesion;this.miscibility[i]=material.miscibility;this.particleRadius[i]=material.particleRadius;this.incompressible[i]=material.incompressible?1:0;this.heatCapacity[i]=material.heatCapacity;this.thermalConductivity[i]=material.thermalConductivity;
     this.meltingTemperature[i]=material.meltingTemperature;this.boilingTemperature[i]=material.boilingTemperature;this.phaseHysteresis[i]=material.phaseTransitionHysteresis;this.volatility[i]=material.volatility;this.reactionPotential[i]=material.reactionPotential;this.reactionHeat[i]=material.reactionHeat;this.compressibility[i]=material.compressibility;
@@ -59,3 +62,4 @@ export class ParticleSystem {
   totalMass(){let m=0;for(let i=0;i<this.count;i++)m+=this.mass[i];return m;}
   phaseCounts(){const c=[0,0,0];for(let i=0;i<this.count;i++)c[this.phase[i]]++;return c;}
 }
+
