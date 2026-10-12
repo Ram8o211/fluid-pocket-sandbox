@@ -35,10 +35,12 @@ export class SpatialGrid {
       }
     }
   }
-  forEachPair(ps,radius,callback,stride=1,phase=0){
+  forEachPair(ps,radius,callback,stride=1,phase=0,forcePair=null){
     const nx=this.nx,ny=this.ny,nz=this.nz,head=this.head,next=this.next;
     const reach=Math.max(1,Math.ceil(radius/this.cellSize)),zReach=this.dimensionMode==='2D'?0:reach,s=Math.max(1,stride|0),p=((phase%s)+s)%s;let ordinal=0;
-    const emit=(i,j)=>{const take=s===1||(ordinal%s)===p;ordinal++;if(take)callback(i,j);};
+    // A swept granular collision cannot be deferred to the next stride: by
+    // then previous positions are gone and the two grains may have crossed.
+    const emit=(i,j)=>{const take=s===1||(ordinal%s)===p||forcePair?.(i,j);ordinal++;if(take)callback(i,j);};
     for(let cz=0;cz<nz;cz++)for(let cy=0;cy<ny;cy++)for(let cx=0;cx<nx;cx++){
       const c=cx+nx*(cy+ny*cz),first=head[c];if(first===-1)continue;
       for(let i=first;i!==-1;i=next[i])for(let j=next[i];j!==-1;j=next[j])emit(i,j);
