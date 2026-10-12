@@ -53,3 +53,27 @@ jobs:
           curl --fail --silent --show-error --location -o /tmp/live-js "${SITE_URL}src/app/main.mjs?probe=${GITHUB_SHA}"
           grep -F 'async function boot()' /tmp/live-js >/dev/null
           echo "Live Pages HTML, CSS content and application JavaScript all accessible."
+
+      - name: Headless browser runtime check
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -eu
+          if ! command -v google-chrome >/dev/null 2>&1; then
+            echo "Chrome unavailable on runner; skipping browser-level assertion"
+            exit 0
+          fi
+          timeout 45s google-chrome --headless=new --no-sandbox --disable-dev-shm-usage --enable-webgl --enable-unsafe-swiftshader --use-angle=swiftshader --virtual-time-budget=4000 --dump-dom "${SITE_URL}?probe=${GITHUB_SHA}" > /tmp/rendered.html 2>/tmp/chrome-errors.log || {
+            tail -50 /tmp/chrome-errors.log
+            exit 1
+          }
+          if grep -F 'Startup failed' /tmp/rendered.html; then
+            tail -50 /tmp/chrome-errors.log
+            exit 1
+          fi
+          if ! grep -F 'Azure Heavy' /tmp/rendered.html >/dev/null; then
+            echo "Simulation did not populate its material selector."
+            tail -60 /tmp/chrome-errors.log
+            exit 1
+          fi
+          echo "Browser runtime initialized and materials loaded."
