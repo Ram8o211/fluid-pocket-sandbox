@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BrewingSession } from '../src/game/brewing.mjs';
-import { generateWorld } from '../src/game/world.mjs';
+import { generateLiquidWorld as generateWorld } from './helpers/liquid-world.mjs';
 import { FIXED_STEP } from '../src/game/contracts.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { insideCauldron, cauldronParticlePadding } from '../src/game/cauldron.mjs';

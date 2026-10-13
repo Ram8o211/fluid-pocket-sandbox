@@ -5,11 +5,12 @@ particle engine. The game is entirely **2D**, mobile first, and statically hoste
 
 **Play:** https://ram8o211.github.io/fluid-pocket-sandbox/
 
-Open a seeded world, welcome a customer, pour measured reagents, stir, heat or
-cool the brew, inspect it, bottle it and sell it. Quality and payment come from
-the resulting particle state. Use profits for supplies, instruments, larger
-cauldrons and rare reagents. Discoveries belong in your recipe book. Progress,
-orders, stock and the active cauldron save locally; Settings includes save export.
+Open a seeded world, gather plants and minerals, grind ingredients, and stir
+them into plain water. Heat or cool the brew, test a small dose in the experiment
+room, then inspect, bottle and sell it. Physical, magical and chemical effects
+come from the resulting particles. Use profits for supplies, instruments,
+larger cauldrons and rare ingredients. Progress, resource patches, experiment
+records, recipes and the active cauldron save locally.
 
 The fitted lid retains steam and ingredients. Turn off Flame or use Frost, then
 wait for steam to condense before bottling. Flame and Frost enter through the
@@ -26,16 +27,26 @@ incompatible substances stay separate.
 Four fine particles represent each ml, and the visible walls and lid share their
 collision geometry, including clearance for each particle's full drawn radius.
 
-The first commission has an interactive tutorial. Hold Pour for repeated doses,
-drag bottles onto the cauldron, draw circles with the spoon or hold Stir. Tap
-Flame/Frost to cycle power; a copper furnace unlocks precise controls. Six starter
-liquids, two dry powder jars and later guild reagents change with the world seed.
-Powders are ready to add from the inventory; existing shops receive them on load.
-Density layers remain in contact. Fine sand grains settle into compact, independent
-piles without bounce or continued levelling. Stir powder with compatible liquid
-to knead thick liquid dough; extra solvent gradually thins it. All materials use
-one-pixel texels at up to 768×464 (Crisp, following screen density) or
-384×232 (battery saver).
+The first commission teaches metered pouring and stirring. Whole plants and
+stones enter as solids; **Grind & add** turns them into powder. A small amount
+of compatible ground ingredient slowly dissolves in plenty of water. Lesser
+dilution makes paste or dough. Loose mica dust is ready to add. Drag the spoon
+or hold Stir, and tap Flame/Frost to cycle power. Local particle glows preview
+strength, love, death, transformation, fire and frost. Acidity and poison travel
+through the same mixing and sampling mechanism.
+
+The nature room contains a spring, meadow, woodland and mineral banks. Gathering
+uses real stock: emptied patches recover with elapsed time, including while the
+game is closed. The experiment room has animals, a seedling and limestone;
+each test consumes a measured 5 ml dose and records the observed changes.
+**Ingredient sandbox** offers all ingredients and instruments with infinite
+supplies, keeping its cauldron and experiment history separate from the shop.
+Older saves preserve their pinned materials and customer targets.
+
+Fine grains settle into compact, independent piles. Recent spoon work kneads
+compatible powder and water into thick liquid dough; extra stirred solvent thins
+it. Matter uses one-pixel texels at up to 768×464 in Crisp mode, following screen
+density, or 384×232 in battery saver.
 
 **Original sandbox:** https://ram8o211.github.io/fluid-pocket-sandbox/sandbox.html?mode=2D
 
@@ -57,11 +68,12 @@ npm run test:browser
 npm run benchmark:game
 ```
 
-`test:browser` plays two orders through visible controls, checks physics actions,
-a recipe and equipment purchase, restores an active cauldron, checks portrait and
-desktop layouts and opens the original sandbox. It writes QA screenshots to the
-ignored `test-results/` directory. Set `SITE_URL` to run the same acceptance flow
-on a deployed site; `BROWSER_PATH` can select an already-installed Chromium.
+`test:browser` plays two orders through visible controls, grinds raw ingredients,
+checks thermal physics and save conservation, tests subjects, gathers and
+depletes a resource patch, and verifies the separate infinite ingredient sandbox.
+It also checks portrait/desktop layouts and opens the original sandbox. QA
+screenshots go to the ignored `test-results/` directory. Set `SITE_URL` to run
+against a deployed site; `BROWSER_PATH` selects an installed Chromium.
 TypeScript and Playwright are development-only dependencies; the game has no
 runtime dependency downloads or server requirements.
 

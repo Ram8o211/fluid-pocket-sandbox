@@ -5,3 +5,44 @@
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}.sheet::backdrop{backdrop-filter:none}}
 
 .brew-tools{grid-template-columns:repeat(5,minmax(0,1fr))}.brew-tools .tool-button{min-width:0;padding-left:3px;padding-right:3px}
+
+.room-navigation{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 12px}
+.room-navigation button{display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;background:#39473d;border-color:#647c56;box-shadow:0 3px #222d27}
+.room-navigation .pixel-icon{width:19px;height:19px}
+.sandbox-notice{border:1px solid #8f78aa;background:#43384f;color:#dfcbee;font-size:10px;line-height:1.6;padding:9px;margin:4px 0 10px}
+.grind-button{width:100%;font-size:11px;margin:1px 0 9px;background:#475043;border-color:#90a875;color:#e1e8bb}
+.room-intro{margin-bottom:14px!important}
+.natural-scene{position:relative;border:2px solid #728467;background:#263b34;overflow:hidden}
+.natural-scene>img{display:block;width:100%;height:auto;min-height:140px;object-fit:cover}
+.gather-hotspot{position:absolute;transform:translate(-50%,-50%);padding:3px;min-width:32px;min-height:40px;background:#202d28b8;border:1px solid #c6d294;box-shadow:0 2px #19241d}
+.gather-hotspot:active{transform:translate(-50%,-45%)}
+.gather-hotspot img{width:24px;height:32px;display:block;pointer-events:none}
+.resource-card{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:13px 0;border-bottom:1px solid #58483c}
+.resource-card>img{width:30px;height:40px}
+.resource-card strong{color:#cde0b3;font-size:12px}
+.resource-card p{font-size:10px;margin-top:4px;line-height:1.4}
+.resource-status{color:#bdc9a1!important;font-size:9px!important}
+.resource-actions{display:flex;flex-direction:column;gap:6px}
+.resource-actions button{font-size:10px;padding:7px;min-width:72px}
+.resource-meter{height:4px;margin-top:6px;background:#221e27}
+.resource-meter span{display:block;height:100%;background:#93bb84;transition:width .25s}
+.effects-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.effect-reading{display:grid;grid-template-columns:1fr auto;gap:5px;padding:8px;border:1px solid #665446;background:#2d2633;font-size:10px}
+.effect-reading strong{color:var(--effect-color)}
+.effect-meter{height:3px;grid-column:1/-1;background:#1d1923}
+.effect-meter span{display:block;height:100%;background:var(--effect-color)}
+.experiment-supply{padding:10px;border:1px dashed #877253;background:#3e3337;color:#e8d0a3;font-size:10px;line-height:1.5;margin-bottom:14px}
+.subjects-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.subject-card{text-align:center;background:#3c323a;border:2px solid #735747;padding:10px;min-width:0}
+.subject-card>img{width:96px;height:84px;max-width:100%;object-fit:contain}
+.subject-card h3{font-size:13px;margin:8px 0;color:#edcc97}
+.subject-card p{font-size:10px;line-height:1.45}
+.subject-card .subject-stats{font-size:9px;color:#b8d2ad;margin:8px 0}
+.subject-card button{width:100%;font-size:10px;margin-top:7px;background:#56725d;border-color:#839971;padding:8px 3px}
+.subject-card .reset-subject{background:transparent;border-color:#735747;color:#bca88f;box-shadow:none;font-size:9px}
+.experiment-report{border:2px solid #9e895e;padding:13px;margin:16px 0 0;background:#2e3430}
+.experiment-report h3{margin:9px 0;color:#d9d7a7}
+.experiment-report ul{margin:7px 0 12px;padding-left:16px;font-size:11px;line-height:1.7;color:#d5dfb9}
+.observed-change{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #536044;font-size:10px;color:#dbe1bd}
+.observed-change strong{color:#cae2aa}
+@media(max-width:360px){.dose-selector{gap:2px}.dose-selector button{min-width:25px;padding:4px}.ingredient-title{gap:4px}.ingredient-title strong{max-width:135px}.room-navigation button{font-size:10px;padding:8px 4px}.resource-card{gap:6px;grid-template-columns:25px minmax(0,1fr) auto}.resource-card>img{width:24px;height:32px}.subjects-grid{gap:6px}.subject-card{padding:8px 5px}}

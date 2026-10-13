@@ -1,5 +1,11 @@
 import { clamp, hexToRgb, rgbToHex } from '../simulation/math.mjs';
 
+// These concentrations use the same material, parcel and mixture paths as
+// density or viscosity. Zero is inert, including chemically neutral water.
+export const MAGIC_PROPERTIES = Object.freeze(['strength', 'love', 'death', 'transformation', 'fire', 'freeze']);
+export const CHEMICAL_PROPERTIES = Object.freeze(['acidity', 'poison']);
+export const EFFECT_PROPERTIES = Object.freeze([...MAGIC_PROPERTIES, ...CHEMICAL_PROPERTIES]);
+
 export const MATERIAL_RANGES = Object.freeze({
   density: [0.35, 1.65], viscosity: [0.02, 1], cohesion: [0, 1], miscibility: [0, 1],
   particleRadius: [0.065, 0.20],
@@ -8,13 +14,15 @@ export const MATERIAL_RANGES = Object.freeze({
   phaseTransitionHysteresis: [0.005, 0.08], volatility: [0, 1], reactionPotential: [-1, 1],
   reactionHeat: [-1, 1], compressibility: [0.1, 1], opacity: [0.08, 1],
   crystallinity: [0, 1], solidSubdivision: [0, 1], electricalConductivity: [0, 1], electricPotential: [-1, 1],
-  combustionTemperature: [0, 1.4]
+  combustionTemperature: [0, 1.4],
+  ...Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, [0, 1]]))
 });
 
 export function sanitizeMaterial(input) {
   const m = {...input};
   if (!Number.isFinite(m.combustionTemperature)) m.combustionTemperature = 1.15;
   if (!Number.isFinite(m.particleRadius)) m.particleRadius = 0.13;
+  for (const key of EFFECT_PROPERTIES) if (!Number.isFinite(m[key])) m[key] = 0;
   const incompressibleValue = m.incompressible;
   m.incompressible = incompressibleValue === true || (Number.isFinite(Number(incompressibleValue)) && Number(incompressibleValue) >= 0.5);
   for (const [key, range] of Object.entries(MATERIAL_RANGES)) {
@@ -37,7 +45,7 @@ export function materialVector(m) {
     m.heatCapacity, m.thermalConductivity, m.meltingTemperature, m.boilingTemperature,
     m.volatility, (m.reactionPotential+1)/2, (m.reactionHeat+1)/2,
     m.crystallinity, m.solidSubdivision, m.electricalConductivity, (m.electricPotential+1)/2, m.combustionTemperature/1.4,
-    m.opacity, r,g,b
+    m.opacity, r,g,b, ...EFFECT_PROPERTIES.map(key => m[key] || 0)
   ];
 }
 
@@ -58,6 +66,7 @@ export function weightedMaterialMean(a, b, massA, massB, id) {
     reactionPotential: mean('reactionPotential'), reactionHeat: mean('reactionHeat'),
     compressibility: mean('compressibility'), crystallinity: mean('crystallinity'),
     solidSubdivision: mean('solidSubdivision'), electricalConductivity: mean('electricalConductivity'),
-    electricPotential: mean('electricPotential'), combustionTemperature: mean('combustionTemperature')
+    electricPotential: mean('electricPotential'), combustionTemperature: mean('combustionTemperature'),
+    ...Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, (a[key] || 0) * wA + (b[key] || 0) * wB]))
   });
 }

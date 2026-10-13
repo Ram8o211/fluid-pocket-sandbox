@@ -6,11 +6,12 @@ import { BrewingSession } from '../src/game/brewing.mjs';
 
 test('stock trades give bankrupt players cash but cannot create a refill profit loop', () => {
   const state = newShop(generateWorld('recovery')); const initialCoins = state.coins;
-  const purchase = restock(state, 1); const trade = tradeStock(state, 1);
+  const purchase = restock(state, 2); const trade = tradeStock(state, 2);
   assert.ok(trade.payment < purchase.cost); assert.ok(state.coins < initialCoins);
-  state.coins = 0; const previous = state.inventory[1]; tradeStock(state, 1);
-  assert.ok(state.coins > 0); assert.equal(state.inventory[1], previous - 60);
-  assert.throws(() => tradeStock(state, 1, -40));
+  state.coins = 0; const previous = state.inventory[2]; tradeStock(state, 2);
+  assert.ok(state.coins > 0); assert.equal(state.inventory[2], previous - 60);
+  assert.throws(() => tradeStock(state, 2, -40));
+  assert.throws(() => tradeStock(state, 1), /water|trade/i);
 });
 test('discarding a rejected vial enables another attempt without refund or duplicate stock', () => {
   const state = newShop(generateWorld('recovery')), brew = new BrewingSession(state.world.ingredients);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateWorld } from '../src/game/world.mjs';
+import { generateLiquidWorld as generateWorld } from './helpers/liquid-world.mjs';
 import { BrewingSession } from '../src/game/brewing.mjs';
 import { CAULDRON_INTERIOR, PARTICLE_ML, insideCauldron, cauldronParticlePadding } from '../src/game/cauldron.mjs';
 import { effectiveParticleRadius } from '../src/simulation/FluidSolver.mjs';

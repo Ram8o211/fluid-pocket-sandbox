@@ -9,14 +9,17 @@ shop entry point, and no backend or production framework dependency is needed.
 | Layer | Owner | Responsibility |
 |---|---|---|
 | Physics | existing `src/simulation` and `src/reactions` | Particle state, momentum, fluid contact, thermal conduction, phases, electrical behavior, reactions and combustion |
-| World | `src/game/world.mjs` | Seed hashing, original MaterialGenerator reuse, validated starter diversity, names and rare unlocks |
+| World | `src/game/world.mjs` | Seeded raw plants/minerals, plain water, validated starter diversity and rare unlocks |
+| Foraging | `src/game/gathering.mjs` | Resource patches, finite gathering, timestamp-based replenishment and guild access |
+| Effects | `src/game/effects.mjs` | Shared magical/chemical field metadata and deterministic subject responses |
+| Experiments | `src/game/experiments.mjs` | Conserved doses, subject state, bounded immutable reports and reset |
 | Brew adapter | `src/game/brewing.mjs` | Cauldron walls, metered stock transfer, spoon impulses, thermal energy, sampling, exact liquid drain and full snapshots |
 | Vessel geometry | `src/game/cauldron.mjs` | Shared collision planes and rendered cutaway, radius clearance, fine particle quantity and pool limits |
 | Potion | `src/game/potion.mjs` | Mass-weighted MaterialSampler reuse and physical/derived measurement |
 | Customers | `src/game/orders.mjs` | Seeded personalities and attainable targets from bounded actual engine brews |
 | Assessment | `src/game/evaluation.mjs` | Pure weighted tolerance-aware scoring, hard constraints, quantity and pricing |
 | Shop | `src/game/economy.mjs` | Stock, coins, costs, single-use sales, reputation, purchases, unlocks and discoveries |
-| Persistence | `src/game/persistence.mjs` | Version 3 schema, v1/v2 migration, validation, backup and future-save protection |
+| Persistence | `src/game/persistence.mjs` | Version 4 schema, legacy migration, resource/experiment validation and independent sandbox saves |
 | Art | `src/game/art.mjs`, `LaboratoryRenderer.mjs` | Original pixel sprites, seeded portraits, workshop and existing planar rendering contract |
 | Interaction | `src/game/main.mjs` | State transitions, touch/keyboard controls, tutorial, panels, sound and autosave |
 
@@ -33,6 +36,11 @@ guild labels temperature as °A. Each initially emitted particle represents .25
 ml: its mass equals the ingredient's density times .25. Stock is debited only for particles
 successfully emitted. Inventory, remaining capacity and allocated particle slots
 bound a pour. Spatial and phase-dependent solvers continue to control the fluid.
+Raw quantities share these normalized capacity units and appear as measures in
+the interface. Water is the initial solvent; plants, roots, mushrooms and stones
+spawn below their melting threshold as coherent solids. Grinding emits the same
+material as granular powder, preserving every physical and effect field. The
+local pestle can also crush already-added whole material.
 
 Flame and frost supply a finite energy rate to the lower copper bowl. Only
 particles touching its upward-facing lower surfaces exchange that energy.
@@ -105,6 +113,16 @@ mixing trials and requires a full resulting vial.
 
 ## Derived properties and evaluation
 
+Strength, love, death, transformation, fire, freeze, acidity and poison are
+bounded intrinsic material fields stored in the same particle typed arrays as
+physical properties. The material sanitizer, generator, sampling, conservative
+contact transport, emergent products and save snapshots preserve them.
+There is no separate ingredient-to-potion recipe lookup: an incompatible or
+undissolved ingredient can keep its effects outside the drained liquid. Potion
+effects are weighted by the actual selected particle mass and diluted by actual
+solvent. The same measured fields drive orders, inspection, glows and experiment
+responses. Legacy materials lacking these fields start at zero.
+
 Colour is the mass-weighted actual particle colour. Density is drained mass
 divided by drained volume. Texture uses the same temperature-dependent viscosity
 as the fluid solver. Volatility reads actual sampled particle properties.
@@ -114,12 +132,15 @@ potential, electrical conductivity and crystallinity, bounded exposure to actual
 heat, and homogeneity. Fresh additions dilute activation by mass; emptying the
 cauldron clears it. Neither potency nor stability has an independent game slider.
 
-Customer generation performs a bounded three-second real-engine trial using
+Customer generation performs a bounded real-engine trial using
 available ingredients and equipment. Targets are read from its bottle. A safe
 ambient trial is used if a prospective brew freezes or still contains steam. Different
 order indices and world seeds generate different requests; early requests have
 two requirements and later ones gain thermal, stability and magical priorities.
 The witness is feasibility evidence, not a recipe-matching scoring system.
+Raw witnesses grind a small ingredient dose into excess water and stir through
+the actual extraction solver. A plain-water fallback keeps commissions feasible
+when a prospective raw material cannot produce the required liquid volume.
 
 Each property's error is compared with its tolerance. Inside tolerance, the
 similarity falls gently from 1 to .9; beyond it, a continuous Gaussian tail
@@ -141,6 +162,26 @@ sealed and cannot be modified to influence its assessment. Recipes store actual
 portions and measurements; recalling one only pours ingredients through the
 adapter, leaving heating and stirring to the player.
 
+The nature room stores finite resource patches with capacity, remaining stock,
+update timestamp and replenishment interval. Stock resolves lazily from elapsed
+time when a patch is displayed or gathered; the frame loop and physics never
+update an outdoor simulation. Full depletion temporarily blocks gathering, and
+partial stock returns gradually. Spring water is unlimited. Guild licences gate
+rare patches along with their ingredients.
+
+Experiments use rabbit, beetle, seedling and limestone subjects. A test transfers
+a representative 5 ml dose from the cauldron or a sealed vial before applying
+the common measured fields to subject stats. The remaining vial keeps its ID
+and scales volume, mass, ingredient expenses and composition, so testing cannot
+duplicate stock or sales. Reports include independent sample snapshots and
+before/after stats; the history retains at most 80 reports. Reset restores a
+subject while preserving observations.
+
+The ingredient sandbox provides all guild ingredients and equipment. Infinite
+pours bypass stock consumption while vessel capacity and physical simulation
+still apply. Its state uses `alchemists-shop-sandbox-save`, independently of the
+shop save, with no commission progression or sale income.
+
 Autosave runs after important actions, every eight seconds while brewing, and on
 visibility/page exit. Saves pin generated materials rather than relying on future
 generator changes. They include active order, stock, progression, discoveries,
@@ -150,6 +191,10 @@ reloads. Legacy one-ml particles are subdivided once without changing sampled ma
 colour, temperature, stock, costs or progression. Thermal controls restart off. A corrupt
 primary save can recover a validated backup; future-version saves are preserved.
 Export/import is available in Settings. The separate sandbox save key is intact.
+Version 4 adds effect fields, gathering state, experiment subjects and mode.
+Migration preserves pinned legacy materials, recipes, order targets and particle
+snapshots instead of regenerating them as raw ingredients. Unknown future saves
+remain protected.
 
 ## Rendering, performance and static hosting
 
@@ -175,6 +220,10 @@ fast path reduce CPU work. The renderer uses
 Rendering quality never changes stock quantities or assessment. Native Android
 hardware measurements are still needed; CPU/browser emulation is not a device
 performance guarantee.
+Magical particle glows anticipate the sampled local fields before bottling.
+Rendering bounds their count and honors effects quality; they do not allocate
+another physics simulation. Resource replenishment and experimental responses
+run on demand, and effects travel in existing local mixing passes.
 
 All entries and assets use project-relative paths. `build` copies both modes into
 `dist` with the same structure as source hosting. The service worker upgrades the
@@ -197,7 +246,13 @@ Frozen coherent bodies use exact relative offsets and collide with the bowl as a
 
 Density sorting acts only on inverted contacts: an already ordered heavy/light interface receives no separating impulse. Its range fades at the local fluid-neighbour radius. Granular support and wall friction use mass-scaled contact radii instead of a fixed support distance, so fine grains cannot rest above an air gap. The laboratory draws full pixel footprints with colour flecks for grain texture at both resolutions.
 
-Worlds start with six liquids and two dry powder jars (IDs 10–11); guild reagent IDs 7–9 keep their unlocks. Powders share the existing affinity, dough, dissolution, stirring, heating and inventory rules. Their measured bulk quantities use the same ml capacity units. The rack labels powders and uses an Add action. Save version 3 appends missing powders and 240 ml stock to v1/v2 shops once, preserving pinned ingredients, order targets and particle snapshots. Generated customer witnesses continue to use liquid recipes until powder-and-solvent witnesses are supported.
+New worlds start with plain water (ID 1), raw starter plants/minerals (IDs 2–6
+and 10), and naturally loose mica dust (ID 11). Guild ingredients 7–9 keep their
+unlocks. Water starts at 240 ml; raw ingredients start at 60 measures. Powders
+share the existing affinity, dough, dissolution, stirring, heating and inventory
+rules. The rack distinguishes forms and offers whole addition or grinding.
+Version 2 legacy shops receive missing starter minerals and stock once, preserving
+pinned ingredients, order targets and particle snapshots.
 
 Powder content is a conserved local dry-material mass fraction. Compatible
 condensed contacts exchange it only with recent local spoon work, independently

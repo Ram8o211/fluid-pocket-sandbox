@@ -1,5 +1,5 @@
 import { generateMaterial, mulberry32 } from '../materials/MaterialGenerator.mjs';
-import { sanitizeMaterial } from '../materials/MaterialDefinition.mjs';
+import { EFFECT_PROPERTIES, sanitizeMaterial } from '../materials/MaterialDefinition.mjs';
 import { hexToRgb, rgbToHex } from '../simulation/math.mjs';
 
 export function seedNumber(seed) {
@@ -9,81 +9,118 @@ export function seedNumber(seed) {
 }
 
 const PREFIXES = ['Moon', 'Ember', 'Witch', 'Frost', 'Star', 'Dusk', 'Moss', 'Sun', 'Dragon', 'Silver', 'Dream', 'Thorn'];
-const SUFFIXES = ['water', ' Sap', "'s Tears", 'root Extract', ' Nectar', ' Dew', ' Essence', ' Resin', ' Tincture'];
-const PALETTE = ['#67c9dd', '#e4785c', '#be78de', '#8dce99', '#e2c560', '#6995df', '#e58cba', '#a7dfcf', '#e1b18b'];
+const NEUTRAL_EFFECTS = Object.freeze(Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, 0])));
 
-/** Appended IDs preserve the six original liquids and guild unlock IDs 7–9. */
-export function generateStarterPowders(seed) {
-  const root = seedNumber(seed);
-  return [' Chalk', ' Dust'].map((suffix, i) => {
-    const id = 10 + i, materialSeed = seedNumber(`${root}:powder:${i}`), local = mulberry32(materialSeed);
-    const prefix = PREFIXES[Math.floor(local() * PREFIXES.length)];
-    const material = sanitizeMaterial({
-      ...generateMaterial(materialSeed, id), name: prefix + suffix,
-      color: i ? '#cbaedc' : '#dfcb91', density: 1.1 + i * .25 + local() * .05,
-      viscosity: .55 + i * .15, cohesion: .12, miscibility: i ? .79 : .42,
-      meltingTemperature: .55 + local() * .05, boilingTemperature: .95,
-      phaseTransitionHysteresis: .02, solidSubdivision: 1, crystallinity: .12,
-      volatility: .12, reactionPotential: 0, reactionHeat: 0, electricPotential: 0,
-      combustionTemperature: 1.2, particleRadius: .105, incompressible: true, opacity: 1
-    });
-    return { id, name: material.name, material, price: .09 + i * .015, starter: true, form: 'powder',
-      lore: i ? 'A dry mineral dust. Stir with wild nectar to knead it; other extracts remain separate.' : 'A fine apothecary powder. Stir with gentle extract for thick dough; more solvent gradually thins it.' };
+// IDs are permanent: the first six starter ingredients, guild unlocks 7–9,
+// and the two later starter minerals keep their inventory and recipe identity.
+const INGREDIENTS = [
+  { id: 1, name: 'Plain Water', form: 'liquid', shape: 'water', icon: '💧', color: '#a8dfe8', density: 1, viscosity: .06, volatility: .08, miscibility: .42, price: .018,
+    lore: 'Fresh spring water. A neutral solvent: crush a small amount of a compatible ingredient, then stir it into plenty of water.', effects: {} },
+  { id: 2, name: 'Ironroot', form: 'plant', shape: 'sprig', icon: '🌿', color: '#8ba96d', density: .74, viscosity: .32, volatility: .18, miscibility: .41, price: .062,
+    lore: 'A sturdy woodland herb carrying strength. Crush its leaves before extracting their character with water.', effects: { strength: .86, acidity: .12 } },
+  { id: 3, name: 'Heartpetal', form: 'plant', shape: 'petal', icon: '🌸', color: '#e794b4', density: .58, viscosity: .64, volatility: .43, miscibility: .435, price: .068,
+    lore: 'Soft meadow petals carrying warmth and affection. Ground petals slowly tint a well-stirred water infusion.', effects: { love: .9, transformation: .1, acidity: .18 } },
+  { id: 4, name: 'Ember Flint', form: 'stone', shape: 'stone', icon: '🪨', color: '#db9467', density: 1.59, viscosity: .9, volatility: .63, miscibility: .4, price: .077,
+    lore: 'A warm mineral from the rocky bank. The pestle releases its fire; a little powder goes a long way.', effects: { fire: .9, strength: .16, acidity: .62 } },
+  { id: 5, name: 'Frostcap', form: 'mushroom', shape: 'cap', icon: '🍄', color: '#91c9df', density: .95, viscosity: .17, volatility: .76, miscibility: .425, price: .073,
+    lore: 'A cool mushroom growing beneath the trees. Crushing reveals a freezing essence with a trace of transformation.', effects: { freeze: .92, transformation: .28 } },
+  { id: 6, name: 'Nightshade', form: 'plant', shape: 'leaf', icon: '🍃', color: '#9981bd', density: 1.23, viscosity: .76, volatility: .52, miscibility: .79, price: .086,
+    lore: 'A poisonous leaf from the shaded thicket. Its incompatible extract tends to separate from water; test a tiny sample before selling.', effects: { poison: .9, death: .62, acidity: .32 } },
+  { id: 7, name: 'Mandrake', form: 'root', shape: 'root', icon: '🌱', color: '#d0ae78', density: 1.15, viscosity: .72, volatility: .34, miscibility: .43, price: .15,
+    lore: 'A rare guild root carrying transformation and strength. Its gathering patch opens with the first guild reagent licence.', effects: { transformation: .95, strength: .5, poison: .16 } },
+  { id: 8, name: 'Grave Moss', form: 'plant', shape: 'sprig', icon: '🌿', color: '#96a899', density: .82, viscosity: .51, volatility: .56, miscibility: .415, price: .18,
+    lore: 'A rare moss rich in death magic. Crush carefully, dilute generously, and observe the effects in the experiment room.', effects: { death: .98, freeze: .22, poison: .65 } },
+  { id: 9, name: 'Star Quartz', form: 'stone', shape: 'crystal', icon: '💎', color: '#ceb7e8', density: 1.48, viscosity: .44, volatility: .29, miscibility: .42, price: .2,
+    lore: 'An unusual crystal carrying love and transformation. Grind it into a fine powder to prepare a luminous infusion.', effects: { transformation: .7, love: .64, fire: .22 } },
+  { id: 10, name: 'River Chalk', form: 'stone', shape: 'stone', icon: '🪨', color: '#ded6b1', density: 1.32, viscosity: .56, volatility: .1, miscibility: .42, price: .065,
+    lore: 'A soft river stone. Crush and stir it with a little water for thick dough; abundant water and more stirring gradually thin the infusion.', effects: { strength: .12, freeze: .1 } },
+  { id: 11, name: 'Mica Dust', form: 'powder', shape: 'powder', icon: '✦', color: '#c5b5d8', density: 1.22, viscosity: .61, volatility: .15, miscibility: .405, price: .075,
+    lore: 'Naturally loose mineral grains collected from the bank. Stir with a little water to knead dough; abundant water and sustained stirring make a fluid infusion.', effects: { transformation: .28, love: .12, acidity: .08 } }
+];
+
+function makeIngredient(worldSeed, spec) {
+  const materialSeed = seedNumber(`${worldSeed}:ingredient:${spec.id}`);
+  const local = mulberry32(materialSeed), raw = generateMaterial(materialSeed, spec.id);
+  const base = hexToRgb(spec.color), original = hexToRgb(raw.color);
+  const name = spec.id === 1 ? spec.name : `${PREFIXES[Math.floor(local() * PREFIXES.length)]} ${spec.name}`;
+  const liquid = spec.form === 'liquid', powder = spec.form === 'powder';
+  const material = sanitizeMaterial({
+    ...raw, ...NEUTRAL_EFFECTS, ...spec.effects, name,
+    color: liquid ? spec.color : rgbToHex(...base.map((v, k) => v * .92 + original[k] * .08)),
+    density: spec.density + (liquid ? 0 : local() * .035),
+    viscosity: spec.viscosity + (liquid ? 0 : local() * .025),
+    miscibility: spec.miscibility, volatility: spec.volatility,
+    meltingTemperature: liquid ? .08 : .70 + local() * .035,
+    boilingTemperature: liquid ? .88 : 1.05,
+    phaseTransitionHysteresis: .02,
+    solidSubdivision: powder ? 1 : 0, crystallinity: spec.form === 'stone' ? .8 : .12,
+    heatCapacity: liquid ? .85 : .55 + local() * .2,
+    thermalConductivity: liquid ? .35 : .18 + local() * .18,
+    cohesion: liquid ? .22 : .14,
+    reactionPotential: liquid ? 0 : (spec.id % 2 ? 1 : -1) * (.08 + local() * .12),
+    reactionHeat: liquid ? 0 : (local() - .5) * .08,
+    electricPotential: 0, electricalConductivity: liquid ? .1 : .1 + local() * .25,
+    combustionTemperature: 1.3, particleRadius: .10 + local() * .01,
+    incompressible: true, opacity: liquid ? .7 : 1
   });
+  return { id: spec.id, name, material, price: spec.price, starter: spec.id <= 6 || spec.id >= 10,
+    form: spec.form, unit: liquid ? 'ml' : 'measures', solvent: liquid,
+    crushable: !liquid && !powder, extractable: !liquid,
+    appearance: { shape: spec.shape, icon: spec.icon }, lore: spec.lore };
 }
 
-/** Generates six starter liquids, two starter powders and three guild reagents. */
+/** Kept for version-two migrations; appended IDs never replace pinned stock. */
+export function generateStarterPowders(seed) {
+  return INGREDIENTS.filter(i => i.id >= 10).map(spec => makeIngredient(String(seed), spec));
+}
+
+/** Water, raw plants and minerals feed the same physical material simulation. */
 export function generateWorld(seed) {
   const worldSeed = String(seed).trim().slice(0, 48) || 'moonlight';
-  const root = seedNumber(worldSeed), rng = mulberry32(root);
-  const rotate = Math.floor(rng() * PREFIXES.length);
-  const ingredients = Array.from({ length: 9 }, (_, i) => {
-    const materialSeed = seedNumber(`${root}:ingredient:${i}`), raw = generateMaterial(materialSeed, i + 1);
-    const local = mulberry32(materialSeed ^ 0x12345678), base = hexToRgb(PALETTE[(i + rotate) % PALETTE.length]);
-    const original = hexToRgb(raw.color), colour = base.map((v, k) => v * .8 + original[k] * .2);
-    const prefix = PREFIXES[(rotate + i * 5) % PREFIXES.length];
-    const material = sanitizeMaterial({
-      ...raw,
-      name: prefix + SUFFIXES[i], color: rgbToHex(...colour),
-      density: .68 + (i % 6) * .16 + local() * .06,
-      viscosity: .07 + (i % 6) * .14 + local() * .05,
-      miscibility: i < 4 ? .40 + local() * .035 : i === 4 ? .79 : i === 5 ? .12 : .42 + local() * .03,
-      meltingTemperature: i < 6 ? .05 + local() * .075 : .16 + local() * .08,
-      boilingTemperature: .61 + local() * .33,
-      volatility: .06 + (i % 6) * .12 + local() * .08,
-      reactionPotential: (i % 2 ? 1 : -1) * (i >= 6 ? .5 + local() * .45 : .08 + local() * .36),
-      electricalConductivity: i >= 6 ? .55 + local() * .4 : raw.electricalConductivity,
-      reactionHeat: (local() - .5) * .5,
-      combustionTemperature: i < 4 ? .96 + local() * .2 : .72 + local() * .35,
-      particleRadius: .10 + local() * .01, incompressible: true,
-      opacity: .72 + local() * .23
-    });
-    const price = Math.round((.055 + material.viscosity * .045 + material.electricalConductivity * .035 + (i >= 6 ? .07 : 0)) * 1000) / 1000;
-    return { id: material.id, name: material.name, material, price, starter: i < 6,
-      lore: i < 4 ? 'A gentle reagent from the village apothecary. Often blends with other gentle extracts.' : i < 6 ? 'A wild extract. Watch for separate layers and a lively response to fire.' : 'A rare guild reagent. Best explored with a measuring prism.' };
-  });
-  ingredients.push(...generateStarterPowders(worldSeed));
+  const ingredients = INGREDIENTS.map(spec => makeIngredient(worldSeed, spec));
   const validation = validateWorld(ingredients);
   if (!validation.valid) throw new Error('Unplayable world: ' + validation.reason);
-  return { seed: worldSeed, ingredients, validation };
+  return { seed: worldSeed, ingredientVersion: 2, ingredients, validation };
 }
 
 export function validateWorld(ingredients) {
-  const starters = ingredients.filter(i => i.starter), powders = starters.filter(i => i.form === 'powder');
-  const mats = starters.filter(i => i.form !== 'powder').map(i => i.material);
+  const starters = ingredients.filter(i => i.starter), water = starters.find(i => i.id === 1);
+  const raws = starters.filter(i => i.form !== 'liquid' && i.form !== 'powder');
+  const mats = starters.map(i => i.material);
   const span = key => Math.max(...mats.map(m => m[key])) - Math.min(...mats.map(m => m[key]));
-  if (starters.length < 6 || starters.length > 8) return { valid: false, reason: 'Starter count' };
-  if (mats.length !== 6 || mats.some(m => m.meltingTemperature >= .28 || m.boilingTemperature <= .5 || m.combustionTemperature <= .6))
-    return { valid: false, reason: 'Unsafe starting liquid' };
-  if (powders.some(i => i.material.meltingTemperature <= .36 || i.material.solidSubdivision < .55 || i.material.combustionTemperature <= .6))
-    return { valid: false, reason: 'Unsafe starting powder' };
+  if (starters.length !== 8 || new Set(ingredients.map(i => i.id)).size !== ingredients.length)
+    return { valid: false, reason: 'Starter count or duplicate ingredient' };
+  if (!water?.solvent || water.form !== 'liquid' || water.material.meltingTemperature >= .28 || water.material.boilingTemperature <= .5)
+    return { valid: false, reason: 'Missing safe water solvent' };
+  if (raws.length < 5 || raws.some(i => !i.crushable || i.material.meltingTemperature <= .36 || i.material.solidSubdivision !== 0))
+    return { valid: false, reason: 'Missing crushable raw ingredients' };
+  if (mats.some(m => m.combustionTemperature <= .6 || EFFECT_PROPERTIES.some(key => !Number.isFinite(m[key]) || m[key] < 0 || m[key] > 1)))
+    return { valid: false, reason: 'Unsafe or invalid starter material' };
   if (span('density') < .65 || span('viscosity') < .55 || span('volatility') < .45)
     return { valid: false, reason: 'Insufficient property diversity' };
-  if (!mats.some((a, i) => mats.some((b, j) => i !== j && Math.abs(a.miscibility - b.miscibility) < .06)))
-    return { valid: false, reason: 'No compatible pair' };
-  return { valid: true, reason: 'Six ambient liquids and two dry powders; diverse textures and compatible mixing families.' };
+  if (raws.filter(i => Math.abs(i.material.miscibility - water.material.miscibility) < .06).length < 3)
+    return { valid: false, reason: 'Insufficient water-compatible ingredients' };
+  return { valid: true, reason: 'Fresh water, crushable plants and stones, and loose mineral dust; diverse physical, magical and chemical properties.' };
+}
+
+/** Preserve legacy recipe targets and pinned physics; only add missing metadata. */
+export function migrateIngredients(world) {
+  if (!world?.ingredients) return world;
+  return { ...world, ingredients: world.ingredients.map(ingredient => {
+    const spec = INGREDIENTS.find(i => i.id === ingredient.id);
+    const form = ingredient.form || 'liquid', liquid = form === 'liquid', powder = form === 'powder';
+    const material = { ...ingredient.material };
+    for (const key of EFFECT_PROPERTIES) if (material[key] === undefined) material[key] = 0;
+    return { ...ingredient, form, material,
+      unit: ingredient.unit || (liquid ? 'ml' : 'measures'),
+      solvent: ingredient.solvent ?? liquid,
+      crushable: ingredient.crushable ?? (!liquid && !powder),
+      extractable: ingredient.extractable ?? !liquid,
+      appearance: ingredient.appearance || { shape: liquid ? 'water' : spec?.shape || 'stone', icon: liquid ? '💧' : spec?.icon || '🪨' }
+    };
+  }) };
 }
 
 export function availableIngredients(world, equipment) {
-  return world.ingredients.filter(i => i.starter || i.id <= 6 + (equipment.reagents || 0));
+  return world.ingredients.filter(i => i.starter || i.id <= 6 + (equipment?.reagents || 0));
 }

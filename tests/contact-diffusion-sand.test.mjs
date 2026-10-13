@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BrewingSession } from '../src/game/brewing.mjs';
-import { generateWorld } from '../src/game/world.mjs';
+import { generateLiquidWorld as generateWorld } from './helpers/liquid-world.mjs';
 import { ParticleSystem } from '../src/simulation/ParticleSystem.mjs';
 import { SpatialGrid } from '../src/simulation/SpatialGrid.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';

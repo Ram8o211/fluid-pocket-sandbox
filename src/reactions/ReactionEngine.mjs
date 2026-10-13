@@ -2,6 +2,10 @@ import { clamp, saturate } from '../simulation/math.mjs';
 import { isCoherentSolid, isPowder } from '../simulation/PowderSolver.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
+import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
+import { MIX_PROPERTIES } from './MixtureSolver.mjs';
+
+const PAIR_PROPERTIES = Object.freeze(MIX_PROPERTIES.filter(key => key !== 'solidSubdivision' && key !== 'phaseHysteresis'));
 
 export function thermalMixingMultiplier(ps, i, j, coefficient = 0) {
   if (ps.phase[i] !== Phase.LIQUID || ps.phase[j] !== Phase.LIQUID) return 1;
@@ -60,12 +64,12 @@ export class ReactionEngine {
     });
     this.mixtures?.finishFrame(ps,rules,dt);
   }
-  particleDistance(ps,i,j){let s=0,w=0;const add=(a,b,weight=1)=>{const d=a-b;s+=d*d*weight;w+=weight;};add((ps.baseDensity[i]-.35)/1.3,(ps.baseDensity[j]-.35)/1.3);add(ps.viscosity[i],ps.viscosity[j]);add(ps.cohesion[i],ps.cohesion[j]);add((ps.particleRadius[i]-.065)/.135,(ps.particleRadius[j]-.065)/.135,.7);add(ps.incompressible[i],ps.incompressible[j],.45);add(ps.opacity[i],ps.opacity[j]);add((ps.reactionPotential[i]+1)/2,(ps.reactionPotential[j]+1)/2);add((ps.reactionHeat[i]+1)/2,(ps.reactionHeat[j]+1)/2);add(ps.crystallinity[i],ps.crystallinity[j],.5);add(ps.solidSubdivision[i],ps.solidSubdivision[j],.5);add(ps.electricalConductivity[i],ps.electricalConductivity[j],.35);add(ps.combustionTemperature[i]/1.4,ps.combustionTemperature[j]/1.4,.45);add(ps.r[i],ps.r[j],.45);add(ps.g[i],ps.g[j],.45);add(ps.b[i],ps.b[j],.45);return saturate(Math.sqrt(s/Math.max(w,1))*1.9);}
+  particleDistance(ps,i,j){let s=0,w=0;const add=(a,b,weight=1)=>{const d=a-b;s+=d*d*weight;w+=weight;};add((ps.baseDensity[i]-.35)/1.3,(ps.baseDensity[j]-.35)/1.3);add(ps.viscosity[i],ps.viscosity[j]);add(ps.cohesion[i],ps.cohesion[j]);add((ps.particleRadius[i]-.065)/.135,(ps.particleRadius[j]-.065)/.135,.7);add(ps.incompressible[i],ps.incompressible[j],.45);add(ps.opacity[i],ps.opacity[j]);add((ps.reactionPotential[i]+1)/2,(ps.reactionPotential[j]+1)/2);add((ps.reactionHeat[i]+1)/2,(ps.reactionHeat[j]+1)/2);add(ps.crystallinity[i],ps.crystallinity[j],.5);add(ps.solidSubdivision[i],ps.solidSubdivision[j],.5);add(ps.electricalConductivity[i],ps.electricalConductivity[j],.35);add(ps.combustionTemperature[i]/1.4,ps.combustionTemperature[j]/1.4,.45);add(ps.r[i],ps.r[j],.45);add(ps.g[i],ps.g[j],.45);add(ps.b[i],ps.b[j],.45);for(const key of EFFECT_PROPERTIES){if(ps[key][i]===0&&ps[key][j]===0)continue;const d=ps[key][i]-ps[key][j];s+=d*d*.65;w+=.65;}return saturate(Math.sqrt(s/Math.max(w,1))*1.9);}
   mixPair(ps,i,j,t,rules,onFuse=null){
     const mi=ps.mass[i],mj=ps.mass[j],total=Math.max(1e-6,mi+mj),wi=mi/total,wj=mj/total;
     const blend=(arr)=>{const mean=arr[i]*wi+arr[j]*wj;arr[i]+=(mean-arr[i])*t;arr[j]+=(mean-arr[j])*t;};
     if(!this.mixtures){
-      for(const arr of [ps.r,ps.g,ps.b,ps.opacity,ps.baseDensity,ps.viscosity,ps.cohesion,ps.miscibility,ps.particleRadius,ps.incompressible,ps.heatCapacity,ps.thermalConductivity,ps.meltingTemperature,ps.boilingTemperature,ps.volatility,ps.reactionPotential,ps.reactionHeat,ps.compressibility,ps.crystallinity,ps.electricalConductivity,ps.combustionTemperature])blend(arr);
+      for(const key of PAIR_PROPERTIES)blend(ps[key]);
       if(ps.phase[i]!==Phase.SOLID&&ps.phase[j]!==Phase.SOLID)blend(ps.solidSubdivision);
     }
     ps.density[i]=ps.effectiveDensityAt(i);ps.density[j]=ps.effectiveDensityAt(j);
