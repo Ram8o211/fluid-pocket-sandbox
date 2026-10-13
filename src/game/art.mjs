@@ -5,6 +5,29 @@ import { mulberry32 } from '../materials/MaterialGenerator.mjs';
 const cache = new Map();
 function surface(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
+/** Wooden spoon with a rounded, recessed bowl. Its (18,59) bowl centre is
+ * exactly the interaction point; the long handle extends above the potion. */
+export function spoonSprite() {
+  const key = 'wooden-spoon'; if (cache.has(key)) return cache.get(key);
+  const canvas = surface(64, 80), ctx = canvas.getContext('2d');
+  const hx = 28, hy = -43, lengthSquared = hx * hx + hy * hy;
+  const length = Math.sqrt(lengthSquared), ux = hx / length, uy = hy / length;
+  for (let y = 0; y < 80; y++) for (let x = 0; x < 64; x++) {
+    const along = Math.max(0, Math.min(1, ((x - 28) * hx + (y - 47) * hy) / lengthSquared));
+    const handleDistance = Math.hypot(x - 28 - along * hx, y - 47 - along * hy);
+    let colour = handleDistance <= 4 ? '#312237' : null;
+    if (handleDistance <= 2.3) colour = x - 28 - along * hx < 0 ? '#e3b784' : '#b97c4b';
+    const dx = x - 18, dy = y - 59, axis = dx * ux + dy * uy, side = -dx * uy + dy * ux;
+    const bowl = (axis / 20) ** 2 + (side / 14) ** 2;
+    if (bowl <= 1) colour = '#312237';
+    if (bowl <= .80) colour = side < -2 ? '#f0cd93' : '#d6a36d';
+    if (bowl <= .53) colour = side < -2 ? '#b87e4d' : '#98623e';
+    if (bowl <= .25) colour = '#79503c';
+    if (colour) { ctx.fillStyle = colour; ctx.fillRect(x, y, 1, 1); }
+  }
+  cache.set(key, canvas); return canvas;
+}
+
 /** Tiny reusable lights; building the falloff once keeps particle drawing cheap. */
 export function magicGlowSprite(colour) {
   const key = `glow:${colour}`; if (cache.has(key)) return cache.get(key);
@@ -223,7 +246,8 @@ const PATHS = {
   settings: '<path fill="#af987c" d="M6 1h4v2h3v3h2v4h-2v3h-3v2H6v-2H3v-3H1V6h2V3h3z"/><path fill="#382b39" d="M6 6h4v4H6z"/>',
   flame: '<path fill="#af4938" d="M7 0h2v5h3v3h2v5h-2v2H4v-2H2V9h2V5h2z"/><path fill="#ea9d52" d="M7 5h2v4h2v4H5V9h2z"/><path fill="#f6d383" d="M7 10h2v4H7z"/>',
   frost: '<path fill="#93d8df" d="M7 0h2v5l3-3 1 2-3 3h6v2h-6l3 3-1 2-3-3v5H7v-5l-3 3-1-2 3-3H0V7h6L3 4l1-2 3 3z"/>',
-  spoon: '<path fill="#cd9e67" d="M11 0h3v4h-2v3h-2v3H8v3H6v2H2v-4h2V9h2V7h2V5h2V3h1z"/><path fill="#f1cb8c" d="M3 11h2v2H3z"/>',
+    spoon: '<path fill="#cd9e67" d="M12 0h3v3h-2v2h-2v2H9v2H7v2H5V9h2V7h2V5h2V3h1z"/><path fill="#f1cb8c" d="M3 8h3v1h2v4H7v2H3v-1H1v-4h1V9h1z"/><path fill="#98623e" d="M3 10h3v1h1v2H6v1H3v-1H2v-2h1z"/>',
+    pestle: '<path fill="#46525e" d="M12 0h3v4h-2v3h-2v3H9v3H7v3H1v-6h3V8h3V6h2V4h2V2h1z"/><path fill="#a8b4b6" d="M12 1h2v2h-2zM10 3h2v3h-2zM8 6h2v2H8zM4 9h4v2H4zM2 11h4v3H2z"/>',
   measure: '<path fill="#d9c597" d="M2 2h12v12H2z"/><path fill="#5b6869" d="M4 4h8v8H4z"/><path fill="#e9aa68" d="M7 5h2v3h3v2H7z"/>',
   inventory: '<path fill="#5e3f37" d="M1 5h14v10H1z"/><path fill="#b88655" d="M2 6h12v7H2z"/><path fill="#e3c185" d="M5 2h6v3H5zm2 6h2v3H7z"/>',
   star: '<path fill="#dcbd76" d="M7 0h2v5h5v2h2v2h-5v5H9v2H7v-5H2V9H0V7h5V2h2z"/>',

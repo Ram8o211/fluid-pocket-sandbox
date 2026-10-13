@@ -188,6 +188,23 @@ try {
   // Freeze a real batch, then crush a touched portion using the visible pestle.
   for (let i = 0; i < 3; i++) await page.locator('#coolBtn').click();
   await page.waitForFunction(solid => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.phase.some(p => p === solid), Phase.SOLID, { timeout: 20000 });
+  // A real spoon stroke must move a touched frozen parcel as well as fluids.
+  // Capture its rounded bowl while held; read only saves made by visible UI.
+  await page.locator('#measureBtn').click(); const beforeSolidStroke = await readSave(page);
+  await page.locator('[data-action="close"]').first().click();
+  const solidTarget = beforeSolidStroke.brew.particles.phase.findIndex(p => p === Phase.SOLID);
+  const spoonBox = await page.locator('#labCanvas').boundingBox();
+  const spoonX = spoonBox.x + (192 + beforeSolidStroke.brew.particles.x[solidTarget] * 40) / 384 * spoonBox.width;
+  const spoonY = spoonBox.y + (158 - beforeSolidStroke.brew.particles.y[solidTarget] * 40) / 232 * spoonBox.height;
+  await page.mouse.move(spoonX, spoonY); await page.mouse.down();
+  await page.mouse.move(spoonX + 14, spoonY - 14, { steps: 5 }); await page.waitForTimeout(80);
+  await page.screenshot({ path: 'test-results/direct-spoon.png', fullPage: true }); await page.mouse.up();
+  await page.locator('#measureBtn').click(); const afterSolidStroke = await readSave(page);
+  assert.ok(afterSolidStroke.brew.history.stirred > beforeSolidStroke.brew.history.stirred, 'pointer contact must stir intact frozen material');
+  assert.ok(Math.hypot(afterSolidStroke.brew.particles.x[solidTarget] - beforeSolidStroke.brew.particles.x[solidTarget],
+    afterSolidStroke.brew.particles.y[solidTarget] - beforeSolidStroke.brew.particles.y[solidTarget]) > .01, 'a touched solid must follow the spoon');
+  await page.locator('[data-action="close"]').first().click(); await page.waitForTimeout(400);
+  await page.locator('#measureBtn').click(); await page.locator('[data-action="close"]').first().click();
   await page.locator('#crushBtn').click();
   assert.equal(await page.locator('#crushBtn').getAttribute('aria-pressed'), 'true');
   const frozen = await readSave(page), target = frozen.brew.particles.phase.findIndex(p => p === Phase.SOLID);

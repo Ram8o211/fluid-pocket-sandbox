@@ -110,17 +110,21 @@ export class BrewingSession {
   }
   stir(point, velocity, dt = FIXED_STEP, fromPoint = point, intensity = 1) {
     const ps = this.engine.ps, speed = Math.hypot(velocity.x, velocity.y);
-    if (speed < .02 || !Number.isFinite(speed)) return 0;
-    // Wider spoon catches a meaningful cross-section of both liquids and
-    // loose powders. Sweep its footprint along the entire touch movement:
-    // frame-rate-dependent pointer gaps must not leave un-stirred strips.
-    const vx = clamp(velocity.x, -6, 6), vy = clamp(velocity.y, -6, 6), radius = .42;
+    if (speed < .02 || !Number.isFinite(speed) || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+      || !Number.isFinite(dt) || dt <= 0 || !Number.isFinite(intensity) || intensity <= 0) return 0;
+    const strength = clamp(intensity, 0, 1), elapsed = Math.min(.1, dt), direct = strength === 1;
+    // Manual contact follows the spoon within one physics tick. Gentle hold-
+    // assisted stirring retains its original impulse and preparation timing.
+    const response = direct ? 1 - Math.exp(-90 * elapsed) : Math.min(.52, Math.max(.015, elapsed) * 9);
+    // Sweep every material phase along the full movement, including steam and
+    // intact solids. Pointer gaps must not leave un-stirred strips.
+    const velocityScale = Math.min(1, 6 / speed), vx = velocity.x * velocityScale, vy = velocity.y * velocityScale, radius = .42;
     const sx = Number.isFinite(fromPoint?.x) ? fromPoint.x : point.x;
     const sy = Number.isFinite(fromPoint?.y) ? fromPoint.y : point.y;
     const dx = point.x - sx, dy = point.y - sy, lengthSquared = dx * dx + dy * dy;
     let affected = 0;
+    const bodies = new Map();
     for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] !== Phase.LIQUID && !(ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] >= .55)) continue;
       const projection = lengthSquared > 1e-8
         ? clamp(((ps.x[i] - sx) * dx + (ps.y[i] - sy) * dy) / lengthSquared, 0, 1)
         : 1;
@@ -128,16 +132,31 @@ export class BrewingSession {
       const distance = Math.hypot(ps.x[i] - closestX, ps.y[i] - closestY);
       const contact = radius + effectiveParticleRadius(ps, i, true);
       if (distance >= contact) continue;
-      // Smooth nonzero peripheral influence allows several grains to move
-      // together while keeping strong impulses centered under the spoon.
       const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
-      const amount = falloff * Math.min(.52, Math.max(.015, dt) * 9) * clamp(intensity, 0, 1);
-      ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
-      ps.stirActivity[i] = Math.max(ps.stirActivity[i], falloff * Math.min(1, speed) * Math.sqrt(clamp(intensity, 0, 1)));
+      const amount = (direct ? .35 + .65 * falloff : falloff) * response * strength;
+      const activity = falloff * Math.min(1, speed) * Math.sqrt(strength);
+      const body = ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55 ? ps.solidBodyId[i] : 0;
+      if (body > 0) {
+        // A contact pushes a frozen block as one body rather than stretching
+        // its touched grains or silently ignoring them. Only the pestle breaks it.
+        const contact = bodies.get(body);
+        if (contact) { contact.amount = Math.max(contact.amount, amount); contact.activity = Math.max(contact.activity, activity); }
+        else bodies.set(body, { amount, activity });
+      } else {
+        ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
+        ps.stirActivity[i] = Math.max(ps.stirActivity[i], activity);
+      }
       ps.grainRest[i] = 0;
       affected++;
     }
-    if (affected) this.history.stirred += Math.min(6, speed) * dt;
+    if (bodies.size) for (let i = 0; i < ps.count; i++) {
+      if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .55) continue;
+      const contact = bodies.get(ps.solidBodyId[i]);
+      if (!contact) continue;
+      ps.vx[i] += (vx - ps.vx[i]) * contact.amount; ps.vy[i] += (vy - ps.vy[i]) * contact.amount;
+      ps.stirActivity[i] = Math.max(ps.stirActivity[i], contact.activity); ps.grainRest[i] = 0;
+    }
+    if (affected) this.history.stirred += Math.min(6, speed) * elapsed;
     return affected;
   }
   crush(point) {

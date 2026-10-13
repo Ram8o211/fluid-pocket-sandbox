@@ -26,6 +26,18 @@ export function insideCauldron(x, y, padding = 0) {
   return PLANES.every(p => (x - p.x) * p.nx + (y - p.y) * p.ny >= padding - .000002);
 }
 
+// The head centre can reach the entire cutaway, including lid and floor
+// corners. Clamp only outside pointer positions, never shrink the usable pot
+// by the spoon's radius; that would leave material along its walls unreachable.
+export function cauldronToolPoint(point) {
+  let x = Number.isFinite(point.x) ? point.x : 0, y = Number.isFinite(point.y) ? point.y : 0;
+  for (let pass = 0; pass < 6; pass++) for (const p of PLANES) {
+    const distance = (x - p.x) * p.nx + (y - p.y) * p.ny;
+    if (distance < 0) { x -= p.nx * distance; y -= p.ny * distance; }
+  }
+  return { x, y };
+}
+
 // Only the upward-facing lower bowl touches the flame/Frost plate. The upper
 // walls and lid cannot apply the source directly to falling or remote parcels.
 export function cauldronBottomContact(ps, i) {

@@ -4,6 +4,7 @@ import { BrewingSession } from '../src/game/brewing.mjs';
 import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
+import { CAULDRON_INTERIOR, cauldronToolPoint, confineCauldronParticle, insideCauldron, cauldronParticlePadding } from '../src/game/cauldron.mjs';
 const make = () => new BrewingSession([{ id: 1, price: 1, material: sanitizeMaterial({ id: 1, density: 1, boilingTemperature: .6, meltingTemperature: .3, combustionTemperature: .9, volatility: 1, solidSubdivision: .9, crystallinity: 1, reactionPotential: 0, reactionHeat: 0 }) }]);
 const add = (b, x, y, phase=Phase.LIQUID, temperature=.4) => b.engine.ps.add({x,y,z:0,mass:.25,temperature}, b.engine.materials.get(1), phase);
 
@@ -26,13 +27,72 @@ test('wider spoon catches multiple liquid and powder grains per stroke without p
   const gas=add(b,0,.1,Phase.GAS),frozen=add(b,0,-.1,Phase.SOLID);
   ps.solidSubdivision[frozen]=0;
   const mass=ps.totalMass();
-  assert.equal(b.stir({x:0,y:0},{x:4,y:0}),5,
-    'one stroke should affect all five nearby grains, including loose powder');
+  assert.equal(b.stir({x:0,y:0},{x:4,y:0}),7,
+    'one stroke should affect nearby liquid, loose powder, vapour and intact solid');
   for(const i of indices.slice(0,5))assert.ok(ps.vx[i]>.05,`grain ${i} was missed by stirring`);
   assert.equal(ps.vx[indices[5]],0,'distant liquid must remain unaffected');
-  assert.equal(ps.vx[gas],0,'vapour must remain unaffected');
-  assert.equal(ps.vx[frozen],0,'coherent frozen blocks cannot be stirred');
+  assert.ok(ps.vx[gas]>0,'the spoon must touch vapour');
+  assert.ok(ps.vx[frozen]>0,'the spoon must push intact solids');
+  assert.equal(ps.solidSubdivision[frozen],0,'stirring must not crush frozen matter');
   assert.equal(ps.totalMass(),mass);
+});
+
+test('manual spoon contact follows a stroke and reverses within one physics tick', () => {
+  const b=make(),ps=b.engine.ps;add(b,0,0);
+  b.stir({x:0,y:0},{x:4,y:0},1/40);
+  b.step(1/40);
+  assert.ok(ps.x[0]>.065,'a touched parcel should visibly follow the first stroke');
+  const before=ps.x[0];
+  b.stir({x:ps.x[0],y:ps.y[0]},{x:-4,y:0},1/40);
+  b.step(1/40);
+  assert.ok(ps.x[0]<before-.055,'reversing the spoon must reverse the parcel immediately');
+  assert.equal(ps.totalMass(),.25);
+});
+
+test('spoon reaches every lid, wall and floor corner without moving its centre outside the pot', () => {
+  for(const [x,y] of CAULDRON_INTERIOR){
+    const b=make(),ps=b.engine.ps;add(b,x,y);
+    confineCauldronParticle(ps,0);
+    const point=cauldronToolPoint({x,y});
+    assert.ok(insideCauldron(point.x,point.y));
+    assert.equal(b.stir(point,{x:1,y:1}),1,'wall-adjacent particles must remain reachable');
+  }
+  for(const point of [{x:-20,y:20},{x:20,y:-20},{x:0,y:10},{x:0,y:-10}]){
+    const head=cauldronToolPoint(point);
+    assert.ok(insideCauldron(head.x,head.y),'dragging outside must stop the head at the actual bowl boundary');
+  }
+});
+
+test('touching one end moves an entire frozen block without stretching or crushing it', () => {
+  const b=make(),e=b.engine,ps=e.ps;e.gravity={x:0,y:0,z:0};e.env.ambientThermalExchange=0;
+  for(let i=0;i<12;i++){add(b,-1+i*.1,0,Phase.SOLID,.15);ps.solidSubdivision[i]=0;}
+  const distant=add(b,1.5,0,Phase.SOLID,.15);ps.solidSubdivision[distant]=0;
+  e.grid.rebuild(ps,e.env.box);for(let i=0;i<ps.count;i++)e.solid.initializeParticle(ps,i,true,e.grid);
+  const body=ps.solidBodyId[0],distance=ps.x[11]-ps.x[0],mass=ps.totalMass();
+  assert.equal(ps.solidBodyId[11],body);assert.notEqual(ps.solidBodyId[distant],body);
+  const touched=b.stir({x:-1,y:0},{x:4,y:0});
+  assert.ok(touched>0&&touched<12,'only local surface contacts initiate the push');
+  assert.ok(ps.vx[11]>3,'connected grains must move with the touched end');
+  assert.equal(ps.vx[distant],0,'a disconnected solid must remain unaffected');
+  for(let n=0;n<12;n++)b.step(1/40);
+  assert.ok(Math.abs((ps.x[11]-ps.x[0])-distance)<.003);
+  for(let i=0;i<12;i++){
+    assert.equal(ps.solidSubdivision[i],0);assert.equal(ps.phase[i],Phase.SOLID);
+    assert.ok(insideCauldron(ps.x[i],ps.y[i],cauldronParticlePadding(ps,i)));
+  }
+  assert.equal(ps.totalMass(),mass);
+});
+
+test('manual steering preserves direction at high speed and rejects inactive or invalid gestures', () => {
+  const b=make(),ps=b.engine.ps;add(b,0,0);
+  b.stir({x:0,y:0},{x:100,y:200});
+  assert.ok(Math.hypot(ps.vx[0],ps.vy[0])<=6);
+  assert.ok(Math.abs(ps.vy[0]/ps.vx[0]-2)<.001,'diagonal steering must retain the pointer direction');
+  const before=[ps.vx[0],ps.vy[0],b.history.stirred];
+  assert.equal(b.stir({x:0,y:0},{x:2,y:0},1/40,undefined,0),0);
+  assert.equal(b.stir({x:0,y:0},{x:2,y:0},-1),0);
+  assert.equal(b.stir({x:NaN,y:0},{x:2,y:0}),0);
+  assert.deepEqual([ps.vx[0],ps.vy[0],b.history.stirred],before);
 });
 
 test('fast spoon drag catches particles along the whole travelled path only once', () => {
