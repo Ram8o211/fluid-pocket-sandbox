@@ -7,9 +7,10 @@ import { CAPACITY_ML, FIXED_STEP, ROOM_TEMPERATURE, ROOM_DENSITY } from './contr
 import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSupport, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
+import { EFFECT_PROPERTIES } from './effects.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature'];
+const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -80,26 +81,26 @@ export class BrewingSession {
     for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.GAS) ml += ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
     return ml;
   }
-  pour(ingredientId, requestedMl, inventory) {
+  pour(ingredientId, requestedMl, inventory, { crushed = false, infinite = false } = {}) {
     const ingredient = this.ingredients.find(i => i.id === ingredientId);
     if (!ingredient || !Number.isFinite(requestedMl) || requestedMl <= 0) return 0;
     const ps = this.engine.ps;
-    const quantity = Math.max(0, Math.floor(Math.min(requestedMl, inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, (ps.capacity - ps.count) * PARTICLE_ML) + .00001));
+    const quantity = Math.max(0, Math.floor(Math.min(requestedMl, infinite ? Infinity : inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, (ps.capacity - ps.count) * PARTICLE_ML) + .00001));
     if (!quantity) return 0;
     const massBefore = ps.totalMass();
     const start = ps.count, x = ingredientId % 2 ? -1.2 : 1.2;
     const count = this.engine.emit(ingredientId, { x, y: .95, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
     for (let i = start; i < ps.count; i++) {
       ps.mass[i] = ingredient.material.density * PARTICLE_ML; ps.mixtureAmount[i] = PARTICLE_ML; ps.vy[i] = -1.3;
-      if (ingredient.form === 'powder') { ps.setPhase(i, Phase.SOLID); ps.solidSubdivision[i] = 1; ps.powderContent[i] = 1; }
+      if (ingredient.form === 'powder' || crushed && ingredient.form && ingredient.form !== 'liquid') { ps.setPhase(i, Phase.SOLID); ps.solidBodyId[i] = 0; ps.solidSubdivision[i] = 1; ps.powderContent[i] = 1; }
     }
     this.confineCauldron();
     const pouredMl = count * PARTICLE_ML;
     this.history.activation *= massBefore / Math.max(.001, ps.totalMass());
-    inventory[ingredientId] = Math.max(0, (inventory[ingredientId] || 0) - pouredMl);
-    this.cost.ingredients += pouredMl * ingredient.price;
-    this.portions.push({ ingredientId, ml: pouredMl, time: this.history.elapsed });
-    this.lastPour = { x, color: ingredient.material.color, form: ingredient.form, until: this.engine.time + .6 };
+    if (!infinite) inventory[ingredientId] = Math.max(0, (inventory[ingredientId] || 0) - pouredMl);
+    this.cost.ingredients += infinite ? 0 : pouredMl * ingredient.price;
+    this.portions.push({ ingredientId, ml: pouredMl, time: this.history.elapsed, crushed });
+    this.lastPour = { x, color: ingredient.material.color, form: crushed ? 'powder' : ingredient.form, until: this.engine.time + .6 };
     return pouredMl;
   }
   setThermal(heat, cool = 0) {
@@ -187,8 +188,14 @@ export class BrewingSession {
     return measurePotion(this.engine, Array.from({ length: ps.count }, (_, index) => ({ index, mass: ps.mass[index] })), this.history, this.cost);
   }
   bottle(requestedMl) {
+    return this.drainLiquid(requestedMl);
+  }
+  takeSample(requestedMl = 5) {
+    return this.drainLiquid(requestedMl, true);
+  }
+  drainLiquid(requestedMl, experiment = false) {
     if (!Number.isFinite(requestedMl) || requestedMl <= 0) throw new Error('Choose a positive vial quantity.');
-    if (this.vaporVolume > .01) throw new Error('Steam is safely trapped under the lid. Turn off the flame or use Frost, then wait for it to condense before bottling.');
+    if (!experiment && this.vaporVolume > .01) throw new Error('Steam is safely trapped under the lid. Turn off the flame or use Frost, then wait for it to condense before bottling.');
     const ps = this.engine.ps, before = this.liquidVolume;
     if (before < 1) throw new Error('The cauldron needs liquid before you can bottle.');
     const quantity = Math.min(requestedMl, before), fraction = quantity / before;
@@ -196,13 +203,18 @@ export class BrewingSession {
     // heterogeneous sample and exactly conserving mass even after reactions.
     const selections = [];
     for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.LIQUID) selections.push({ index: i, mass: ps.mass[i] * fraction });
-    const cost = { ingredients: this.cost.ingredients * fraction, energy: this.cost.energy * fraction };
+    // Solids and trapped vapour keep their share of preparation expenses and
+    // recipe portions. Only the mass actually transferred belongs to this dose.
+    const withdrawnMass = selections.reduce((total, selection) => total + selection.mass, 0);
+    const materialFraction = withdrawnMass / Math.max(.00001, ps.totalMass());
+    const cost = { ingredients: this.cost.ingredients * materialFraction, energy: this.cost.energy * materialFraction };
     const sample = measurePotion(this.engine, selections, this.history, cost);
-    const bottledPortions = this.portions.map(p => ({ ...p, ml: p.ml * fraction }));
+    const bottledPortions = this.portions.map(p => ({ ...p, ml: p.ml * materialFraction }));
     for (let n = selections.length - 1; n >= 0; n--) { const { index, mass } = selections[n]; ps.mixtureAmount[index] *= 1 - fraction; ps.mass[index] -= mass; if (ps.mass[index] < .00001) ps.removeAt(index); }
     this.cost.ingredients -= cost.ingredients; this.cost.energy -= cost.energy;
-    this.portions = this.portions.map(p => ({ ...p, ml: p.ml * (1 - fraction) })).filter(p => p.ml > .001);
-    this.heat = this.cool = 0; this.bottles++;
+    this.portions = this.portions.map(p => ({ ...p, ml: p.ml * (1 - materialFraction) })).filter(p => p.ml > .001);
+    if (!experiment) this.heat = this.cool = 0;
+    this.bottles++;
     const id = `vial-${this.bottles}-${Math.round(this.history.elapsed * 1000)}`;
     if (ps.count === 0) { this.engine.reset(); this.thermal.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 }; }
     return { ...sample, id, portions: bottledPortions };
@@ -226,12 +238,13 @@ export class BrewingSession {
     for (const key of SAVE_FIELDS) {
       const values = saved.particles[key];
       if (values === undefined && key === 'solventMeltingTemperature') { ps[key].set(ps.meltingTemperature); continue; }
-      if (values === undefined && (key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount' || key === 'powderContent' || key === 'dissolutionProgress')) { ps[key].fill(0); continue; }
+      if (values === undefined && (EFFECT_PROPERTIES.includes(key) || key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount' || key === 'powderContent' || key === 'dissolutionProgress')) { ps[key].fill(0); continue; }
       if (!Array.isArray(values) || values.length !== saved.count || values.some(v => !Number.isFinite(v))) throw new Error('Invalid saved particle data.');
       ps[key].set(values);
     }
     for (let i = 0; i < saved.count; i++) if (ps.mass[i] <= 0 || ![0, 1, 2].includes(ps.phase[i])) throw new Error('Invalid saved particle mass or phase.');
     for (let i=0;i<saved.count;i++) if(ps.powderContent[i]<0||ps.powderContent[i]>1||ps.dissolutionProgress[i]<0||ps.dissolutionProgress[i]>1) throw new Error('Invalid saved powder wetness.');
+    for (const key of EFFECT_PROPERTIES) for (let i = 0; i < saved.count; i++) if (ps[key][i] < 0 || ps[key][i] > 1) throw new Error('Invalid saved potion effect.');
     for (const material of saved.materials) this.engine.registerMaterial({ ...material, particleRadius: clamp(material.particleRadius, .10, .11) });
     ps.count = saved.count;
     for (let i = 0; i < ps.count; i++) {

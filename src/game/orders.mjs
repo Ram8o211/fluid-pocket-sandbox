@@ -3,6 +3,7 @@ import { availableIngredients, seedNumber } from './world.mjs';
 import { BrewingSession } from './brewing.mjs';
 import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { propertyDescription } from './potion.mjs';
+import { describeEffects } from './effects.mjs';
 
 const NAMES = ['Mira', 'Oswin', 'Rowan', 'Elara', 'Bram', 'Sylvie', 'Aldric', 'Tamsin', 'Fern', 'Corin', 'Nessa', 'Hugo'];
 const ROLES = ['wandering bard', 'forest keeper', 'village knight', 'moon scholar', 'herbalist', 'castle cook'];
@@ -13,7 +14,7 @@ const PURPOSES = ['for a long journey', 'for the evening feast', 'to mend a tire
 export function simulateWitness(world, recipe, equipment = {}) {
   const brew = new BrewingSession(world.ingredients, equipment);
   const stock = Object.fromEntries(world.ingredients.map(i => [i.id, 10000]));
-  for (const portion of recipe.portions) brew.pour(portion.ingredientId, portion.ml, stock);
+  for (const portion of recipe.portions) brew.pour(portion.ingredientId, portion.ml, stock, { crushed: Boolean(portion.crushed) });
   for (let tick = 0; tick < recipe.ticks; tick++) {
     brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0);
     if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP);
@@ -25,23 +26,29 @@ export function simulateWitness(world, recipe, equipment = {}) {
 
 export function generateOrder(world, completed = 0, equipment = {}) {
   const rng = mulberry32(seedNumber(`${world.seed}:order:${completed}`));
-  // Powder recipes require a solvent and longer dissolution. Keep generated
-  // single-reagent commissions feasible with the original liquid witness flow.
-  const ingredients = availableIngredients(world, equipment).filter(i => i.form !== 'powder'), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
-  const primary = completed === 0 ? ingredients[0] : ingredients[Math.floor(rng() * ingredients.length)];
+  const ingredients = availableIngredients(world, equipment), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
+  const liquids = ingredients.filter(i => !i.form || i.form === 'liquid');
+  const solvent = liquids.find(i => i.solvent) || liquids[0];
+  if (!solvent) throw new Error('A customer potion needs an available liquid solvent.');
+  const extracts = ingredients.filter(i => i.id !== solvent.id && i.extractable !== false);
+  const primary = completed === 0 ? solvent : extracts.length ? extracts[Math.floor(rng() * extracts.length)] : solvent;
   const volume = completed === 0 ? 60 : difficulty < 3 ? 80 : 100;
-  const compatible = ingredients.filter(i => i.id !== primary.id && Math.abs(i.material.miscibility - primary.material.miscibility) < .06);
-  const secondary = completed >= 2 && compatible.length ? compatible[Math.floor(rng() * compatible.length)] : null;
+  const rawPrimary = Boolean(primary.form && primary.form !== 'liquid');
+  const compatible = liquids.filter(i => i.id !== primary.id && Math.abs(i.material.miscibility - primary.material.miscibility) < .06);
+  const secondary = !rawPrimary && completed >= 2 && compatible.length ? compatible[Math.floor(rng() * compatible.length)] : null;
   const heat = difficulty >= 3 && rng() > .45 ? .45 : 0;
   const cool = difficulty >= 2 && !heat && rng() > .55 ? .35 : 0;
-  const recipe = { portions: secondary ? [{ ingredientId: primary.id, ml: Math.ceil(volume * .55 / 10) * 10 }, { ingredientId: secondary.id, ml: Math.ceil(volume * .55 / 10) * 10 }] : [{ ingredientId: primary.id, ml: volume }], volume, ticks: 120, thermalTicks: heat || cool ? 65 : 0, heat, cool, stir: Boolean(secondary) };
+  const portions = rawPrimary ? [{ ingredientId: solvent.id, ml: volume + 10 }, { ingredientId: primary.id, ml: difficulty >= 3 ? 15 : 10, crushed: true }]
+    : secondary ? [{ ingredientId: primary.id, ml: Math.ceil(volume * .55 / 10) * 10 }, { ingredientId: secondary.id, ml: Math.ceil(volume * .55 / 10) * 10 }]
+      : [{ ingredientId: primary.id, ml: volume }];
+  const recipe = { portions, volume, ticks: rawPrimary ? 280 : 120, thermalTicks: heat || cool ? 65 : 0, heat, cool, stir: rawPrimary || Boolean(secondary), crush: rawPrimary };
   let sample = null;
   try { sample = simulateWitness(world, recipe, equipment); } catch { /* A completely evaporated trial needs a safe fallback. */ }
   // If a rare reagent flashes to vapour, validate a safe ambient single-liquid
   // fallback rather than issue an order that lost its required vial quantity.
   if (!sample || sample.volume < volume - .001 || sample.liquidFraction < .98) {
-    recipe.portions = [{ ingredientId: ingredients[0].id, ml: volume }];
-    recipe.heat = recipe.cool = recipe.thermalTicks = 0; recipe.stir = false;
+    recipe.portions = [{ ingredientId: solvent.id, ml: volume }];
+    recipe.heat = recipe.cool = recipe.thermalTicks = 0; recipe.stir = false; recipe.crush = false;
     sample = simulateWitness(world, recipe, equipment);
   }
   if (sample.volume < volume - .001) throw new Error('Could not validate a customer order.');
@@ -49,6 +56,8 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   if (difficulty >= 2) properties.push(heat || cool ? 'temperature' : completed % 2 ? 'stability' : 'volatility');
   if (difficulty >= 3) properties.push(equipment.analyzer ? 'potency' : 'temperature');
   if (difficulty >= 4 && equipment.analyzer) properties.push('stability');
+  const characteristic = describeEffects(sample).find(effect => effect.value > .01);
+  if (completed >= 2 && characteristic && Object.hasOwn(PROPERTIES, characteristic.property)) properties.push(characteristic.property);
   const unique = [...new Set(properties)];
   const requirements = unique.map((property, i) => ({ property, target: sample[property], tolerance: PROPERTIES[property].tolerance * (difficulty === 1 ? 1.2 : 1), weight: i === 0 ? 1.3 : 1, hard: property === 'temperature' && difficulty >= 3 }));
   const customer = { id: `customer-${completed}`, name: NAMES[Math.floor(rng() * NAMES.length)], role: ROLES[Math.floor(rng() * ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff), dialogue: `A potion ${PURPOSES[Math.floor(rng() * PURPOSES.length)]}, please. A careful brew is worth its weight in gold.` };
@@ -56,7 +65,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   return {
     id: `${world.seed}-${completed}`, customer, requirements, volume, difficulty,
     budget: Math.round(43 + difficulty * 14 + rng() * 8), witness: recipe,
-    clue: completed === 0 ? `Your first commission: pour ${volume} ml of ${sources[0]}. Three 20 ml pours will do.` : `I like the character of ${sources.join(' with ')}.${recipe.heat ? ' Gently warmed, please.' : recipe.cool ? ' A brief touch of frost would be lovely.' : ' A calm, well-mixed brew would suit me.'}`,
+    clue: completed === 0 ? `Your first commission: pour ${volume} ml of ${sources[0]}. Three 20 ml pours will do.` : `I like the character of ${sources.join(' with ')}.${recipe.crush ? ' Crush the raw ingredient, then stir it into the water to extract its properties.' : ''}${recipe.heat ? ' Gently warmed, please.' : recipe.cool ? ' A brief touch of frost would be lovely.' : ' A calm, well-mixed brew would suit me.'}`,
     targetDescriptions: Object.fromEntries(requirements.map(r => [r.property, propertyDescription(r.property, r.target)]))
   };
 }

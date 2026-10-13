@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BrewingSession } from '../src/game/brewing.mjs';
-import { generateWorld, availableIngredients } from '../src/game/world.mjs';
+import { generateWorld as generateRawWorld, availableIngredients } from '../src/game/world.mjs';
+import { generateLiquidWorld as generateWorld } from './helpers/liquid-world.mjs';
 import { newShop, restock } from '../src/game/economy.mjs';
 import { encodeSave, decodeSave } from '../src/game/persistence.mjs';
 import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
@@ -242,13 +243,13 @@ test('all potion materials use fine pixel footprints at both graphics resolution
   }
 });
 
-test('starter powders pour as dry grains and settle into a compact frictional pile',()=>{
-  const world=generateWorld('compact-test'),state=newShop(world);
+test('naturally loose starter dust pours as dry grains and settles into a compact frictional pile',()=>{
+  const world=generateRawWorld('compact-test'),state=newShop(world);
   assert.equal(availableIngredients(world,state.equipment).length,8);
-  const powders=world.ingredients.filter(i=>i.form==='powder');assert.equal(powders.length,2);
+  const powders=world.ingredients.filter(i=>i.form==='powder');assert.equal(powders.length,1);
   for(const powder of powders){
     const b=new BrewingSession(world.ingredients);assert.equal(b.pour(powder.id,40,state.inventory),40);
-    assert.equal(state.inventory[powder.id],200);const ps=b.engine.ps,mass=ps.totalMass();
+    assert.equal(state.inventory[powder.id],20);const ps=b.engine.ps,mass=ps.totalMass();
     for(let n=0;n<320;n++)b.step();
     for(let i=0;i<ps.count;i++){
       assert.equal(ps.phase[i],Phase.SOLID);assert.equal(ps.powderContent[i],1);assert.equal(ps.solidBodyId[i],0);
@@ -265,12 +266,14 @@ test('starter powders pour as dry grains and settle into a compact frictional pi
   }
 });
 
-test('legacy shops receive powders once while preserving pinned ingredients, progress and brew',()=>{
-  const generated=generateWorld('legacy-compact'),world={...generated,ingredients:generated.ingredients.filter(i=>i.form!=='powder')};
+test('legacy shops receive missing starter minerals once while preserving pinned ingredients, progress and brew',()=>{
+  const generated=generateWorld('legacy-compact'),world={...generated,ingredients:generated.ingredients.filter(i=>i.id<=9)};
   const state=newShop(world),b=new BrewingSession(world.ingredients);b.pour(1,20,state.inventory);for(let n=0;n<30;n++)b.step();
   const raw=JSON.parse(encodeSave(state,b));raw.version=2;
   const saved=decodeSave(JSON.stringify(raw));
-  assert.equal(saved.version,SAVE_VERSION);assert.deepEqual(saved.world.ingredients.slice(0,9),raw.world.ingredients);
+  assert.equal(saved.version,SAVE_VERSION);
+  for(const [index,original] of raw.world.ingredients.entries())
+    for(const [key,value] of Object.entries(original)) assert.deepEqual(saved.world.ingredients[index][key],value);
   assert.deepEqual(saved.brew,raw.brew);assert.deepEqual(saved.order,raw.order);assert.equal(saved.coins,raw.coins);
   for(let id=1;id<=9;id++)assert.equal(saved.inventory[id],raw.inventory[id]);
   assert.equal(saved.inventory[10],240);assert.equal(saved.inventory[11],240);

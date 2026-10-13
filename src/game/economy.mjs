@@ -3,6 +3,10 @@ import { generateOrder } from './orders.mjs';
 import { priceSale } from './evaluation.mjs';
 import { SAVE_VERSION } from './contracts.mjs';
 import { clamp } from '../simulation/math.mjs';
+import { createForaging } from './gathering.mjs';
+import { createExperimentState } from './experiments.mjs';
+
+export const SANDBOX_STOCK = 240;
 
 export const UPGRADES = Object.freeze([
   { id: 'densimeter', name: 'Density stone', cost: 35, sales: 1, description: 'Weigh each brew and reveal its density.' },
@@ -16,10 +20,13 @@ export const UPGRADES = Object.freeze([
   { id: 'reagents', name: 'Guild reagents III', cost: 220, sales: 10, description: 'Unlock the final guild reagent, with 120 ml.', level: 3 }
 ]);
 
-export function newShop(world) {
+export function newShop(world, options = {}) {
+  const sandbox = options.sandbox === true;
   const equipment = { thermometer: true, densimeter: false, viscometer: false, analyzer: false, furnace: 0, cauldron: 0, reagents: 0 };
-  return { version: SAVE_VERSION, seed: world.seed, world, coins: 80, debt: 0, reputation: 0, completed: 0,
-    inventory: Object.fromEntries(world.ingredients.map(i => [i.id, i.starter ? 240 : 0])), equipment,
+  if (sandbox) Object.assign(equipment, { densimeter: true, viscometer: true, analyzer: true, furnace: 1, cauldron: 2, reagents: 3 });
+  return { version: SAVE_VERSION, seed: world.seed, world, mode: sandbox ? 'sandbox' : 'shop', coins: sandbox ? 0 : 80, debt: 0, reputation: 0, completed: 0,
+    inventory: Object.fromEntries(world.ingredients.map(i => [i.id, sandbox ? SANDBOX_STOCK : i.starter ? (i.solvent || i.form === 'liquid' || !i.form ? 240 : 60) : 0])), equipment,
+    foraging: createForaging(world, options.now), experiments: createExperimentState(),
     discoveries: [], order: generateOrder(world, 0, equipment), pendingBottle: null, lastSale: null,
     tutorial: 0, settings: { sound: true, graphics: 'balanced' }, brew: null, stage: 'brewing', soldOrderIds: [] };
 }
@@ -28,14 +35,21 @@ export function restock(state, ingredientId, ml = 60) {
   const ingredient = availableIngredients(state.world, state.equipment).find(i => i.id === ingredientId);
   if (!ingredient || !Number.isFinite(ml) || ml <= 0) throw new Error('Choose an available reagent.');
   const quantity = Math.floor(ml), cost = Math.ceil(quantity * ingredient.price);
-  if (!quantity || state.coins < cost) throw new Error(`You need ${cost} coins for this refill.`);
+  if (!quantity) throw new Error('Choose at least one measure of stock.');
+  if (state.mode === 'sandbox') {
+    state.inventory[ingredientId] = Math.max(SANDBOX_STOCK, (state.inventory[ingredientId] || 0) + quantity);
+    return { quantity, cost: 0 };
+  }
+  if (state.coins < cost) throw new Error(`You need ${cost} coins for this refill.`);
   state.coins = Math.round((state.coins - cost) * 100) / 100;
   state.inventory[ingredientId] = (state.inventory[ingredientId] || 0) + quantity;
   return { quantity, cost };
 }
 
 export function tradeStock(state, ingredientId, ml = 60) {
+  if (state.mode === 'sandbox') throw new Error('Sandbox stock is unlimited and cannot be traded.');
   const ingredient = availableIngredients(state.world, state.equipment).find(i => i.id === ingredientId);
+  if (state.foraging?.nodes.some(node => node.ingredientId === ingredientId && node.unlimited)) throw new Error('Spring water is freely available and cannot be traded.');
   const quantity = Math.floor(ml), payment = ingredient ? Math.floor(quantity * ingredient.price * .55) : 0;
   if (!ingredient || !Number.isFinite(ml) || quantity <= 0 || payment < 1 || (state.inventory[ingredientId] || 0) < quantity) throw new Error('You need 60 ml of this stock to trade.');
   state.inventory[ingredientId] -= quantity; state.coins += payment;
@@ -64,6 +78,7 @@ export function buyUpgrade(state, index) {
 }
 
 export function completeSale(state) {
+  if (state.mode === 'sandbox') throw new Error('Sandbox experiments do not advance shop commissions.');
   if (!state.pendingBottle || !state.order || state.soldOrderIds.includes(state.order.id)) throw new Error('This vial has already been sold.');
   const sale = priceSale(state.pendingBottle, state.order, state.reputation);
   if (state.coins + sale.payment < sale.expenses) throw new Error('You need one coin for a fresh vial.');
@@ -78,6 +93,7 @@ export function completeSale(state) {
 }
 
 export function nextCustomer(state) {
+  if (state.mode === 'sandbox') throw new Error('Customer commissions belong to shop mode.');
   if (state.stage !== 'sale') throw new Error('Finish this commission first.');
   state.order = generateOrder(state.world, state.completed, state.equipment); state.stage = 'brewing';
   return state.order;
@@ -92,6 +108,7 @@ export function recordDiscovery(state, sample, name = '') {
 
 // Recovery is a repayable loan, never a free refill or a repeatable money faucet.
 export function guildLoan(state) {
+  if (state.mode === 'sandbox') throw new Error('Sandbox ingredients are already unlimited.');
   const stockValue = availableIngredients(state.world, state.equipment).reduce((n, i) => n + (state.inventory[i.id] || 0) * i.price, 0);
   if (state.debt > 0 || state.coins + stockValue > 15) throw new Error('Guild aid is reserved for penniless apprentices with no outstanding loan.');
   state.coins += 25; state.debt = 30;

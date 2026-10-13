@@ -2,6 +2,7 @@ import { sampleParticleSet } from '../materials/MaterialSampler.mjs';
 import { effectiveLiquidViscosity } from '../simulation/FluidSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp, hexToRgb } from '../simulation/math.mjs';
+import { EFFECT_DEFINITIONS, readEffects } from './effects.mjs';
 
 /** Sampling is mass weighted and reads the selected actual particles, including
  * partial particles at a bottling boundary. No gameplay property sliders exist. */
@@ -17,7 +18,8 @@ export function measurePotion(engine, selections, history, cost = { ingredients:
     phases[ps.phase[i]]++; phaseMass[ps.phase[i]] += m;
     liquidMass += ps.phase[i] === Phase.LIQUID ? m : 0;
     viscosity += effectiveLiquidViscosity(ps, i) * m; density += ps.density[i] * m;
-    arcana += (.5 * Math.abs(ps.reactionPotential[i]) + .35 * ps.electricalConductivity[i] + .15 * ps.crystallinity[i]) * m;
+    const magic = Math.max(ps.strength[i], ps.love[i], ps.death[i], ps.transformation[i], ps.fire[i], ps.freeze[i]);
+    arcana += Math.max(magic, .5 * Math.abs(ps.reactionPotential[i]) + .35 * ps.electricalConductivity[i] + .15 * ps.crystallinity[i]) * m;
     const keys = [ps.r[i], ps.g[i], ps.b[i], ps.baseDensity[i] / 1.65, ps.viscosity[i]];
     keys.forEach((v, k) => { means[k] += v * m; });
     const id = ps.materialId[i]; composition[id] = (composition[id] || 0) + m;
@@ -33,10 +35,11 @@ export function measurePotion(engine, selections, history, cost = { ingredients:
   const stability = 100 * homogeneity * clamp(1 - Math.sqrt(miscibilityVariance) * 1.5, .2, 1) * liquidMass / mass;
   const activation = clamp(history.activation || 0, 0, 1);
   const potency = 100 * clamp(arcana / mass * (.8 + .2 * activation) * (.55 + .45 * stability / 100), 0, 1);
+  const effects = readEffects(sampled.material);
   return {
     volume, mass, color: sampled.material.color, density: mass / volume,
     viscosity: viscosity / mass, temperature: sampled.temperature,
-    volatility: sampled.material.volatility, stability, potency, liquidFraction: liquidMass / mass,
+    volatility: sampled.material.volatility, stability, potency, ...effects, effects, liquidFraction: liquidMass / mass,
     homogeneity, composition, history: { ...history }, cost: { ...cost },
     phases, phaseMass, sourceMaterialIds: sampled.sourceMaterialIds
   };
@@ -45,6 +48,7 @@ export function measurePotion(engine, selections, history, cost = { ingredients:
 export function propertyDescription(property, value) {
   if (property === 'color') return colourName(value);
   if (!Number.isFinite(value)) return 'Unmeasured';
+  if (EFFECT_DEFINITIONS[property]) return `${value < .005 ? 'Inert' : value < .2 ? 'Trace' : value < .5 ? 'Gentle' : value < .8 ? 'Strong' : 'Intense'} · ${Math.round(value * 100)}%`;
   if (property === 'temperature') return `${value < .26 ? 'Cold' : value < .44 ? 'Room warm' : value < .68 ? 'Warm' : 'Hot'} · ${Math.round(value * 100)}°A`;
   if (property === 'density') return `${value < .9 ? 'Light' : value < 1.25 ? 'Balanced' : 'Heavy'} · ${value.toFixed(2)}`;
   if (property === 'viscosity') return `${value < .25 ? 'Watery' : value < .55 ? 'Silky' : value < .8 ? 'Syrupy' : 'Thick'} · ${Math.round(value * 100)}`;

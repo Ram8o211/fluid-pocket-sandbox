@@ -1,7 +1,8 @@
 import { Phase } from './Phase.mjs';
 import { clamp, hexToRgb } from './math.mjs';
+import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 
-const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId'];
+const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
 
 export class ParticleSystem {
   constructor(capacity=1800){
@@ -15,6 +16,7 @@ export class ParticleSystem {
     this.viscosity=new Float32Array(capacity);this.cohesion=new Float32Array(capacity);this.miscibility=new Float32Array(capacity);this.particleRadius=new Float32Array(capacity);this.incompressible=new Float32Array(capacity);this.heatCapacity=new Float32Array(capacity);this.thermalConductivity=new Float32Array(capacity);
     this.meltingTemperature=new Float32Array(capacity);this.boilingTemperature=new Float32Array(capacity);this.phaseHysteresis=new Float32Array(capacity);this.volatility=new Float32Array(capacity);this.reactionPotential=new Float32Array(capacity);this.reactionHeat=new Float32Array(capacity);this.compressibility=new Float32Array(capacity);
     this.crystallinity=new Float32Array(capacity);this.solidSubdivision=new Float32Array(capacity);this.electricalConductivity=new Float32Array(capacity);this.electricPotential=new Float32Array(capacity);this.combustionTemperature=new Float32Array(capacity);this.combustionProgress=new Float32Array(capacity);
+    this.strength=new Float32Array(capacity);this.love=new Float32Array(capacity);this.death=new Float32Array(capacity);this.transformation=new Float32Array(capacity);this.fire=new Float32Array(capacity);this.freeze=new Float32Array(capacity);this.acidity=new Float32Array(capacity);this.poison=new Float32Array(capacity);
     this.solidLocalX=new Float32Array(capacity);this.solidLocalY=new Float32Array(capacity);this.solidLocalZ=new Float32Array(capacity);
     this.savedDepth=new Float32Array(capacity);this.savedVz=new Float32Array(capacity);this.hasSavedDepth=new Uint8Array(capacity);
     this.materialId=new Int32Array(capacity);this.phase=new Int32Array(capacity);this.cell=new Int32Array(capacity);this.solidBodyId=new Int32Array(capacity);
@@ -32,6 +34,7 @@ export class ParticleSystem {
     this.viscosity[i]=material.viscosity;this.cohesion[i]=material.cohesion;this.miscibility[i]=material.miscibility;this.particleRadius[i]=material.particleRadius;this.incompressible[i]=material.incompressible?1:0;this.heatCapacity[i]=material.heatCapacity;this.thermalConductivity[i]=material.thermalConductivity;
     this.meltingTemperature[i]=material.meltingTemperature;this.boilingTemperature[i]=material.boilingTemperature;this.phaseHysteresis[i]=material.phaseTransitionHysteresis;this.volatility[i]=material.volatility;this.reactionPotential[i]=material.reactionPotential;this.reactionHeat[i]=material.reactionHeat;this.compressibility[i]=material.compressibility;
     this.crystallinity[i]=material.crystallinity;this.solidSubdivision[i]=material.solidSubdivision;this.electricalConductivity[i]=material.electricalConductivity;this.electricPotential[i]=p.electricPotential??material.electricPotential;this.combustionTemperature[i]=material.combustionTemperature;this.combustionProgress[i]=0;
+    for(const key of EFFECT_PROPERTIES)this[key][i]=clamp(Number.isFinite(material[key])?material[key]:0,0,1);
     this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;this.savedDepth[i]=0;this.savedVz[i]=0;this.hasSavedDepth[i]=0;
     return i;
   }
@@ -45,6 +48,7 @@ export class ParticleSystem {
     this.viscosity[i]=material.viscosity;this.cohesion[i]=material.cohesion;this.miscibility[i]=material.miscibility;this.particleRadius[i]=material.particleRadius;this.incompressible[i]=material.incompressible?1:0;this.heatCapacity[i]=material.heatCapacity;this.thermalConductivity[i]=material.thermalConductivity;
     this.meltingTemperature[i]=material.meltingTemperature;this.boilingTemperature[i]=material.boilingTemperature;this.phaseHysteresis[i]=material.phaseTransitionHysteresis;this.volatility[i]=material.volatility;this.reactionPotential[i]=material.reactionPotential;this.reactionHeat[i]=material.reactionHeat;this.compressibility[i]=material.compressibility;
     this.crystallinity[i]=material.crystallinity;this.solidSubdivision[i]=material.solidSubdivision;this.electricalConductivity[i]=material.electricalConductivity;this.electricPotential[i]=material.electricPotential;this.combustionTemperature[i]=material.combustionTemperature;
+    for(const key of EFFECT_PROPERTIES)this[key][i]=clamp(Number.isFinite(material[key])?material[key]:0,0,1);
     this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;return true;
   }
   effectiveDensity(material,phase){ if(phase===Phase.GAS)return Math.max(0.08,material.density*(0.18+0.16*(1-material.compressibility))); if(phase===Phase.SOLID)return material.density*1.08; return material.density; }

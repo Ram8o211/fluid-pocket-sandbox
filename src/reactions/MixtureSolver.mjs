@@ -1,13 +1,14 @@
 import { isCoherentSolid, isPowder, wetPowderPair } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
+import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 
 export const MIX_PROPERTIES = Object.freeze([
   'r', 'g', 'b', 'opacity', 'baseDensity', 'viscosity', 'cohesion', 'miscibility',
   'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity',
   'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility',
   'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity',
-  'solidSubdivision', 'electricalConductivity', 'combustionTemperature'
+  'solidSubdivision', 'electricalConductivity', 'combustionTemperature', ...EFFECT_PROPERTIES
 ]);
 const FIELD_MASK=MIX_PROPERTIES.map(key=>key==='solidSubdivision'?1:['meltingTemperature','boilingTemperature','phaseHysteresis'].includes(key)?2:0);
 
@@ -131,8 +132,11 @@ export class MixtureSolver {
     if (!saved) { ps.mixtureGroup.fill(0); ps.mixtureProgress.fill(0); return; }
     if (!Number.isInteger(saved.nextId) || saved.nextId < 1 || !Array.isArray(saved.groups) || !Array.isArray(saved.materialGroups)) throw new Error('Invalid saved mixtures.');
     for (const g of saved.groups) {
-      if (!Number.isInteger(g.id) || g.id < 1 || g.id >= saved.nextId || this.groups.has(g.id) || !Number.isInteger(g.parent) || !Number.isFinite(g.amount) || g.amount < 0 || !Number.isFinite(g.min) || !Number.isFinite(g.max) || g.min < 0 || g.max > 1 || g.max < g.min || !Array.isArray(g.target) || g.target.length !== MIX_PROPERTIES.length || g.target.some(v => !Number.isFinite(v))) throw new Error('Invalid saved mixture target.');
-      this.groups.set(g.id, { ...g, target: [...g.target] });
+      // Old mixtures contain physical channels only. Their absent magical and
+      // chemical concentrations remain inert when Continue upgrades the save.
+      const target = Array.isArray(g.target) && g.target.length === MIX_PROPERTIES.length - EFFECT_PROPERTIES.length ? [...g.target, ...EFFECT_PROPERTIES.map(() => 0)] : g.target;
+      if (!Number.isInteger(g.id) || g.id < 1 || g.id >= saved.nextId || this.groups.has(g.id) || !Number.isInteger(g.parent) || !Number.isFinite(g.amount) || g.amount < 0 || !Number.isFinite(g.min) || !Number.isFinite(g.max) || g.min < 0 || g.max > 1 || g.max < g.min || !Array.isArray(target) || target.length !== MIX_PROPERTIES.length || target.some(v => !Number.isFinite(v))) throw new Error('Invalid saved mixture target.');
+      this.groups.set(g.id, { ...g, target: [...target] });
     }
     for (const [material, id] of saved.materialGroups) {
       if (!Number.isInteger(material) || material < 1 || !this.root(id)) throw new Error('Invalid saved mixture source.');

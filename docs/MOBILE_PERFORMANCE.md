@@ -24,9 +24,18 @@ texels are always one pixel and actual shop particle footprints are finer. This
 changes neither stock quantities nor measured ingredient mass. Native resolution
 prevents redundant supersampling on ordinary desktop displays.
 
-`npm run benchmark:game` measures liquid, sand and kneaded powder/liquid scenarios
+Magical and chemical concentrations remain typed particle channels transported
+in the same conservative local passes as physical properties. Resource regrowth
+and experimental subject responses run on demand. Magic rendering reuses six
+cached 20×20 light sprites and fixed scratch buffers, with at most 160 halos per
+frame or 48 in battery saver. Adaptive `effectsScale` reduces count and alpha;
+zero disables both halos and foreground shimmer.
+
+`npm run benchmark:game` measures ground-herb infusions, sand and kneaded
+powder/liquid scenarios
 at 60, 200 and 440 ml, including periodic real inspection. It reports median and
 p95 CPU time per 40 Hz step; a step's nominal budget is 25 ms. Benchmark numbers
 are runner measurements rather than guarantees of Android FPS. Browser acceptance
 covers both graphics modes, real gestures, two complete sales, phase transitions,
-powder/paste use and save restoration under a GitHub Pages project path.
+raw grinding, stirring-only liquid dough, experiment dosing, resource depletion,
+separate infinite sandbox saves and restoration under a GitHub Pages project path.

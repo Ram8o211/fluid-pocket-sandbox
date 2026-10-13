@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld, validateWorld } from '../src/game/world.mjs';
+import { generateLiquidWorld } from './helpers/liquid-world.mjs';
 import { BrewingSession } from '../src/game/brewing.mjs';
 import { generateOrder, simulateWitness } from '../src/game/orders.mjs';
 import { assessPotion, toleranceSimilarity, priceSale } from '../src/game/evaluation.mjs';
@@ -10,16 +11,16 @@ import { FIXED_STEP, SAVE_VERSION } from '../src/game/contracts.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { effectiveLiquidViscosity } from '../src/simulation/FluidSolver.mjs';
 
-const world = generateWorld('test-guild');
+const world = generateLiquidWorld('test-guild');
 function setup() { const state = newShop(world); return { state, brew: new BrewingSession(world.ingredients, state.equipment) }; }
 function ticks(brew, n, stir = false) { for (let i = 0; i < n; i++) { if (stir) brew.assistStir(); brew.step(); } }
 const close = (a, b, tolerance = .001) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 
 test('world seeds reproduce all ingredient properties, names and costs', () => {
-  assert.deepEqual(world, generateWorld('test-guild'));
-  assert.notDeepEqual(world.ingredients, generateWorld('another-guild').ingredients);
+  assert.deepEqual(generateWorld('test-guild'), generateWorld('test-guild'));
+  assert.notDeepEqual(generateWorld('test-guild').ingredients, generateWorld('another-guild').ingredients);
 });
-test('120 generated worlds always contain six safe liquids, two powders and compatible mixtures', () => {
+test('120 generated worlds contain valid raw ingredients, solvent and compatible mixtures', () => {
   for (let seed = 0; seed < 120; seed++) assert.ok(validateWorld(generateWorld('world-' + seed).ingredients).valid);
 });
 test('pour transfers exact ml and mass, debits stock, and caps capacity', () => {
@@ -87,6 +88,26 @@ test('bottle excludes solids and does not fabricate missing liquid quantity', ()
   for (let i = 0; i < 80; i++) brew.engine.ps.setPhase(i, Phase.SOLID);
   const sample = brew.bottle(60); close(sample.volume, 40); assert.equal(sample.liquidFraction, 1); assert.equal(brew.engine.ps.count, 80);
   assert.deepEqual(sample.phases, [0, 160, 0]); close(sample.phaseMass[Phase.LIQUID], sample.mass);
+});
+test('experiment sampling leaves undrained raw solids and their preparation expenses in the cauldron', () => {
+  const rawWorld = generateWorld('mixed-phase-dose'), state = newShop(rawWorld);
+  const brew = new BrewingSession(rawWorld.ingredients);
+  brew.pour(1, 20, state.inventory); brew.pour(4, 20, state.inventory);
+  const ps = brew.engine.ps, originalMass = ps.totalMass(), originalCost = { ...brew.cost };
+  const originalPortions = structuredClone(brew.portions);
+  const solidMass = () => Array.from({ length: ps.count }, (_, i) => ps.phase[i] === Phase.SOLID ? ps.mass[i] : 0).reduce((sum, mass) => sum + mass, 0);
+  const residueMass = solidMass(), dose = brew.takeSample(20);
+  close(dose.volume, 20); close(brew.liquidVolume, 0); close(solidMass(), residueMass);
+  close(dose.mass + ps.totalMass(), originalMass); assert.equal(dose.fire, 0);
+  assert.ok(dose.cost.ingredients > 0 && dose.cost.ingredients < originalCost.ingredients);
+  assert.ok(brew.cost.ingredients > 0, 'Raw residue must retain preparation expenses');
+  for (const key of ['ingredients', 'energy']) close(dose.cost[key] + brew.cost[key], originalCost[key]);
+  for (const portion of originalPortions) {
+    const quantity = portions => portions.filter(p => p.ingredientId === portion.ingredientId).reduce((sum, p) => sum + p.ml, 0);
+    close(quantity(dose.portions) + quantity(brew.portions), portion.ml);
+  }
+  const restored = new BrewingSession(rawWorld.ingredients); restored.restore(brew.snapshot());
+  close(restored.engine.ps.totalMass(), residueMass); close(restored.cost.ingredients, brew.cost.ingredients);
 });
 test('overheating creates retained vapour and cooling can solidify a brew', () => {
   const hot = setup(); hot.brew.pour(1, 15, hot.state.inventory); hot.brew.setThermal(1); ticks(hot.brew, 400);
@@ -189,10 +210,13 @@ test('save migrations preserve progress, recover a good backup, reject corrupt a
   const invalid = brew.snapshot(); invalid.count = 30000; assert.throws(() => brew.restore(invalid));
 });
 test('complete repeated commissions through physics, assessment, sale and progression', () => {
-  const { state } = setup();
+  const gameplayWorld = generateWorld('test-guild'), state = newShop(gameplayWorld);
   for (let i = 0; i < 7; i++) {
-    const brew = new BrewingSession(world.ingredients, state.equipment), recipe = state.order.witness;
-    for (const p of recipe.portions) { if (state.inventory[p.ingredientId] < p.ml) restock(state, p.ingredientId, 120); brew.pour(p.ingredientId, p.ml, state.inventory); }
+    const brew = new BrewingSession(gameplayWorld.ingredients, state.equipment), recipe = state.order.witness;
+    for (const p of recipe.portions) {
+      if (state.inventory[p.ingredientId] < p.ml) restock(state, p.ingredientId, 120);
+      brew.pour(p.ingredientId, p.ml, state.inventory, { crushed: Boolean(p.crushed) });
+    }
     for (let tick = 0; tick < recipe.ticks; tick++) { brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0); if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP); brew.step(); }
     state.pendingBottle = brew.bottle(recipe.volume); const sale = completeSale(state);
     assert.equal(sale.quality, 100); assert.ok(sale.profit > 0); assert.equal(state.completed, i + 1);
