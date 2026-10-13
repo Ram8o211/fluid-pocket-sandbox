@@ -6,6 +6,7 @@ import { saveShop, loadShop, encodeSave, decodeSave, SANDBOX_SAVE_KEY } from './
 import { propertyDescription } from './potion.mjs';
 import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
+import { cauldronToolPoint, insideCauldron } from './cauldron.mjs';
 import { icon, bottleSprite, ingredientSprite, naturalLandscapeSprite, experimentSubjectSprite, portraitSprite, workshopBackground } from './art.mjs';
 import { resourceStatus, gatherIngredient } from './gathering.mjs';
 import { runExperiment, resetExperimentSubject, splitPotionSample } from './experiments.mjs';
@@ -139,7 +140,7 @@ function renderTools() {
   $('coolBtn').innerHTML = `${icon('frost')}<span>Frost <small>${brew.cool ? `${Math.round(brew.cool * 100)}%` : 'OFF'}</small></span>`;
   $('coolBtn').classList.toggle('cold', brew.cool > 0); $('coolBtn').setAttribute('aria-label', `Adjust cooling, ${Math.round(brew.cool * 100)} percent`);
   $('stirBtn').innerHTML = `${icon('spoon')}<span>Stir <small>HOLD</small></span>`;
-  $('crushBtn').innerHTML = `${icon('spoon')}<span>Pestle <small>CRUSH</small></span>`;
+  $('crushBtn').innerHTML = `${icon('pestle')}<span>Pestle <small>CRUSH</small></span>`;
   $('crushBtn').classList.toggle('active', tool === 'pestle'); $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle'));
   $('cleanBtn').innerHTML = `${icon('clean')}<span>Clean <small>CAULDRON</small></span>`;
   for (const id of ['heatBtn', 'coolBtn', 'stirBtn', 'crushBtn', 'cleanBtn']) $(id).disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
@@ -456,14 +457,17 @@ function bindUI() {
   window.addEventListener('pointercancel', () => { dragged = null; assist = false; pointer = null; stopPour(); });
   $('labCanvas').onpointerdown = event => {
     if (!brew || state.pendingBottle || state.stage !== 'brewing') return;
+    const point = renderer.screenToWorld(event.clientX, event.clientY);
+    if (!insideCauldron(point.x, point.y)) return;
     event.preventDefault(); $('labCanvas').setPointerCapture(event.pointerId);
-    pointer = { id: event.pointerId, point: renderer.screenToWorld(event.clientX, event.clientY), time: performance.now() };
+    assist = false;
+    pointer = { id: event.pointerId, point: cauldronToolPoint(point), time: performance.now() };
     if (tool === 'pestle') brew.crush(pointer.point);
     renderer.tool = tool; renderer.spoon = pointer.point;
   };
   $('labCanvas').onpointermove = event => {
     if (!pointer || pointer.id !== event.pointerId) return;
-    const now = performance.now(), point = renderer.screenToWorld(event.clientX, event.clientY), dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
+    const now = performance.now(), point = cauldronToolPoint(renderer.screenToWorld(event.clientX, event.clientY)), dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
     if (tool === 'pestle') brew.crush(point);
     else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt, pointer.point);
     renderer.tool = tool;
@@ -474,7 +478,14 @@ function bindUI() {
     if (!brew || state.pendingBottle || state.stage !== 'brewing') return;
     if (event.code === 'Space') { event.preventDefault(); assist = true; }
     const velocities = { ArrowLeft: [-4, 0], ArrowRight: [4, 0], ArrowUp: [0, 4], ArrowDown: [0, -4] };
-    if (velocities[event.key]) { event.preventDefault(); const [x, y] = velocities[event.key]; brew.stir({ x: 0, y: -.8 }, { x, y }, .1); advanceTutorial(); }
+    if (velocities[event.key]) {
+      event.preventDefault(); assist = false;
+      const [x, y] = velocities[event.key], from = renderer.spoon || { x: 0, y: -.8 };
+      const point = cauldronToolPoint({ x: from.x + x * .08, y: from.y + y * .08 });
+      if (tool === 'pestle') brew.crush(point);
+      else brew.stir(point, { x: (point.x - from.x) / .08, y: (point.y - from.y) / .08 }, .08, from);
+      renderer.tool = tool; renderer.spoon = point; advanceTutorial();
+    }
   };
   $('labCanvas').onkeyup = event => { if (event.code === 'Space') assist = false; };
   $('sheetContent').onclick = guard(event => {

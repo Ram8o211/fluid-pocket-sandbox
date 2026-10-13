@@ -188,12 +188,45 @@ try {
   // Freeze a real batch, then crush a touched portion using the visible pestle.
   for (let i = 0; i < 3; i++) await page.locator('#coolBtn').click();
   await page.waitForFunction(solid => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.phase.some(p => p === solid), Phase.SOLID, { timeout: 20000 });
+  // A real spoon stroke must move a touched frozen parcel as well as fluids.
+  // Capture its rounded bowl while held; read only saves made by visible UI.
+  await page.locator('#measureBtn').click(); const beforeSolidStroke = await readSave(page);
+  await page.locator('[data-action="close"]').first().click();
+  const solidTarget = beforeSolidStroke.brew.particles.phase.findIndex(p => p === Phase.SOLID);
+  const spoonBox = await page.locator('#labCanvas').boundingBox();
+  const spoonX = spoonBox.x + (192 + beforeSolidStroke.brew.particles.x[solidTarget] * 40) / 384 * spoonBox.width;
+  const spoonY = spoonBox.y + (158 - beforeSolidStroke.brew.particles.y[solidTarget] * 40) / 232 * spoonBox.height;
+  await page.mouse.move(spoonX, spoonY); await page.mouse.down();
+  await page.mouse.move(spoonX + 14, spoonY - 14, { steps: 5 }); await page.waitForTimeout(80);
+  await page.screenshot({ path: 'test-results/direct-spoon.png', fullPage: true }); await page.mouse.up();
+  await page.locator('#measureBtn').click(); const afterSolidStroke = await readSave(page);
+  assert.ok(afterSolidStroke.brew.history.stirred > beforeSolidStroke.brew.history.stirred, 'pointer contact must stir intact frozen material');
+  assert.ok(Math.hypot(afterSolidStroke.brew.particles.x[solidTarget] - beforeSolidStroke.brew.particles.x[solidTarget],
+    afterSolidStroke.brew.particles.y[solidTarget] - beforeSolidStroke.brew.particles.y[solidTarget]) > .01, 'a touched solid must follow the spoon');
+  await page.locator('[data-action="close"]').first().click();
   await page.locator('#crushBtn').click();
   assert.equal(await page.locator('#crushBtn').getAttribute('aria-pressed'), 'true');
-  const frozen = await readSave(page), target = frozen.brew.particles.phase.findIndex(p => p === Phase.SOLID);
-  const canvasBox = await page.locator('#labCanvas').boundingBox();
-  await page.mouse.click(canvasBox.x + (192 + frozen.brew.particles.x[target] * 40) / 384 * canvasBox.width, canvasBox.y + (158 - frozen.brew.particles.y[target] * 40) / 232 * canvasBox.height);
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles?.solidSubdivision.some(v => v === 1), null, { timeout });
+  // The block is still moving after the spoon stroke. Reacquire an actual
+  // central solid through Inspect for each jab rather than clicking a stale
+  // saved edge parcel and waiting eight seconds for an unrelated autosave.
+  let crushedFrozen = false;
+  for (let jab = 0; jab < 3 && !crushedFrozen; jab++) {
+    await page.locator('#measureBtn').click(); const frozen = await readSave(page);
+    const solids = frozen.brew.particles.phase.map((phase, i) => phase === Phase.SOLID ? i : -1).filter(i => i >= 0);
+    assert.ok(solids.length > 0, 'the frozen batch must contain solid material');
+    solids.sort((a, b) => frozen.brew.particles.x[a] - frozen.brew.particles.x[b]);
+    const target = solids[Math.floor(solids.length / 2)];
+    await page.locator('[data-action="close"]').first().click();
+    const canvasBox = await page.locator('#labCanvas').boundingBox();
+    const x = canvasBox.x + (192 + frozen.brew.particles.x[target] * 40) / 384 * canvasBox.width;
+    const y = canvasBox.y + (158 - frozen.brew.particles.y[target] * 40) / 232 * canvasBox.height;
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.mouse.move(x + 8, y, { steps: 4 }); await page.mouse.up();
+    await page.locator('#measureBtn').click();
+    crushedFrozen = (await readSave(page)).brew.particles.solidSubdivision.some(v => v === 1);
+    await page.locator('[data-action="close"]').first().click();
+  }
+  assert.ok(crushedFrozen, 'the visible pestle must crush touched frozen material');
   await page.screenshot({ path: 'test-results/pestle-powder.png', fullPage: true });
   // Raw stone stays coherent until the player grinds it. Ground stock is a
   // conserved dry powder, and neither reload nor a graphics preset refunds it.

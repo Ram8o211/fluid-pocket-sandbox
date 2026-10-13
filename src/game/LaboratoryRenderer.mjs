@@ -1,6 +1,6 @@
 import { PlanarRenderer } from '../rendering/PlanarRenderer.mjs';
 import { Phase } from '../simulation/Phase.mjs';
-import { workshopBackground, magicGlowSprite } from './art.mjs';
+import { workshopBackground, magicGlowSprite, spoonSprite } from './art.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
 import { MAGIC_PROPERTIES, EFFECT_DEFINITIONS } from './effects.mjs';
@@ -14,6 +14,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
   constructor(canvas, brew) {
     super(canvas, brew.engine); this.brew = brew; this.background = workshopBackground();
     this.quality = 'balanced'; this.spoon = null; this.frame = 0; this.graphics.effectsScale = 1;
+    this.spoonArt = spoonSprite();
     this.magicSprites = MAGIC_PROPERTIES.map(key => magicGlowSprite(EFFECT_DEFINITIONS[key].color));
     this.magicX = new Float32Array(MAGIC_GLOW_LIMIT); this.magicY = new Float32Array(MAGIC_GLOW_LIMIT);
     this.magicType = new Uint8Array(MAGIC_GLOW_LIMIT); this.magicIntensity = new Float32Array(MAGIC_GLOW_LIMIT);
@@ -85,11 +86,11 @@ export class LaboratoryRenderer extends PlanarRenderer {
     }
     if (this.spoon) {
       const x = 192 + this.spoon.x * 40, y = 158 - this.spoon.y * 40;
-      ctx.strokeStyle = '#312237'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + 35, y - 47); ctx.lineTo(x, y); ctx.stroke();
-      ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#cea478'; ctx.lineWidth = 5; ctx.stroke();
-      if (this.tool === 'pestle') { rect(x - 6, y - 5, 12, 13, '#75858d'); rect(x - 4, y - 5, 8, 3, '#ced6ce'); rect(x - 7, y + 5, 14, 3, '#4c5a65'); }
-      // A broad spoon bowl visually matches the expanded stirring footprint.
-      else { rect(x - 16, y - 6, 33, 15, '#e3b784'); rect(x - 12, y + 4, 25, 5, '#ae724d'); }
+      if (this.tool === 'pestle') {
+        ctx.strokeStyle = '#312237'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + 35, y - 47); ctx.lineTo(x, y); ctx.stroke();
+        ctx.strokeStyle = '#a8b4b6'; ctx.lineWidth = 5; ctx.stroke();
+        rect(x - 6, y - 5, 12, 13, '#75858d'); rect(x - 4, y - 5, 8, 3, '#ced6ce'); rect(x - 7, y + 5, 14, 3, '#4c5a65');
+      } else ctx.drawImage(this.spoonArt, Math.round(x) - 18, Math.round(y) - 59);
     }
     ctx.restore(); this.frame++;
   }
