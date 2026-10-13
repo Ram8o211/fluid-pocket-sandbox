@@ -80,7 +80,7 @@ test('combustion heats immediate neighbours before those neighbours ignite on th
   assert.ok(ps.temperature[2] > .5999);
 });
 
-test('20/80 measured amounts drive every property to one target even with unequal ingredient densities', () => {
+test('local diffusion conserves 20/80 measured proportions and stirring homogenizes unequal-density ingredients', () => {
   const ps = new ParticleSystem(10), grid = new SpatialGrid(10), reactions = new ReactionEngine(); reactions.mixtures = new MixtureSolver();
   const a = material({ density: .5 }), b = material({ ...ingredients[1].material, density: 1.5 });
   for (let i = 0; i < 10; i++) { const m = i < 2 ? a : b; ps.add({ x: i < 2 ? -1.5 : 1.5, y: 0, z: 0, mass: m.density, temperature: .33 }, m); }
@@ -92,7 +92,7 @@ test('20/80 measured amounts drive every property to one target even with unequa
   assert.equal(ps.materialId[1], ps.materialId[2]); // Canonicalization must not stop homogenization.
   for (let i = 0; i < 10; i++) ps.x[i] = -.8 + i * .18;
   grid.rebuild(ps, box);
-  for (let frame = 0; frame < 1200; frame++) reactions.step(ps, grid, rules, .025);
+  for (let frame = 0; frame < 1200; frame++) { ps.stirActivity.fill(1); reactions.step(ps, grid, rules, .025); }
   for (let i = 0; i < ps.count; i++) for (let k = 0; k < MIX_PROPERTIES.length; k++) close(ps[MIX_PROPERTIES[k]][i], expected[k], .002);
   close(ps.r[0], .8, .002); close(ps.baseDensity[0], 1.3, .002); close(ps.totalMass(), 13);
   close([...ps.mass].reduce((v, m, i) => v + m / ps.density[i], 0), 10, .002);

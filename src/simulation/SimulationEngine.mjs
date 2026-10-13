@@ -61,11 +61,24 @@ export class SimulationEngine{
   resizeBox(width,height,depth){const mode=this.env.dimensionMode==='2D'?'2D':'3D',next=cleanBox({width,height,depth},this.boxByMode[mode]);this.boxByMode[mode]={...next};this.env.box={...next};this.ps.clampToBox(this.env.box);this.grid.configure(this.env.box);}
   addMold(point,size='M'){return this.molds.add(point,size,this.env.box);}
   clearMolds(){this.molds.clear();}
-  emit(materialId,position,count=16,temperature,spread=1){const m=this.materials.get(materialId);if(!m)return 0;let added=0;const planar=this.env.dimensionMode==='2D',placementTemperature=Number.isFinite(temperature)?temperature:this.env.ambientTemperature,phase=placementTemperature>m.boilingTemperature+m.phaseTransitionHysteresis?Phase.GAS:(placementTemperature<m.meltingTemperature-m.phaseTransitionHysteresis?Phase.SOLID:Phase.LIQUID);for(let n=0;n<count;n++){const a=n*2.399963,r=(.05+.035*Math.sqrt(n))*spread,x=position.x+Math.cos(a)*r,y=planar?position.y+Math.sin(a)*r:position.y+(n%4)*.035*spread,z=planar?0:position.z+Math.sin(a)*r,i=this.ps.add({x,y,z,mass:1,temperature:placementTemperature},m,phase);if(i>=0){added++;if(phase===Phase.SOLID)this.solid.initializeParticle(this.ps,i,planar);}else break;}return added;}
+  emit(materialId,position,count=16,temperature,spread=1){const m=this.materials.get(materialId);if(!m)return 0;let added=0;const emissionOffset=this.ps.count,planar=this.env.dimensionMode==='2D',placementTemperature=Number.isFinite(temperature)?temperature:this.env.ambientTemperature,phase=placementTemperature>m.boilingTemperature+m.phaseTransitionHysteresis?Phase.GAS:(placementTemperature<m.meltingTemperature-m.phaseTransitionHysteresis?Phase.SOLID:Phase.LIQUID);for(let n=0;n<count;n++){const a=(n+emissionOffset)*2.399963,r=(.05+.035*Math.sqrt(n))*spread,x=position.x+Math.cos(a)*r,y=planar?position.y+Math.sin(a)*r:position.y+(n%4)*.035*spread,z=planar?0:position.z+Math.sin(a)*r,i=this.ps.add({x,y,z,mass:1,temperature:placementTemperature},m,phase);if(i>=0){added++;if(phase===Phase.SOLID)this.solid.initializeParticle(this.ps,i,planar);}else break;}return added;}
   erase(point,radius=.6){return this.ps.removeInSphere(point,radius);}
   applyHeat(point,radius,amount){const r2=radius*radius;let affected=0,totalDelta=0;for(let i=0;i<this.ps.count;i++){const dx=this.ps.x[i]-point.x,dy=this.ps.y[i]-point.y,dz=this.ps.z[i]-point.z,d2=dx*dx+dy*dy+dz*dz;if(d2<r2){const before=this.ps.temperature[i],weight=1-Math.sqrt(d2)/radius;this.ps.temperature[i]=clamp(before+amount*weight,0,1.2);if(this.ps.temperature[i]!==before){affected++;totalDelta+=this.ps.temperature[i]-before;}}}return{affected,totalDelta};}
   step(dt){
     if(this.paused)return;dt=clamp(dt,1/120,1/24);this.time+=dt;this.stepIndex++;const planar=this.env.dimensionMode==='2D',profile=performanceProfileFor(this.ps.count,this.env.dimensionMode);this.performance=profile;const fluidIterations=Math.min(this.iterations,profile.fluidIterations);
+    // Keep gravity, sand contacts, phase progress and spoon response at 40 Hz.
+    // Fine local transport uses its full elapsed time at 10–20 Hz in large
+    // bowls, instead of competing with collision work on every display tick.
+    if(this.env.mobileContactBudget){const stride=this.ps.count>1200?4:this.ps.count>480?2:1;profile.reactionStride=Math.max(profile.reactionStride,stride);profile.thermalStride=Math.max(profile.thermalStride,stride);}
+    // Revalidate every resting grain against *current* contacts. A removed or
+    // moving support wakes it immediately. Supported sand must not be pushed
+    // into its neighbours by fresh gravity penetration on every static tick.
+    if(this.ps.grainRest.subarray(0,this.ps.count).some(v=>v)){
+      this.grid.rebuild(this.ps,this.env.box);
+      this.solid.prepareGranularCache(this.ps,planar);
+      for(let i=0;i<this.ps.count;i++)if(this.ps.grainRest[i])this.ps.grainRest[i]=this.solid.settleGranularParticle(this.ps,this.grid,i,this.env,this.gravity,0,planar)?1:0;
+      this.solid.grainCachePS=null;
+    }
     this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider);this.molds.collide(this.ps,planar);this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);
     if(this.rules.densityDrivenCondensation)updateGasDensity(this.ps,this.grid,this.rules,this.env);
     for(let i=0;i<this.ps.count;i++)applyBuoyancy(this.ps,i,this.gravity,this.env,dt);
@@ -73,8 +86,10 @@ export class SimulationEngine{
     let changes=0,hasSolid=false;for(let i=0;i<this.ps.count;i++){const change=updatePhaseParticle(this.ps,i,dt,this.rules,this.env);if(change){changes++;if(change.from===Phase.SOLID&&change.to===Phase.LIQUID)this.solid.onMelt(this.ps,i);else if(change.to===Phase.SOLID){if(this.solid.compactFreezing&&change.from===Phase.LIQUID)this.ps.solidSubdivision[i]=0;this.solid.initializeParticle(this.ps,i,planar,this.grid);}}if(this.ps.phase[i]===Phase.SOLID)hasSolid=true;}
     let positionsDirty=false;if(hasSolid){this.solid.step(this.ps,this.grid,this.env,this.gravity,dt);this.fluid.collideBox(this.ps,this.env.box,planar);positionsDirty=true;}if(this.molds.molds.length||this.molds.barriers.size){this.molds.collide(this.ps,planar);positionsDirty=true;}if(positionsDirty){this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);}
     if(this.stepIndex%profile.electricalStride===0)updateElectrical(this.ps,this.grid,this.rules,dt*profile.electricalStride);
-    if(this.stepIndex%profile.reactionStride===0)this.reactions.step(this.ps,this.grid,this.rules,dt*profile.reactionStride,(ps,i,j,a,b)=>this.resolveFusion(ps,i,j,a,b));else this.reactions.clearFrame();
+    const reactionOffset=this.env.mobileContactBudget&&profile.reactionStride>1?Math.floor(profile.reactionStride/2):0;
+    if(this.stepIndex%profile.reactionStride===reactionOffset)this.reactions.step(this.ps,this.grid,this.rules,dt*profile.reactionStride,(ps,i,j,a,b)=>this.resolveFusion(ps,i,j,a,b));else this.reactions.clearFrame();
     updatePowderDissolution(this.ps,dt);
+    const stirringDecay=Math.exp(-dt*12);for(let i=0;i<this.ps.count;i++)this.ps.stirActivity[i]=this.ps.stirActivity[i]<.025?0:this.ps.stirActivity[i]*stirringDecay;
     if(this.stepIndex%profile.combustionStride===0)this.combustion.step(this.ps,this.grid,this.materials,this.rules,this.env,dt*profile.combustionStride,m=>this.resolveCombustionProducts(m),(index,isPlanar)=>this.solid.initializeParticle(this.ps,index,isPlanar,this.grid),(x,y,z,intensity,thermal)=>this.reactions.pushEvent(x,y,z,intensity,thermal));else this.combustion.resetFrame();
     this.sanitize(this.stepIndex%profile.clampStride===0);this.boundaryCollider?.();this.stats.reactions=this.reactions.activeReactions+this.combustion.events;this.stats.combustions=this.combustion.events;this.stats.combustionMass=this.combustion.massConsumed;this.stats.gridCells=this.grid.cellCount;this.stats.phaseChanges=changes;this.stats.performanceTier=profile.tier;
   }

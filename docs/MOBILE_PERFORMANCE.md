@@ -1,9 +1,32 @@
-# Mobile Performance
+# Mobile performance
 
-The renderer uses raw WebGL `POINTS` for matter plus a small pooled reaction-effects point cloud. No particle is an independent mesh.
+The shop uses 2,304 fixed particle slots. Four parcels represent each ml, so a
+full upgraded 440 ml cauldron contains 1,760 particles. The original sandbox
+retains its separate defaults and graphics presets.
 
-The simulation uses typed SoA buffers, integer grid linked lists and fixed capacity. There is no global O(N²) neighbor search. The hot update loop avoids per-particle object creation. Reaction events are stored in fixed TypedArrays.
+Physics collisions, gravity, phase progress and spoon response run at 40 Hz.
+Large bowls integrate local heat and composition transport at 10–20 Hz using the
+full elapsed time. Heat and chemistry run on staggered ticks. Dynamic and swept
+sand contacts are never skipped by generic pair decimation; supported, stationary
+grain pairs avoid redundant collision work after their supports are revalidated.
 
-Simulation runs at 40 Hz with a fixed timestep; render runs at display cadence. LOW/MEDIUM/HIGH map to 1/2/3 position-relaxation iterations and different visual budgets. Automatic quality observes smoothed frame time and can drop from MEDIUM/HIGH to LOW without deleting matter.
+The hot paths use typed buffers, cached radii/viscosity, actual-distance filtering
+before neighbour callbacks and contact-sized granular queries. Uniform thermal
+fields and neutral charge fields avoid unnecessary pair passes. Spatial-grid heads
+allocate on demand instead of reserving the maximum 3D lattice: a shop now uses
+about 5.7 KB for its grid heads rather than about 6 MB. Granular angle scratch and
+transport buffers are reused.
 
-The storage ceiling is 1,800 particles. The initial demo targets roughly 420–450 particles because the current CPU solver benchmark rises sharply past ~500 particles. HIGH is therefore experimental on mid-range phones. Future optimization should merge neighbor traversals for fluid/thermal/reaction work, move selected grid reductions to a worker, and consider WebGL2/WebGPU compute-like paths only if device coverage justifies them.
+Matter paints into one reusable RGBA layer and uses a single canvas upload/draw
+per frame, replacing many per-texel drawing calls and colour strings. Crisp mode
+follows screen density up to 768×464; battery mode uses 384×232 at 30 FPS. Material
+texels are always one pixel and actual shop particle footprints are finer. This
+changes neither stock quantities nor measured ingredient mass. Native resolution
+prevents redundant supersampling on ordinary desktop displays.
+
+`npm run benchmark:game` measures liquid, sand and kneaded powder/liquid scenarios
+at 60, 200 and 440 ml, including periodic real inspection. It reports median and
+p95 CPU time per 40 Hz step; a step's nominal budget is 25 ms. Benchmark numbers
+are runner measurements rather than guarantees of Android FPS. Browser acceptance
+covers both graphics modes, real gestures, two complete sales, phase transitions,
+powder/paste use and save restoration under a GitHub Pages project path.

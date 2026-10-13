@@ -1,9 +1,9 @@
 import { PlanarRenderer } from '../rendering/PlanarRenderer.mjs';
-import { isPowder } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { workshopBackground } from './art.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
+import { paintMaterialParticles } from './MaterialRaster.mjs';
 
 // Reuses the existing planar renderer's particle colours, effects and picking
 // contract. The laboratory is a low-resolution, pixel-scaled 2D canvas only.
@@ -13,7 +13,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
     this.quality = 'balanced'; this.spoon = null; this.frame = 0; this.resize(true);
   }
   resize() {
-    const scale = this.quality === 'eco' ? .5 : 1;
+    const scale = this.quality === 'eco' ? 1 : Math.min(2, Math.max(1, globalThis.devicePixelRatio || 1));
     if (this.canvas.width !== 384 * scale) { this.canvas.width = 384 * scale; this.canvas.height = 232 * scale; }
   }
   transform() { const factor = this.canvas.width / 384; return { w: this.canvas.width, h: this.canvas.height, scale: 40 * factor, cx: 192 * factor, cy: 158 * factor }; }
@@ -106,33 +106,18 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.restore();
   }
   drawFluid(ctx, t) {
-    const ps = this.sim.ps, c = this.colorScratch;
-    for (let i = 0; i < ps.count; i++) {
-      this.particleColor(ps, i, c);
-      const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
-      const phase=ps.phase[i],dryGrain=isPowder(ps,i)&&ps.powderContent[i]>.85;
-      // Each material now consists of 1-2 screen-pixel texels instead of the
-      // old 6x6 squares. Scale both the footprint and texels with ECO mode:
-      // 2px at 384x232 and 1px at 192x116 represent the same visible detail.
-      const size=Math.max(1,Math.round(effectiveParticleRadius(ps,i,true)*t.scale*.9));
-      const tile=Math.max(1,Math.min(2,Math.round(t.scale/40*2)));
-      const variation=dryGrain?.13:phase===Phase.SOLID?.07:phase===Phase.GAS?.04:.025;
-      ctx.globalAlpha=phase===Phase.GAS?.24:phase===Phase.LIQUID?.94:.98;
-      for(let oy=-size;oy<size;oy+=tile)for(let ox=-size;ox<size;ox+=tile){
-        const hash=((i*67+ox*23+oy*41)>>>0)%11-5;
-        const v=1+variation*hash/5;
-        ctx.fillStyle=`rgb(${Math.max(0,Math.min(255,Math.round(c.r*v)))},${Math.max(0,Math.min(255,Math.round(c.g*v)))},${Math.max(0,Math.min(255,Math.round(c.b*v)))})`;
-        ctx.fillRect(x+ox,y+oy,Math.min(tile,size-ox),Math.min(tile,size-oy));
-      }
-      // One-pixel grit/highlights preserve the medieval pixel-art texture
-      // without enlarging the physical grains or creating hollow powder piles.
-      if(dryGrain){
-        ctx.globalAlpha=.5;ctx.fillStyle=`rgb(${Math.round(c.r*.64)},${Math.round(c.g*.64)},${Math.round(c.b*.64)})`;
-        ctx.fillRect(x+(i%2),y-1,1,1);
-      }else if(phase===Phase.SOLID){ctx.globalAlpha=.28;ctx.fillStyle='#c1d9d2';ctx.fillRect(x,y,1,1);}
-      else if(phase===Phase.LIQUID&&i%16===0){ctx.globalAlpha=.14;ctx.fillStyle='#e6f9e1';ctx.fillRect(x,y-size,1,1);}
+    if (!this.matterLayer) {
+      this.matterLayer = this.canvas.ownerDocument.createElement('canvas');
+      this.matterContext = this.matterLayer.getContext('2d');
     }
-    ctx.globalAlpha=1;
+    if (this.matterLayer.width !== t.w || this.matterLayer.height !== t.h || !this.matterPixels) {
+      this.matterLayer.width = t.w; this.matterLayer.height = t.h;
+      this.matterPixels = this.matterContext.createImageData(t.w, t.h);
+    }
+    this.drawCount = paintMaterialParticles(this.sim.ps, t, this.matterPixels.data,
+      (ps, i, out) => this.particleColor(ps, i, out), this.colorScratch);
+    this.matterContext.putImageData(this.matterPixels, 0, 0);
+    ctx.globalAlpha = 1; ctx.drawImage(this.matterLayer, 0, 0);
   }
 }
 

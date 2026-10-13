@@ -12,6 +12,19 @@ test('pair grid visits each candidate pair once without mirrored duplicates',()=
   assert.equal(pairs.length,6);assert.equal(seen.size,6);
 });
 
+test('grid allocates compact heads and preserves pair coverage while storage grows across dimension changes',()=>{
+  const ps=new ParticleSystem(8),grid=new SpatialGrid(8,64),m=generateMaterial(321,1);
+  let visits=0;grid.forEachPair(ps,.55,()=>visits++);assert.equal(visits,0);
+  for(let i=0;i<4;i++)ps.add({x:i*.08,y:0,z:0},m);
+  grid.setDimensionMode('2D');grid.rebuild(ps,{width:5.6,height:3.2,depth:3});
+  assert.ok(grid.head.byteLength<65536,'a small planar bowl must not allocate a giant 3D grid');
+  const pairs=()=>{const seen=new Set();grid.forEachPair(ps,.55,(i,j)=>seen.add([i,j].sort((a,b)=>a-b).join(':')));return seen.size;};
+  assert.equal(pairs(),6);
+  grid.setDimensionMode('3D');grid.rebuild(ps,{width:20,height:20,depth:12});assert.equal(pairs(),6);
+  ps.z[3]=2;grid.rebuild(ps,{width:20,height:20,depth:12});assert.equal(pairs(),3);
+  ps.z.fill(0);grid.setDimensionMode('2D');grid.rebuild(ps,{width:5.6,height:3.2,depth:3});assert.equal(pairs(),6);
+});
+
 test('large-particle scheduler preserves full fidelity at normal counts and decimates expensive passes only when needed',()=>{
   const normal=performanceProfileFor(1200,'3D'),large=performanceProfileFor(2000,'3D'),huge=performanceProfileFor(3200,'3D'),massive=performanceProfileFor(6000,'3D'),planarDense=performanceProfileFor(2000,'2D');
   assert.equal(normal.tier,'FULL');assert.equal(normal.thermalStride,1);assert.equal(normal.reactionStride,1);assert.equal(normal.electricalStride,1);

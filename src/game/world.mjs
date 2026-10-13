@@ -28,7 +28,7 @@ export function generateStarterPowders(seed) {
       combustionTemperature: 1.2, particleRadius: .105, incompressible: true, opacity: 1
     });
     return { id, name: material.name, material, price: .09 + i * .015, starter: true, form: 'powder',
-      lore: i ? 'A dry mineral dust. Blends with the wild nectar; other extracts remain separate.' : 'A fine apothecary powder. Add a little gentle extract for dough, or more to dissolve it slowly.' };
+      lore: i ? 'A dry mineral dust. Stir with wild nectar to knead it; other extracts remain separate.' : 'A fine apothecary powder. Stir with gentle extract for thick dough; more solvent gradually thins it.' };
   });
 }
 

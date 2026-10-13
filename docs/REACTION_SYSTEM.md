@@ -22,16 +22,24 @@ High compatibility plus high property distance produces strong flash/impulse fee
 
 Each contacting pair moves local particle properties toward a mass-weighted mean. The engine does not mutate a shared global material definition during contact, preventing remote matter from changing. When local particle vectors become sufficiently close, the pair may canonicalize to one material ID.
 
-The shop additionally enables `MixtureSolver`: first physical contact joins
-compatible source families and fixes their target using measured amounts of the entire
-remaining mixture. Contact activation propagates locally from neighbours using a
-previous-frame field; colour and all mixing channels relax smoothly toward that
-target, including after local material IDs canonicalize. An inactive remote
-parcel keeps its current properties. Warmth and movement accelerate relaxation.
-Original affinity envelopes prevent averaged affinities or bridging ingredients
-from admitting incompatible sources. New stock, representative drains and
-combustion update the remaining source weights; saves preserve targets and local
-progress. Reactive potential/heat targets follow chemistry's current state.
+The shop enables `MixtureSolver` for conservative, double-buffered diffusion.
+Only touching neighbours exchange colour and properties; separating them stops
+transport immediately. Per-edge fluxes use the parcels' conserved ml amounts,
+so the eventual homogeneous colour retains the full 20/80 proportions even with
+unequal densities. Degree normalization keeps dense contact graphs bounded and
+pair-order independent. Material-ID canonicalization does not stop transport.
+Warmth accelerates diffusion; recent local spoon work adds a stronger multiplier.
+
+Source-family affinity envelopes and saved membership prevent bridging an
+incompatible species through an averaged affinity. Batch targets remain legacy
+save metadata and are never used to paint remote particles. Transport adds to the
+current reaction state rather than restoring consumed potential from a target.
+
+Hydration exchanges conserved dry mass only at compatible, mechanically stirred
+condensed contacts. The solvent's melting threshold and gradual kneading progress
+are saved. Kneaded grains become a highly viscous liquid suspension, with no
+rigid body or spring links; additional stirred solvent reduces its concentration.
+Gas cannot hydrate grains, and frozen coherent matter cannot be mixed directly.
 
 Thermal conduction and combustion propagation read a common temperature state
 for each solver tick. Pair enumeration order cannot transfer heat across an

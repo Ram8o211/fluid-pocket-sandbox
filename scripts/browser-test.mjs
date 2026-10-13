@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { Phase } from '../src/simulation/Phase.mjs';
@@ -10,9 +10,10 @@ import { Phase } from '../src/simulation/Phase.mjs';
 const live = process.env.SITE_URL;
 const base = live ? new URL(live).href : 'http://127.0.0.1:4176/fluid-pocket-sandbox/';
 const server = live ? null : spawn(process.execPath, ['scripts/dev-server.mjs'], { stdio: 'ignore', env: { ...process.env, PORT: '4176', BASE_PATH: '/fluid-pocket-sandbox' } });
-let browser;
+let browser, failurePage;
 const errors = [], failedResponses = [];
 const timeout = 15000;
+const phaseTimeout = 30000;
 async function readSave(page) { return page.evaluate(() => JSON.parse(localStorage.getItem('alchemists-shop-save'))); }
 async function clickDose(page, amount) {
   await page.locator(`[data-dose="${amount}"]`).click();
@@ -42,6 +43,7 @@ try {
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-webgl', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1, serviceWorkers: 'allow' });
   const page = await context.newPage();
+  failurePage=page;
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('response', response => { if (response.status() >= 400) failedResponses.push(response.url()); });
@@ -126,19 +128,25 @@ try {
   // warns the player, and blocks bottling until cooling completes the phase loop.
   const massBeforeBoiling = beforeReload.brew.particles.mass.reduce((sum, mass) => sum + mass, 0);
   await page.locator('#heatBtn').click();
-  await page.waitForFunction(() => /ML STEAM/.test(document.querySelector('#labStatus').textContent), null, { timeout });
+  await page.waitForFunction(() => /ML STEAM/.test(document.querySelector('#labStatus').textContent), null, { timeout:phaseTimeout });
   assert.equal(await page.locator('#bottleBtn').isDisabled(), true);
   assert.match(await page.locator('#bottleBtn').textContent(), /Wait for condensation/);
   assert.match(await page.locator('#labHint').textContent(), /Steam is trapped/);
   // Continue heating until the actual persisted vapour reaches the lid. This
   // catches a dense cloud that has lost its lift despite still being labelled gas.
-  await page.waitForFunction(gasPhase => {
-    const particles = JSON.parse(localStorage.getItem('alchemists-shop-save'))?.brew?.particles;
-    return particles?.phase.some((phase, i) => phase === gasPhase && particles.y[i] > .8 && particles.localGasDensity[i] > 0);
-  }, Phase.GAS, { timeout });
+  // Observe the current state through Inspect. The eight-second autosave can
+  // miss a brief boiling window in a fine batch before prolonged heat burns it.
+  let lifted=false;const liftDeadline=Date.now()+phaseTimeout;
+  while(!lifted&&Date.now()<liftDeadline){
+    await page.waitForTimeout(200);await page.locator('#measureBtn').click();
+    const particles=(await readSave(page)).brew.particles;
+    lifted=particles.phase.some((phase,i)=>phase===Phase.GAS&&particles.y[i]>.8&&particles.localGasDensity[i]>0);
+    await page.locator('[data-action="close"]').click();
+  }
+  assert.ok(lifted,'hot vapour must rise to the lid');
   await page.screenshot({ path: 'test-results/retained-steam.png', fullPage: true });
   await page.locator('#coolBtn').click();
-  await page.waitForFunction(() => !/ML STEAM/.test(document.querySelector('#labStatus').textContent), null, { timeout });
+  await page.waitForFunction(() => !/ML STEAM/.test(document.querySelector('#labStatus').textContent), null, { timeout:phaseTimeout });
   for (let i = 0; i < 3; i++) await page.locator('#coolBtn').click();
   const condensed = await readSave(page);
   assert.equal(condensed.brew.history.evaporated, 0); assert.ok(condensed.brew.history.condensed > 0);
@@ -173,6 +181,27 @@ try {
   await page.screenshot({path:'test-results/default-powder-eco.png',fullPage:true});
   await page.locator('#settingsBtn').click();await page.locator('#graphicsSetting').selectOption('balanced');await page.locator('[data-action="close"]').click();
   await page.screenshot({path:'test-results/default-powder.png',fullPage:true});
+  // Solvent resting against sand does not make dough. Only spoon work can
+  // hydrate grains into a thick liquid suspension; that phase survives reload.
+  await page.locator('[data-ingredient="1"]').click();await page.locator('#pourBtn').click();await page.waitForTimeout(2500);
+  await page.locator('#measureBtn').click();const untouched=await readSave(page);
+  assert.equal(untouched.brew.particles.phase.filter(p=>p===Phase.SOLID).length,80);
+  assert.ok(untouched.brew.particles.powderContent.filter(p=>p>0).every(p=>p===1),'flow alone cannot knead powder');
+  await page.locator('[data-action="close"]').click();
+  if(await page.locator('#crushBtn').getAttribute('aria-pressed')==='true')await page.locator('#crushBtn').click();
+  let kneaded;const kneadDeadline=Date.now()+phaseTimeout;
+  do {
+    const spoon=await page.locator('#stirBtn').boundingBox();
+    await page.mouse.move(spoon.x+spoon.width/2,spoon.y+spoon.height/2);await page.mouse.down();await page.waitForTimeout(1800);await page.mouse.up();
+    await page.locator('#measureBtn').click();kneaded=await readSave(page);
+    await page.locator('[data-action="close"]').click();
+  } while(kneaded.brew.particles.phase.filter(p=>p===Phase.LIQUID).length<=80&&Date.now()<kneadDeadline);
+  assert.ok(kneaded.brew.particles.phase.filter(p=>p===Phase.LIQUID).length>80,'stirring must form true liquid dough');
+  assert.ok(kneaded.brew.particles.powderContent.some((p,i)=>p>.27&&p<.935&&kneaded.brew.particles.phase[i]===Phase.LIQUID));
+  await page.screenshot({path:'test-results/kneaded-dough.png',fullPage:true});
+  await page.reload();await page.locator('#continueBtn').click();
+  const doughReload=await readSave(page);assert.ok(doughReload.brew.particles.phase.filter(p=>p===Phase.LIQUID).length>80);
+  assert.equal(doughReload.brew.particles.solventMeltingTemperature.length,doughReload.brew.count);
   await page.locator('#inventoryBtn').click();assert.match(await page.locator('#sheetContent').textContent(),/powder/);
   await page.locator('[data-restock="10"]').click();await page.locator('[data-action="close"]').click();
   assert.equal((await readSave(page)).inventory[10],280);
@@ -187,5 +216,8 @@ try {
   assert.ok((await page.locator('#materialSelect').textContent()).length > 5);
   await page.screenshot({ path: 'test-results/original-sandbox.png', fullPage: true });
   assert.deepEqual(failedResponses, [], 'Missing deployment assets'); assert.deepEqual(errors, [], 'Browser initialization/runtime errors');
-  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, liquid settling, retained steam and condensation, pestle, default dry powder, both graphics presets, powder refill and save/restore, touch, mobile/desktop and original sandbox.`);
+  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, real pour/stir/heat/frost, liquid settling, retained steam and condensation, pestle, default sand, stirring-only liquid dough, fine pixels in both graphics presets, powder refill and save/restore, touch, mobile/desktop and original sandbox.`);
+} catch(error) {
+  try {await mkdir('test-results',{recursive:true});await failurePage.screenshot({path:'test-results/browser-failure.png',fullPage:true});await writeFile('test-results/browser-failure-save.json',JSON.stringify(await readSave(failurePage)));if(await failurePage.locator('#sheet').evaluate(e=>e.open))await failurePage.locator('[data-action="close"]').click();if(await failurePage.locator('#menuBtn').isVisible())await failurePage.locator('#menuBtn').click();await writeFile('test-results/browser-failure-save.json',JSON.stringify(await readSave(failurePage)));} catch { /* Preserve the original assertion. */ }
+  throw error;
 } finally { if (browser) await browser.close(); if (server) server.kill('SIGTERM'); }

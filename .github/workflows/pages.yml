@@ -45,7 +45,7 @@ jobs:
           curl --fail --silent --show-error --location --retry 10 --retry-delay 6 -o /tmp/pages-index.html "${SITE_URL}?probe=${GITHUB_SHA}"
           grep -F 'href="./public/game.css' /tmp/pages-index.html
           grep -F 'src="./src/game/main.mjs' /tmp/pages-index.html
-          for asset in public/game.css src/game/main.mjs src/game/brewing.mjs src/simulation/GasDensitySolver.mjs src/simulation/PowderSolver.mjs sandbox.html styles.css public/base.css public/desktop.css public/fixes.css src/app/main.mjs public/manifest.webmanifest sw.js; do
+          for asset in public/game.css src/game/main.mjs src/game/brewing.mjs src/game/MaterialRaster.mjs src/simulation/GasDensitySolver.mjs src/simulation/PowderSolver.mjs sandbox.html styles.css public/base.css public/desktop.css public/fixes.css src/app/main.mjs public/manifest.webmanifest sw.js; do
             curl --fail --silent --show-error --location --retry 10 --retry-delay 6 -o /tmp/asset "${SITE_URL}${asset}?probe=${GITHUB_SHA}"
             test -s /tmp/asset
           done

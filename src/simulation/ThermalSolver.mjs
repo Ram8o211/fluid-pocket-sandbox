@@ -14,11 +14,14 @@ const workspaces = new WeakMap();
 export function updateThermal(ps,grid,rules,env,dt){
   const count=ps.count,temp=ps.temperature,conductivity=ps.thermalConductivity,heatCapacity=ps.heatCapacity,mass=ps.mass,phase=ps.phase,gasDensity=ps.localGasDensity;
   const ambient=env.ambientTemperature,diffusion=Math.max(0,rules.thermalDiffusionRate??.7);
+  let minTemperature=Infinity,maxTemperature=-Infinity;
   for(let i=0;i<count;i++){
     let t=temp[i];
     if(phase[i]===Phase.GAS)t-=condensationCooling(gasDensity[i],rules.condensationDensityThreshold,rules.condensationCoolingCoefficient)*dt;
     const ambientFraction=1-Math.exp(-Math.max(0,conductivity[i])*diffusion*dt*.08*Math.max(0,env.ambientThermalExchange??1));t+=(ambient-t)*ambientFraction;temp[i]=clamp(t,0,1.2);
+    minTemperature=Math.min(minTemperature,temp[i]);maxTemperature=Math.max(maxTemperature,temp[i]);
   }
+  if(diffusion<=0||minTemperature===maxTemperature)return;
   let buffers = workspaces.get(ps);
   if (!buffers || buffers.delta.length < count) {
     const edges = Math.max(16, count * 16);
@@ -29,7 +32,7 @@ export function updateThermal(ps,grid,rules,env,dt){
   delta.fill(0, 0, count); weight.fill(0, 0, count);
   for(let i=0;i<count;i++)capacity[i]=Math.max(.00001,heatCapacity[i]*mass[i]);
   let edges = 0;
-  const x=ps.x,y=ps.y,z=ps.z,radius=.55*clamp(rules.interactionRadiusScale??1,.4,1),r2=radius*radius;
+  const x=ps.x,y=ps.y,z=ps.z,radius=.55*clamp(rules.interactionRadiusScale??1,.4,1)*(ps.packingScale??1),r2=radius*radius;
   // Read one temperature field for both passes. A neighbour's newly received
   // heat is available on the next thermal tick, independent of grid ordering.
   grid.forEachPair(ps,radius,(i,j)=>{
