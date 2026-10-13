@@ -1,5 +1,6 @@
 import { clamp, saturate } from '../simulation/math.mjs';
-import { isCoherentSolid } from '../simulation/PowderSolver.mjs';
+import { isCoherentSolid, isPowder } from '../simulation/PowderSolver.mjs';
+import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 
 export function thermalMixingMultiplier(ps, i, j, coefficient = 0) {
@@ -11,18 +12,34 @@ export function thermalMixingMultiplier(ps, i, j, coefficient = 0) {
 export class ReactionEngine {
   /** @type {import('./MixtureSolver.mjs').MixtureSolver | null} */
   mixtures = null;
-  constructor(){this.activeReactions=0;this.maxEvents=64;this.eventCount=0;this.eventX=new Float32Array(this.maxEvents);this.eventY=new Float32Array(this.maxEvents);this.eventZ=new Float32Array(this.maxEvents);this.eventIntensity=new Float32Array(this.maxEvents);this.eventThermal=new Float32Array(this.maxEvents);}
+  constructor(){this.activeReactions=0;this.maxEvents=64;this.eventCount=0;this.eventX=new Float32Array(this.maxEvents);this.eventY=new Float32Array(this.maxEvents);this.eventZ=new Float32Array(this.maxEvents);this.eventIntensity=new Float32Array(this.maxEvents);this.eventThermal=new Float32Array(this.maxEvents);this.radii=new Float32Array(0);}
   clearFrame(){this.eventCount=0;this.activeReactions=0;}
   pushEvent(x,y,z,intensity,thermal=0){if(this.eventCount>=this.maxEvents)return;const i=this.eventCount++;this.eventX[i]=x;this.eventY[i]=y;this.eventZ[i]=z;this.eventIntensity[i]=intensity;this.eventThermal[i]=thermal;}
   step(ps,grid,rules,dt,onFuse=null){
     this.clearFrame();const radius=.5*clamp(rules.interactionRadiusScale??1,.4,1),r2=radius*radius,x=ps.x,y=ps.y,z=ps.z,materialId=ps.materialId;
     this.mixtures?.beginFrame(ps);
     const thermalThreshold=clamp(rules.thermalReactionThreshold??.72,0,1.95),thermalStrength=Math.max(0,rules.thermalReactionStrength??1.15);
-    grid.forEachPair(ps,radius,(i,j)=>{
+    let searchRadius=radius;
+    if(this.mixtures){
+      if(this.radii.length<ps.capacity)this.radii=new Float32Array(ps.capacity);
+      let maxRadius=0,gas=false,minPotential=Infinity,maxPotential=-Infinity,minTemperature=Infinity,maxTemperature=-Infinity;
+      for(let i=0;i<ps.count;i++){
+        this.radii[i]=effectiveParticleRadius(ps,i,grid.dimensionMode==='2D');maxRadius=Math.max(maxRadius,this.radii[i]);gas=gas||ps.phase[i]===Phase.GAS;
+        minPotential=Math.min(minPotential,ps.reactionPotential[i]);maxPotential=Math.max(maxPotential,ps.reactionPotential[i]);
+        minTemperature=Math.min(minTemperature,ps.temperature[i]);maxTemperature=Math.max(maxTemperature,ps.temperature[i]);
+      }
+      // Only pigment/solubility work needs the fine contact neighbourhood in
+      // an ordinary batch. Keep the full reach whenever heat shock, opposed
+      // potentials or gas can actually use that larger radius.
+      if(!gas&&maxPotential-minPotential<=thermalThreshold&&maxTemperature-minTemperature<=.35)searchRadius=Math.min(radius,Math.max(.07*(ps.packingScale??1)*1.6,maxRadius*3.2));
+    }
+    grid.forEachPair(ps,searchRadius,(i,j)=>{
       if(materialId[i]===materialId[j] && !this.mixtures)return;
       const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],d2=dx*dx+dy*dy+dz*dz;if(d2>r2)return;
-      const contact=saturate(1-Math.sqrt(d2)/radius),potentialDelta=Math.abs(ps.reactionPotential[i]-ps.reactionPotential[j]);
-      const mixtureCompatibility=this.mixtures ? (rules.baseMixingRate>0 ? this.mixtures.contact(ps,i,j,contact,rules.miscibilityThreshold,dt) : 0) : undefined;
+      const distance=Math.sqrt(d2),contact=saturate(1-distance/radius),potentialDelta=Math.abs(ps.reactionPotential[i]-ps.reactionPotential[j]);
+      const scale=ps.packingScale??1,mixingReach=!this.mixtures||ps.phase[i]===Phase.GAS||ps.phase[j]===Phase.GAS?radius:Math.min(radius,clamp(this.radii[i]+this.radii[j],.07*scale,.44*scale)*(isPowder(ps,i)||isPowder(ps,j)?1.12:1.6));
+      const mixingContact=distance<=mixingReach?contact:0;
+      const mixtureCompatibility=this.mixtures ? (rules.baseMixingRate>0&&mixingContact>0 ? this.mixtures.contact(ps,i,j,mixingContact,rules.miscibilityThreshold,dt,rules) : 0) : undefined;
       if(materialId[i]===materialId[j]||isCoherentSolid(ps,i)||isCoherentSolid(ps,j))return;
       let reacted=false,thermalEvent=0,visual=0;
       if(potentialDelta>thermalThreshold){
@@ -47,8 +64,10 @@ export class ReactionEngine {
   mixPair(ps,i,j,t,rules,onFuse=null){
     const mi=ps.mass[i],mj=ps.mass[j],total=Math.max(1e-6,mi+mj),wi=mi/total,wj=mj/total;
     const blend=(arr)=>{const mean=arr[i]*wi+arr[j]*wj;arr[i]+=(mean-arr[i])*t;arr[j]+=(mean-arr[j])*t;};
-    for(const arr of [ps.r,ps.g,ps.b,ps.opacity,ps.baseDensity,ps.viscosity,ps.cohesion,ps.miscibility,ps.particleRadius,ps.incompressible,ps.heatCapacity,ps.thermalConductivity,ps.meltingTemperature,ps.boilingTemperature,ps.volatility,ps.reactionPotential,ps.reactionHeat,ps.compressibility,ps.crystallinity,ps.electricalConductivity,ps.combustionTemperature])blend(arr);
-    if(ps.phase[i]!==Phase.SOLID&&ps.phase[j]!==Phase.SOLID)blend(ps.solidSubdivision);
+    if(!this.mixtures){
+      for(const arr of [ps.r,ps.g,ps.b,ps.opacity,ps.baseDensity,ps.viscosity,ps.cohesion,ps.miscibility,ps.particleRadius,ps.incompressible,ps.heatCapacity,ps.thermalConductivity,ps.meltingTemperature,ps.boilingTemperature,ps.volatility,ps.reactionPotential,ps.reactionHeat,ps.compressibility,ps.crystallinity,ps.electricalConductivity,ps.combustionTemperature])blend(arr);
+      if(ps.phase[i]!==Phase.SOLID&&ps.phase[j]!==Phase.SOLID)blend(ps.solidSubdivision);
+    }
     ps.density[i]=ps.effectiveDensityAt(i);ps.density[j]=ps.effectiveDensityAt(j);
     if(this.particleDistance(ps,i,j)<rules.canonicalizationDistance){const a=ps.materialId[i],b=ps.materialId[j],fused=onFuse?.(ps,i,j,a,b);const id=Number.isFinite(fused)&&fused>0?fused:Math.min(a,b);ps.materialId[i]=id;ps.materialId[j]=id;}
   }

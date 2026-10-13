@@ -1,11 +1,11 @@
 import { Phase } from './Phase.mjs';
 import { clamp, hexToRgb } from './math.mjs';
 
-const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId'];
+const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId'];
 
 export class ParticleSystem {
   constructor(capacity=1800){
-    this.capacity=capacity; this.count=0;
+    this.capacity=capacity; this.count=0;this.packingScale=1;this.volumePacking=false;
     this.x=new Float32Array(capacity);this.y=new Float32Array(capacity);this.z=new Float32Array(capacity);
     this.px=new Float32Array(capacity);this.py=new Float32Array(capacity);this.pz=new Float32Array(capacity);
     this.vx=new Float32Array(capacity);this.vy=new Float32Array(capacity);this.vz=new Float32Array(capacity);
@@ -18,14 +18,14 @@ export class ParticleSystem {
     this.solidLocalX=new Float32Array(capacity);this.solidLocalY=new Float32Array(capacity);this.solidLocalZ=new Float32Array(capacity);
     this.savedDepth=new Float32Array(capacity);this.savedVz=new Float32Array(capacity);this.hasSavedDepth=new Uint8Array(capacity);
     this.materialId=new Int32Array(capacity);this.phase=new Int32Array(capacity);this.cell=new Int32Array(capacity);this.solidBodyId=new Int32Array(capacity);
-    this.powderContent=new Float32Array(capacity);this.dissolutionProgress=new Float32Array(capacity);this.mixtureGroup=new Int32Array(capacity);this.mixtureProgress=new Float32Array(capacity);this.mixtureAmount=new Float32Array(capacity);
+    this.powderContent=new Float32Array(capacity);this.dissolutionProgress=new Float32Array(capacity);this.solventMeltingTemperature=new Float32Array(capacity);this.stirActivity=new Float32Array(capacity);this.grainRest=new Uint8Array(capacity);this.mixtureGroup=new Int32Array(capacity);this.mixtureProgress=new Float32Array(capacity);this.mixtureAmount=new Float32Array(capacity);
   }
   add(p,material,phase=Number(Phase.LIQUID)){
     if(this.count>=this.capacity)return -1; const i=this.count++;
     this.x[i]=this.px[i]=p.x; this.y[i]=this.py[i]=p.y; this.z[i]=this.pz[i]=p.z;
     this.vx[i]=p.vx||0; this.vy[i]=p.vy||0; this.vz[i]=p.vz||0; this.mass[i]=p.mass||1;
     this.materialId[i]=material.id; this.temperature[i]=p.temperature??.33; this.phase[i]=phase; this.phaseProgress[i]=0;
-    this.powderContent[i]=phase===Phase.SOLID&&material.solidSubdivision>=.55?1:0;this.dissolutionProgress[i]=0;
+    this.powderContent[i]=phase===Phase.SOLID&&material.solidSubdivision>=.55?1:0;this.dissolutionProgress[i]=0;this.solventMeltingTemperature[i]=material.meltingTemperature;this.stirActivity[i]=0;this.grainRest[i]=0;
     this.mixtureGroup[i]=0;this.mixtureProgress[i]=0;
     this.mixtureAmount[i]=this.mass[i]/Math.max(.04,material.density);
     this.baseDensity[i]=material.density; this.density[i]=this.effectiveDensity(material,phase); const [r,g,b]=hexToRgb(material.color); this.r[i]=r;this.g[i]=g;this.b[i]=b;this.opacity[i]=material.opacity;
@@ -38,7 +38,7 @@ export class ParticleSystem {
   assignMaterial(i,material,phase=this.phase[i],temperature=this.temperature[i]){
     if(i<0||i>=this.count)return false;
     this.materialId[i]=material.id;this.temperature[i]=temperature;this.phase[i]=phase;this.phaseProgress[i]=0;this.combustionProgress[i]=0;
-    this.powderContent[i]=phase===Phase.SOLID&&material.solidSubdivision>=.55?1:0;this.dissolutionProgress[i]=0;
+    this.powderContent[i]=phase===Phase.SOLID&&material.solidSubdivision>=.55?1:0;this.dissolutionProgress[i]=0;this.solventMeltingTemperature[i]=material.meltingTemperature;this.stirActivity[i]=0;this.grainRest[i]=0;
     this.mixtureGroup[i]=0;this.mixtureProgress[i]=0;
     this.mixtureAmount[i]=this.mass[i]/Math.max(.04,material.density);
     this.baseDensity[i]=material.density;this.density[i]=this.effectiveDensity(material,phase);const [r,g,b]=hexToRgb(material.color);this.r[i]=r;this.g[i]=g;this.b[i]=b;this.opacity[i]=material.opacity;
@@ -49,7 +49,7 @@ export class ParticleSystem {
   }
   effectiveDensity(material,phase){ if(phase===Phase.GAS)return Math.max(0.08,material.density*(0.18+0.16*(1-material.compressibility))); if(phase===Phase.SOLID)return material.density*1.08; return material.density; }
   effectiveDensityAt(i,phase=this.phase[i]){ const base=this.baseDensity[i]; if(phase===Phase.GAS)return Math.max(.08,base*(.18+.16*(1-this.compressibility[i]))); if(phase===Phase.SOLID)return base*1.08; return base; }
-  setPhase(i,phase){ this.phase[i]=phase;this.phaseProgress[i]=0;this.density[i]=this.effectiveDensityAt(i,phase); }
+  setPhase(i,phase){ this.phase[i]=phase;this.phaseProgress[i]=0;this.grainRest[i]=0;this.density[i]=this.effectiveDensityAt(i,phase); }
   clampToBox(box,padding=0.09){ const hx=box.width/2-padding,hy=box.height/2-padding,hz=box.depth/2-padding; for(let i=0;i<this.count;i++){this.x[i]=clamp(this.x[i],-hx,hx);this.y[i]=clamp(this.y[i],-hy,hy);this.z[i]=clamp(this.z[i],-hz,hz);} }
   removeAt(index){
     if(index<0||index>=this.count)return false;

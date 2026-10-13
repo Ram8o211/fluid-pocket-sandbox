@@ -8,6 +8,7 @@ import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
 import { effectiveParticleRadius, particlePairRestDistance } from '../src/simulation/FluidSolver.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
+import { paintMaterialParticles } from '../src/game/MaterialRaster.mjs';
 import { FIXED_STEP, SAVE_VERSION } from '../src/game/contracts.mjs';
 import { insideCauldron, cauldronParticlePadding, confineCauldronParticle, cauldronGranularWallSupport } from '../src/game/cauldron.mjs';
 
@@ -44,7 +45,7 @@ test('different density liquids settle into touching layers across the bowl and 
   const b=new BrewingSession(liquids());b.pour(2,40,{2:100});for(let n=0;n<200;n++)b.step();
   b.pour(1,40,{1:100});const ps=b.engine.ps,mass=ps.totalMass();for(let n=0;n<400;n++)b.step();
   const mean=id=>{let sum=0,count=0;for(let i=0;i<ps.count;i++)if(ps.materialId[i]===id){sum+=ps.y[i];count++;}return sum/count;};
-  assert.ok(mean(2)<mean(1)-.1,'heavier liquid stays lower');
+  assert.ok(mean(2)<mean(1)-.1*ps.packingScale,'heavier liquid stays lower');
   for(const x of [-.6,-.3,0,.3,.6]){
     let gap=Infinity;
     for(let i=0;i<ps.count;i++)for(let j=0;j<ps.count;j++)if(ps.materialId[i]===1&&ps.materialId[j]===2&&Math.abs(ps.x[i]-x)<.16&&Math.abs(ps.x[j]-x)<.16)
@@ -65,7 +66,7 @@ test('new heavy liquid poured onto a settled light layer sinks and closes the in
   // the previous 1.15-diameter cutoff left the denser layer on top indefinitely.
   for(let n=0;n<1600;n++)b.step();
   const mean=id=>{let total=0,count=0;for(let i=0;i<ps.count;i++)if(ps.materialId[i]===id){total+=ps.y[i];count++;}return total/count;};
-  assert.ok(mean(2)<mean(1)-.08,`heavy layer stranded above light: heavy=${mean(2)} light=${mean(1)}`);
+  assert.ok(mean(2)<mean(1)-.08*ps.packingScale,`heavy layer stranded above light: heavy=${mean(2)} light=${mean(1)}`);
   let contactGap=Infinity;
   for(let i=0;i<ps.count;i++)if(ps.materialId[i]===1)
     for(let j=0;j<ps.count;j++)if(ps.materialId[j]===2)
@@ -90,8 +91,8 @@ test('powder contacts have zero restitution, dissipate slip and never attract se
   ps.add({x:0,y:0,z:0,mass:.25,vx:1,vy:.7},powder,Phase.SOLID);
   ps.add({x:.095,y:0,z:0,mass:.25,vx:-1,vy:-.7},powder,Phase.SOLID);
   ps.solidSubdivision[0]=ps.solidSubdivision[1]=1;
-  const rest=particlePairRestDistance(ps,0,1,true);
-  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,.095,FIXED_STEP,true,b.engine.rules);
+  const rest=particlePairRestDistance(ps,0,1,true);ps.x[1]=ps.px[1]=rest*.9;
+  b.engine.fluid.solvePowderPair(ps,0,1,1,0,0,rest*.9,FIXED_STEP,true,b.engine.rules);
   assert.ok(ps.vx[1]-ps.vx[0]>=-.000001,'no residual approaching velocity');
   assert.ok(ps.vx[1]-ps.vx[0]<.000001,'impact cannot generate separation speed');
   assert.ok(Math.abs(ps.vy[1]-ps.vy[0])<1.4,'friction must dissipate lateral slip');
@@ -170,9 +171,9 @@ test('the cauldron stops downward powder impacts with no rebound and supports re
 });
 
 test('sand avalanches down steep single-grain supports but wet dough resists',()=>{
-  const b=new BrewingSession(generateWorld('sand-angle').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10);
+  const b=new BrewingSession(generateWorld('sand-angle').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10),fixtureScale=ps.packingScale/Math.pow(material.density,1/2);
   ps.add({x:0,y:0,z:0,mass:.25},material,Phase.SOLID);
-  ps.add({x:.06,y:-.08,z:0,mass:.25},material,Phase.SOLID);
+  ps.add({x:.06*fixtureScale,y:-.08*fixtureScale,z:0,mass:.25},material,Phase.SOLID);
   e.grid.rebuild(ps,e.env.box);
   // A 37-degree off-centre support is steeper than the ~27-degree
   // dry angle of repose, so gravity makes the upper grain slide to the left.
@@ -189,14 +190,14 @@ test('sand avalanches down steep single-grain supports but wet dough resists',()
 });
 
 test('3D sand remains still when supported on opposite depth-facing sides',()=>{
-  const b=new BrewingSession(generateWorld('sand-depth-support').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10);
+  const b=new BrewingSession(generateWorld('sand-depth-support').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10),fixtureScale=ps.packingScale/Math.pow(material.density,1/3);
   ps.add({x:0,y:0,z:0,mass:.25},material,Phase.SOLID);
-  ps.add({x:.07,y:0,z:-.10,mass:.25},material,Phase.SOLID);
+  ps.add({x:.07*fixtureScale,y:0,z:-.10*fixtureScale,mass:.25},material,Phase.SOLID);
   const gravity={x:0,y:0,z:-4.5};
   e.grid.setDimensionMode('3D');e.grid.rebuild(ps,e.env.box);
   e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
   assert.ok(ps.vx[0]<-.001,'an unbraced 3D contact should allow a downhill grain to slide');
-  ps.add({x:-.07,y:0,z:-.10,mass:.25},material,Phase.SOLID);
+  ps.add({x:-.07*fixtureScale,y:0,z:-.10*fixtureScale,mass:.25},material,Phase.SOLID);
   ps.vx[0]=ps.vy[0]=ps.vz[0]=0;
   e.grid.rebuild(ps,e.env.box);
   e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
@@ -205,17 +206,17 @@ test('3D sand remains still when supported on opposite depth-facing sides',()=>{
 });
 
 test('3D supports on the same downhill side cannot pin a sand grain',()=>{
-  const b=new BrewingSession(generateWorld('sand-support-cone').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10);
+  const b=new BrewingSession(generateWorld('sand-support-cone').ingredients),e=b.engine,ps=e.ps,material=e.materials.get(10),fixtureScale=ps.packingScale/Math.pow(material.density,1/3);
   ps.add({x:0,y:0,z:0,mass:.25},material,Phase.SOLID);
-  ps.add({x:.04,y:-.09,z:.07,mass:.25},material,Phase.SOLID);
-  ps.add({x:.04,y:-.09,z:-.07,mass:.25},material,Phase.SOLID);
+  ps.add({x:.04*fixtureScale,y:-.09*fixtureScale,z:.07*fixtureScale,mass:.25},material,Phase.SOLID);
+  ps.add({x:.04*fixtureScale,y:-.09*fixtureScale,z:-.07*fixtureScale,mass:.25},material,Phase.SOLID);
   const gravity={x:0,y:-4.5,z:0};
   e.grid.setDimensionMode('3D');e.grid.rebuild(ps,e.env.box);
   e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
   assert.ok(ps.vx[0]<-.001,
     'two oblique contacts on the same downhill side must not hold sand at rest');
   // A genuine third contact on the opposite side encloses the load.
-  ps.add({x:-.08,y:-.09,z:0,mass:.25},material,Phase.SOLID);
+  ps.add({x:-.08*fixtureScale,y:-.09*fixtureScale,z:0,mass:.25},material,Phase.SOLID);
   ps.vx[0]=ps.vy[0]=ps.vz[0]=0;
   e.grid.rebuild(ps,e.env.box);
   e.solid.settleGranularParticle(ps,e.grid,0,e.env,gravity,FIXED_STEP,false);
@@ -229,14 +230,15 @@ test('all potion materials use fine pixel footprints at both graphics resolution
   ps.add({x:0,y:0,z:0,mass:.25},liquid,Phase.LIQUID);
   ps.add({x:.3,y:0,z:0,mass:.25},powder,Phase.SOLID);
   ps.add({x:-.3,y:0,z:0,mass:.25},liquid,Phase.GAS);
-  const draws=[],ctx={globalAlpha:1,fillStyle:'',fillRect(...args){draws.push(args);}};
-  const renderer={sim:b.engine,colorScratch:{r:0,g:0,b:0},particleColor(_ps,_i,out){out.r=180;out.g=140;out.b=100;}};
-  for(const [scale,maxSize] of [[40,4],[20,2]]){
-    draws.length=0;
-    LaboratoryRenderer.prototype.drawFluid.call(renderer,ctx,{cx:192,cy:158,scale});
-    assert.ok(draws.length>=ps.count,'every material phase should be visible');
-    assert.ok(draws.every(([, ,w,h])=>w>0&&h>0&&w<=maxSize&&h<=maxSize),
-      `oversized material pixel at scale ${scale}: ${JSON.stringify(draws)}`);
+  for(const scale of [40,80]){
+    const t={w:scale*10,h:scale*6,cx:scale*5,cy:scale*3,scale},pixels=new Uint8ClampedArray(t.w*t.h*4);
+    const count=paintMaterialParticles(ps,t,pixels,(_ps,_i,out)=>{out.r=180;out.g=140;out.b=100;},{r:0,g:0,b:0});
+    assert.equal(count,ps.count,'every material phase should be visible');
+    for(let i=0;i<ps.count;i++){
+      const x=Math.round(t.cx+ps.x[i]*scale),y=Math.round(t.cy-ps.y[i]*scale);
+      assert.ok(pixels[(y*t.w+x)*4+3]>0,'the parcel centre must be drawn');
+      assert.notEqual(pixels[(y*t.w+x-1)*4],pixels[(y*t.w+x)*4], 'material shading resolves individual one-pixel texels');
+    }
   }
 });
 

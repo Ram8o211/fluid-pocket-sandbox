@@ -1,4 +1,4 @@
-import { isCoherentSolid, wetPowderPair } from '../simulation/PowderSolver.mjs';
+import { isCoherentSolid, isPowder, wetPowderPair } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
 
@@ -9,13 +9,18 @@ export const MIX_PROPERTIES = Object.freeze([
   'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity',
   'solidSubdivision', 'electricalConductivity', 'combustionTemperature'
 ]);
+const FIELD_MASK=MIX_PROPERTIES.map(key=>key==='solidSubdivision'?1:['meltingTemperature','boilingTemperature','phaseHysteresis'].includes(key)?2:0);
 
-/** Composition targets belong to a compatible mixture, never to a contacting
- * pair or a canonical material ID. Only the local contact front activates a
- * parcel's relaxation. Targets remain fixed while that front is propagating,
- * so a minority ingredient cannot bias the final mean by mixing earlier. */
+// Groups retain the original affinity envelope and saved source proportions.
+// Transport itself is local: no parcel ever relaxes to a batch-wide target.
+// Double-buffered, conservative edge fluxes advance only one contact per tick.
 export class MixtureSolver {
-  constructor() { this.reset(); this.previous = this.signal = new Float32Array(0); }
+  constructor() {
+    this.reset(); this.previous = this.signal = new Float32Array(0);
+    this.channels = []; this.before = []; this.delta = []; this.weight = new Float64Array(0);
+    this.left = this.right = new Uint32Array(0); this.fraction = new Float32Array(0); this.edgeCount = 0;
+    this.rightFraction=new Float32Array(0);this.edgeMask=new Uint8Array(0);this.signature=new Int32Array(0);this.activeFields=[];
+  }
   reset() { this.groups = new Map(); this.materialGroups = new Map(); this.nextId = 1; }
   root(id) {
     let group = this.groups.get(id);
@@ -24,7 +29,21 @@ export class MixtureSolver {
     return group;
   }
   beginFrame(ps) {
-    if (this.previous.length < ps.capacity) { this.previous = new Float32Array(ps.capacity); this.signal = new Float32Array(ps.capacity); }
+    if (this.previous.length < ps.capacity) {
+      this.previous = new Float32Array(ps.capacity); this.signal = new Float32Array(ps.capacity); this.weight = new Float64Array(ps.capacity);
+      this.before = MIX_PROPERTIES.map(() => new Float32Array(ps.capacity));
+      this.delta = MIX_PROPERTIES.map(() => new Float64Array(ps.capacity));
+      this.left = new Uint32Array(ps.capacity * 12); this.right = new Uint32Array(ps.capacity * 12); this.fraction = new Float32Array(ps.capacity * 12);
+      this.rightFraction=new Float32Array(ps.capacity*12);this.edgeMask=new Uint8Array(ps.capacity*12);this.signature=new Int32Array(ps.capacity);
+    }
+    this.channels = MIX_PROPERTIES.map(key => ps[key]); this.weight.fill(0, 0, ps.count); this.edgeCount = 0;
+    this.signature.fill(2166136261,0,ps.count);this.activeFields.length=0;
+    for (let k = 0; k < MIX_PROPERTIES.length; k++) {
+      const values=this.before[k];values.set(this.channels[k].subarray(0, ps.count));this.delta[k].fill(0,0,ps.count);
+      const bits=new Int32Array(values.buffer);let first=values[0],varied=false;
+      for(let i=0;i<ps.count;i++){this.signature[i]=Math.imul(this.signature[i]^bits[i],16777619);varied=varied||values[i]!==first;}
+      if(varied)this.activeFields.push(k);
+    }
     this.previous.set(ps.mixtureProgress.subarray(0, ps.count)); this.signal.fill(0, 0, ps.count);
     for (const group of this.groups.values()) group.amount = 0;
     // Count remaining parcels before adding fresh stock; partial bottling and
@@ -44,13 +63,17 @@ export class MixtureSolver {
       ps.mixtureGroup[i] = group.id; ps.mixtureProgress[i] = this.previous[i] = 0;
     }
   }
-  contact(ps, i, j, contact, threshold, dt=0) {
+  contact(ps, i, j, contact, threshold, dt=0, rules=null) {
     if (isCoherentSolid(ps,i) || isCoherentSolid(ps,j)) return 0;
     const a = this.root(ps.mixtureGroup[i]), b = this.root(ps.mixtureGroup[j]);
     const delta = Math.max(a.max, b.max) - Math.min(a.min, b.min);
     // Preserve the original affinity envelope. A bridging third ingredient or
     // an averaged affinity cannot quietly admit incompatible source fluids.
     if (delta >= threshold || threshold <= 0) return 0;
+    const compatibility=clamp(1-delta/threshold,0,1),work=Math.max(ps.stirActivity[i],ps.stirActivity[j]);
+    // Resting solvent cannot convert sand into a suspension. Its grains keep
+    // their phase properties until an actual spoon stroke kneads the contact.
+    if (((isPowder(ps,i)&&ps.phase[j]===Phase.LIQUID)||(isPowder(ps,j)&&ps.phase[i]===Phase.LIQUID))&&work<.025)return 0;
     wetPowderPair(ps,i,j,contact,dt);
     const joined = a.id !== b.id;
     if (joined) {
@@ -58,33 +81,45 @@ export class MixtureSolver {
       for (let k = 0; k < MIX_PROPERTIES.length; k++) a.target[k] = (a.target[k] * a.amount + b.target[k] * b.amount) / amount;
       a.amount = amount; a.min = Math.min(a.min, b.min); a.max = Math.max(a.max, b.max); b.parent = a.id;
     }
-    const distinct = joined || ps.materialId[i] !== ps.materialId[j]
-      || Math.abs(ps.r[i] - ps.r[j]) + Math.abs(ps.g[i] - ps.g[j]) + Math.abs(ps.b[i] - ps.b[j]) > .001;
+    const distinct = joined || this.signature[i]!==this.signature[j];
     this.signal[i] = Math.max(this.signal[i], contact * (distinct ? 1 : this.previous[j]));
     this.signal[j] = Math.max(this.signal[j], contact * (distinct ? 1 : this.previous[i]));
-    return clamp(1 - delta / threshold, 0, 1);
+    if(this.signature[i]===this.signature[j])return compatibility;
+    const warmth=Math.max(0,(ps.temperature[i]+ps.temperature[j])*.5-.33);
+    const thermal=Math.exp(clamp(warmth*(rules?.mixingTemperatureCoefficient??0),0,1.4));
+    const rate=(rules?.baseMixingRate??2.2)*Math.pow(compatibility,rules?.mixingExponent??1.7)*contact*thermal*(1+work*18);
+    const fraction=1-Math.exp(-rate*dt);
+    if(fraction>0){
+      if(this.edgeCount===this.left.length){const grow=old=>{const next=new old.constructor(old.length*2);next.set(old);return next;};this.left=grow(this.left);this.right=grow(this.right);this.fraction=grow(this.fraction);this.rightFraction=grow(this.rightFraction);this.edgeMask=grow(this.edgeMask);}
+      const n=this.edgeCount++,a=ps.mixtureAmount[i],b=ps.mixtureAmount[j],sum=Math.max(.00001,a+b);
+      this.left[n]=i;this.right[n]=j;this.fraction[n]=fraction;
+      this.edgeMask[n]=(ps.phase[i]===Phase.SOLID||ps.phase[j]===Phase.SOLID?1:0)|(isPowder(ps,i)||isPowder(ps,j)?2:0);
+      this.weight[i]+=fraction*b/sum;this.weight[j]+=fraction*a/sum;
+    }
+    return compatibility;
   }
   finishFrame(ps, rules, dt) {
-    // These two channels are also consumed by reactive chemistry. Their target
-    // follows the current conserved reaction state instead of restoring fuel.
-    const reactive = [MIX_PROPERTIES.indexOf('reactionPotential'), MIX_PROPERTIES.indexOf('reactionHeat')];
-    for (const group of this.groups.values()) if (group.id === group.parent) for (const k of reactive) group.target[k] = 0;
-    for (let i = 0; i < ps.count; i++) {
-      const group = this.root(ps.mixtureGroup[i]);
-      for (const k of reactive) group.target[k] += ps[MIX_PROPERTIES[k]][i] * ps.mixtureAmount[i] / Math.max(.00001, group.amount);
+    for(let n=0;n<this.edgeCount;n++){
+      const i=this.left[n],j=this.right[n],a=ps.mixtureAmount[i],b=ps.mixtureAmount[j],sum=Math.max(.00001,a+b);
+      const f=this.fraction[n]/Math.max(1,this.weight[i],this.weight[j]);
+      this.fraction[n]=b/sum*f;this.rightFraction[n]=a/sum*f;
+    }
+    // Add flux to the live fields so chemistry consumed during this tick is
+    // preserved rather than replaced by an old reconstruction target.
+    for(const k of this.activeFields){
+      const before=this.before[k],values=this.channels[k],delta=this.delta[k],mask=FIELD_MASK[k];
+      for(let n=0;n<this.edgeCount;n++){
+        if(this.edgeMask[n]&mask)continue;
+        const i=this.left[n],j=this.right[n],difference=before[j]-before[i];
+        delta[i]+=difference*this.fraction[n];delta[j]-=difference*this.rightFraction[n];
+      }
+      for(let i=0;i<ps.count;i++)values[i]+=delta[i];
     }
     for (let i = 0; i < ps.count; i++) {
-      if (isCoherentSolid(ps,i)) continue;
       const group = this.root(ps.mixtureGroup[i]);
       ps.mixtureGroup[i] = group.id;
       const progress = ps.mixtureProgress[i] + (1 - ps.mixtureProgress[i]) * (1 - Math.exp(-4 * this.signal[i] * dt));
       ps.mixtureProgress[i] = progress;
-      if (progress <= 0) continue;
-      const warmth = Math.max(0, ps.temperature[i] - .33);
-      const thermal = Math.exp(clamp(warmth * (rules.mixingTemperatureCoefficient ?? 0), 0, 1.4));
-      const motion = 1 + Math.min(2, Math.hypot(ps.vx[i], ps.vy[i], ps.vz[i]) * .3);
-      const fraction = 1 - Math.exp(-1.8 * Math.max(0, rules.baseMixingRate / 2.2) * progress * thermal * motion * dt);
-      for (let k = 0; k < MIX_PROPERTIES.length; k++) { if (MIX_PROPERTIES[k]==='solidSubdivision' && ps.phase[i]===Phase.SOLID) continue; const values = ps[MIX_PROPERTIES[k]]; values[i] += (group.target[k] - values[i]) * fraction; }
       ps.density[i] = ps.effectiveDensityAt(i);
     }
   }

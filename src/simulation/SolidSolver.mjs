@@ -8,9 +8,15 @@ const LATTICE_SPACING=.34;
 function quantized(value,spacing){return Math.round(value/spacing)*spacing;}
 
 export class SolidSolver{
-  constructor(){this.compactFreezing=false;this.nextBodyId=1;this.bodyOrigins=new Map();}
+  constructor(){this.compactFreezing=false;this.nextBodyId=1;this.bodyOrigins=new Map();this.grainCachePS=null;this.grainRadii=new Float32Array(0);this.maxGrainRadius=0;this.supportAngles=[];}
+  prepareGranularCache(ps,planar){
+    if(this.grainRadii.length<ps.capacity)this.grainRadii=new Float32Array(ps.capacity);
+    this.maxGrainRadius=0;
+    for(let i=0;i<ps.count;i++)if(ps.phase[i]===Phase.SOLID){this.grainRadii[i]=effectiveParticleRadius(ps,i,planar);this.maxGrainRadius=Math.max(this.maxGrainRadius,this.grainRadii[i]);}
+    this.grainCachePS=ps;
+  }
   reset(){this.nextBodyId=1;this.bodyOrigins.clear();}
-  onMelt(ps,i){ps.powderContent[i]=0;ps.dissolutionProgress[i]=0;ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
+  onMelt(ps,i){ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
   initializeParticle(ps,i,planar=false,grid=null){
     if(ps.phase[i]!==Phase.SOLID)return 0;
     if(ps.solidSubdivision[i]>=.55){ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;return 0;}
@@ -27,11 +33,13 @@ export class SolidSolver{
   }
   step(ps,grid,env,gravity,dt){
     const planar=env.dimensionMode==='2D',groups=new Map();
+    this.prepareGranularCache(ps,planar);
     for(let i=0;i<ps.count;i++){
       if(ps.phase[i]!==Phase.SOLID)continue;
       if(ps.solidSubdivision[i]<.55&&ps.solidBodyId[i]<=0)this.initializeParticle(ps,i,planar,grid);
-      const id=ps.solidBodyId[i];if(id>0){let g=groups.get(id);if(!g){g=[];groups.set(id,g);}g.push(i);}else this.settleGranularParticle(ps,grid,i,env,gravity,dt,planar);
+      const id=ps.solidBodyId[i];if(id>0){let g=groups.get(id);if(!g){g=[];groups.set(id,g);}g.push(i);}else ps.grainRest[i]=this.settleGranularParticle(ps,grid,i,env,gravity,dt,planar)?1:0;
     }
+    this.grainCachePS=null;
     if(this.compactFreezing){
       // Weld only touching coherent solids. Remote islands and crushed powder
       // stay independent; preserve current offsets when two freeze fronts meet.
@@ -73,37 +81,43 @@ export class SolidSolver{
     // grains use dry friction and move ONLY if their local slope exceeds the
     // angle of repose. No spring or neighbour velocity averaging is applied.
     const gLen=Math.hypot(gravity.x,gravity.y,planar?0:gravity.z);
-    if(gLen<1e-8)return;
+    if(gLen<1e-8)return false;
     const gx=gravity.x/gLen,gy=gravity.y/gLen,gz=planar?0:gravity.z/gLen;
-    const powder=ps.powderContent[i],wet=doughStrength(powder),mu=.50+wet*.55;
+    const powder=ps.powderContent[i],wet=doughStrength(powder),mu=.65+wet*.55;
     const onFloor=this.wallSupports(ps,i,env,gravity,planar);
-    let nearestSupport=-1,bestDot=0,contacts=0;
-    const angles=[];
+    let nearestSupport=-1,bestDot=0,contacts=0,compressed=false;
+    const angles=this.supportAngles;angles.length=0;
+    const cached=this.grainCachePS===ps,ownRadius=cached?this.grainRadii[i]:effectiveParticleRadius(ps,i,planar);
+    let maxRadius=this.maxGrainRadius;
+    if(!cached){maxRadius=0;for(let j=0;j<ps.count;j++)if(ps.phase[j]===Phase.SOLID)maxRadius=Math.max(maxRadius,effectiveParticleRadius(ps,j,planar));}
+    const packingScale=ps.packingScale??1,supportRadius=clamp(ownRadius+maxRadius,.07*packingScale,.44*packingScale)*1.035;
     // Resolve the plane orthogonal to gravity into two in-plane axes.
     // In 2D, the second in-plane coordinate is identically zero.
     let ax=Math.abs(gz)>.9?1:-gy,ay=Math.abs(gz)>.9?0:gx,az=0;
     const al=Math.hypot(ax,ay,az);ax/=al;ay/=al;
     const bx=gy*az-gz*ay,by=gz*ax-gx*az,bz=gx*ay-gy*ax;
-    grid.forEachNeighbor(ps,i,.27,j=>{
+    grid.forEachNeighbor(ps,i,supportRadius,j=>{
       if(ps.phase[j]!==Phase.SOLID || ps.solidSubdivision[j]<.42)return;
       const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d=Math.hypot(dx,dy,dz);
       // Actual surface contact only. Never suspend a grain over empty space.
-      if(d<1e-6||d>particlePairRestDistance(ps,i,j,planar)*1.035)return;
+      const scale=ps.packingScale??1,rest=cached?clamp(ownRadius+this.grainRadii[j],.07*scale,.44*scale):particlePairRestDistance(ps,i,j,planar);
+      if(d<1e-6||d>rest*1.035)return;
+      if(d<rest*.94)compressed=true;
       const along=(dx*gx+dy*gy+dz*gz)/d;
       if(along<=.35)return;
       const neighborDown=ps.vx[j]*gx+ps.vy[j]*gy+(planar?0:ps.vz[j]*gz);
       // Transmit the load only from a resting grain or a wall-supported one.
-      if(!this.wallSupports(ps,j,env,gravity,planar)&&Math.abs(neighborDown)>.13)return;
+      if(Math.abs(neighborDown)>.13&&!this.wallSupports(ps,j,env,gravity,planar))return;
       contacts++;
       // Classify opposing contacts in the tangent plane perpendicular to
       // gravity, including the depth axis in 3D. Two braces from opposing
       // directions can hold a grain without an artificial avalanche.
       const tx=dx-along*d*gx,ty=dy-along*d*gy,tz=planar?0:dz-along*d*gz;
       const length=Math.hypot(tx,ty,tz);
-      if(length>.012)angles.push(Math.atan2(tx*bx+ty*by+tz*bz,tx*ax+ty*ay+tz*az));
+      if(length>.012*(ps.packingScale??1))angles.push(Math.atan2(tx*bx+ty*by+tz*bz,tx*ax+ty*ay+tz*az));
       if(along>bestDot){bestDot=along;nearestSupport=j;}
     });
-    if(!onFloor&&contacts===0)return;
+    if(!onFloor&&contacts===0)return false;
     // Remove downward impact momentum only when there is genuine support.
     // Upward spoon impulses and free-fall elsewhere remain unrestricted.
     const vg=ps.vx[i]*gx+ps.vy[i]*gy+(planar?0:ps.vz[i]*gz);
@@ -124,15 +138,22 @@ export class SolidSolver{
     let maxGap=angles.length>1?angles[0]+Math.PI*2-angles[angles.length-1]:Math.PI*2;
     for(let k=1;k<angles.length;k++)maxGap=Math.max(maxGap,angles[k]-angles[k-1]);
     const braced=angles.length>1&&maxGap<=Math.PI+.03;
-    if(onFloor||nearestSupport<0||braced)return;
+    const slow=()=>{
+      if(compressed||Math.hypot(ps.vx[i],ps.vy[i],planar?0:ps.vz[i])>=.045||ps.stirActivity[i]>=.025)return false;
+      ps.vx[i]=ps.vy[i]=ps.vz[i]=0;return true;
+    };
+    if(onFloor||nearestSupport<0||braced)return slow();
     const dx=ps.x[nearestSupport]-ps.x[i],dy=ps.y[nearestSupport]-ps.y[i],dz=planar?0:ps.z[nearestSupport]-ps.z[i];
-    const d=Math.hypot(dx,dy,dz);if(d<1e-7)return;
+    const d=Math.hypot(dx,dy,dz);if(d<1e-7)return false;
     const nx=dx/d,ny=dy/d,nz=planar?0:dz/d;
     const normal=gx*nx+gy*ny+gz*nz;
     const tx=gx-normal*nx,ty=gy-normal*ny,tz=planar?0:gz-normal*nz;
     const tangential=Math.hypot(tx,ty,tz);
     const excess=tangential-mu*normal;
-    if(excess<=0)return;
+    // Static friction has a small breakaway margin; tiny near-repose forces
+    // cannot cause perpetual creeping. Once moving, grains still avalanche.
+    if(excess<=.035)return slow();
     const slide=excess*gLen*dt*.75/Math.max(tangential,1e-6);
     ps.vx[i]+=tx*slide;ps.vy[i]+=ty*slide;if(!planar)ps.vz[i]+=tz*slide;
+    return false;
   }}

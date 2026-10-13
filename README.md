@@ -19,9 +19,10 @@ Vapour always rises against a fixed reference atmosphere, retaining the differen
 reagents' densities. Trapped vapour concentrates under the lid; cool, concentrated
 patches recondense first. With both sources off, hot or cold contents and copper
 gradually return to room temperature (33 °A), including tiny residual droplets.
-Compatible fluids smoothly converge to their full-mixture proportions, starting
-at local contacts; warmth and stirring accelerate this. Incompatible fluids stay
-separate, and colour blending continues after the first particles have mixed.
+Compatible colours and properties diffuse through touching neighbours, with
+visible fronts that spread faster under stirring and warmth. Disconnected regions
+keep their own colour. Local exchange conserves measured ingredient proportions;
+incompatible substances stay separate.
 Four fine particles represent each ml, and the visible walls and lid share their
 collision geometry, including clearance for each particle's full drawn radius.
 
@@ -30,7 +31,11 @@ drag bottles onto the cauldron, draw circles with the spoon or hold Stir. Tap
 Flame/Frost to cycle power; a copper furnace unlocks precise controls. Six starter
 liquids, two dry powder jars and later guild reagents change with the world seed.
 Powders are ready to add from the inventory; existing shops receive them on load.
-Density layers remain in contact, and full-size grains settle into compact piles.
+Density layers remain in contact. Fine sand grains settle into compact, independent
+piles without bounce or continued levelling. Stir powder with compatible liquid
+to knead thick liquid dough; extra solvent gradually thins it. All materials use
+one-pixel texels at up to 768×464 (Crisp, following screen density) or
+384×232 (battery saver).
 
 **Original sandbox:** https://ram8o211.github.io/fluid-pocket-sandbox/sandbox.html?mode=2D
 

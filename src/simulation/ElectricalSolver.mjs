@@ -20,6 +20,11 @@ export function electrostaticPairImpulse(potentialA,potentialB,distance,strength
 
 export function updateElectrical(ps,grid,rules,dt){
   const rate=Math.max(0,rules.electricalConductionRate??2.2),joule=Math.max(0,rules.jouleHeating??.025),forceStrength=Math.max(0,rules.electrostaticStrength??2.4);
+  // A neutral (or uniformly charged, force-disabled) batch has neither a
+  // conduction gradient nor Joule heat. Preserve the charged sandbox path.
+  const count=ps.count??ps.electricPotential.length,first=ps.electricPotential[0]??0;
+  let uniform=true;for(let i=1;i<count&&uniform;i++)uniform=ps.electricPotential[i]===first;
+  if(uniform&&(first===0||forceStrength<=0))return;
   // Neutral bulk fluids only need contact neighbours for charge conduction;
   // traversing a disabled long-range field is particularly costly in a pool.
   const dense=ps.count>1800,massive=ps.count>3500,interactionScale=clamp(rules.interactionRadiusScale??1,.4,1),forceRadius=(forceStrength>0?(massive?.58:(dense?1.0:FORCE_RADIUS)):CONTACT_RADIUS)*interactionScale;

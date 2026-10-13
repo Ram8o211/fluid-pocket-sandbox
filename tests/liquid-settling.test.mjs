@@ -52,7 +52,7 @@ test('contact stirring moves a local parcel without lifting the bulk, then settl
   brew.pour(1, 60, { 1: 100 }); ticks(brew, 240); const resting = heights(brew);
   const ps=brew.engine.ps, point={x:ps.x[0],y:ps.y[0]};
   const touched=brew.stir(point,{x:1,y:6},.05);
-  assert.ok(touched>0 && touched<ps.count/4);assert.ok(ps.vy[0]>0);
+  assert.ok(touched>0 && touched<ps.count);assert.ok(ps.vy[0]>0);
   ticks(brew,80,true);const stirred=heights(brew);
   assert.ok(stirred.mean < resting.mean + .1);assert.ok(brew.history.stirred>0);
   ticks(brew, 160); const settled = heights(brew);

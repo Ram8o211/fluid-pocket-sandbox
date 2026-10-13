@@ -83,18 +83,16 @@ and slow circles, reversal and duration change local movement and contact rates.
 Holding Stir supplies the same physical impulse through a circular path for
 players who prefer an accessible control. It never directly adjusts homogeneity.
 
-MixtureSolver holds an amount-weighted composition target for each compatible fluid
-family. It includes the full remaining amount of each source, not just whichever
-two parcels touch first. A contact front locally activates smooth colour/property
-relaxation toward that target, continuing after canonical material IDs match.
-Warmth and spoon-induced motion accelerate relaxation. The original minimum and
-maximum affinities gate a whole family: dilution or an intermediate fluid cannot
-admit an incompatible source. Targets and contact progress survive saves; new
-pours update targets using remaining measured amounts after bottling or combustion.
-Each parcel retains its source amount in ml as density changes, so a 20/80 ml
-blend stays a 20/80 blend even when the ingredients have different densities.
-Partial drains scale that amount alongside mass. Reactive
-potential/heat targets follow consumption so homogenization cannot restore fuel.
+MixtureSolver transports conserved colour/property fluxes between touching
+neighbours using a previous-frame property field. A pigment front advances at
+most one contact per transport tick; separating regions stops diffusion, even
+when their material IDs or saved mixture group match. Degree normalization keeps
+local transport bounded. Spoon work and warmth accelerate it. Each parcel retains
+its measured source amount in ml, so unequal-density ingredients still converge
+to their original measured proportions after full mixing. Partial drains scale
+that amount alongside mass. Source-family minimum/maximum affinity envelopes
+exclude incompatible additions. Legacy batch targets remain saved metadata and
+do not drive relaxation. Reaction consumption remains in the live state.
 Combustion likewise shares heat only with immediate neighbours, with ignition
 reading a temperature snapshot to prevent particle-order-dependent instant chains.
 
@@ -157,7 +155,10 @@ Export/import is available in Settings. The separate sandbox save key is intact.
 
 The workshop reuses PlanarRenderer's projection, material colouring and reaction
 effects. Pixel particles show real positions, colours and phases. Canvas targets
-are 384×232 or 192×116 and use crisp scaling. Original portraits, bottles, icons,
+follow screen density up to 768×464 in Crisp mode, or 384×232 in battery
+mode, and use crisp scaling. Matter uses a reusable RGBA
+layer with one-pixel texels and one canvas upload/draw per frame, including gas,
+frozen solids and independently shaded sand grains. Original portraits, bottles, icons,
 wood, stone, glass and copper share the same palette and pixel scale. There are
 no stock assets, external fonts or emoji controls.
 
@@ -165,7 +166,11 @@ The game starts with a 200 ml budget and unlocks 320 and 440 ml cauldrons. A max
 2,304-particle allocation leaves headroom above a full 1,760-particle large cauldron
 for solver-generated products. Game-only contact radii and grid cells are scaled
 to the finer packing; sandbox settings retain their existing defaults. It uses a
-40 Hz fixed physics step, at most three catch-up steps, existing solver scheduling,
+40 Hz fixed collision/phase step and at most three catch-up steps. Local
+transport runs at 10–20 Hz for large bowls with full elapsed-time integration;
+thermal and chemical passes are staggered. Radius/viscosity caches, distance
+filtering before neighbour callbacks, smaller grid cells and a neutral-charge
+fast path reduce CPU work. The renderer uses
 30 FPS battery rendering and AdaptiveQuality-based resolution/effect fallback.
 Rendering quality never changes stock quantities or assessment. Native Android
 hardware measurements are still needed; CPU/browser emulation is not a device
@@ -182,16 +187,36 @@ the published URL after deployment, retaining screenshots as workflow artifacts.
 
 ### Contact tools and phase pacing
 
-The spoon applies velocity only to liquid parcels touching its 0.14-unit head (plus the parcel radius). Neighbour viscosity transfers that motion gradually. The Pestle button selects a local 0.18-unit crushing head: touched coherent solids lose their body membership and become granular powder, retaining mass, temperature and chemistry. Powder subdivision survives save/restore. Freezing sets liquid parcels to coherent solid and welds touching freeze fronts; it preserves their compact offsets instead of snapping fine parcels onto the sandbox's coarse crystal lattice.
+The spoon applies velocity only to liquid parcels touching its swept 0.42-unit head (plus the parcel radius). Neighbour viscosity transfers that motion gradually. The Pestle button selects a local 0.18-unit crushing head: touched coherent solids lose their body membership and become granular powder, retaining mass, temperature and chemistry. Powder subdivision survives save/restore. Freezing sets liquid parcels to coherent solid and welds touching freeze fronts; it preserves their compact offsets instead of snapping fine parcels onto the sandbox's coarse crystal lattice.
 
 Shop evaporation and combustion run at 22% of the base transition rate; combustion heat is reduced to 30%. Condensation and melting retain their rates. Soft gas contact pressure and deterministic thermal agitation prevent vapor from forming a perfectly flat line beneath the sealed lid. Local concentration still controls cool condensation and material density still controls buoyancy. Every actively burning parcel renders a tiny warm light and bright core; completed reaction sparks are also particle-sized.
 
 ### Powder, solvent and compact block mechanics
 
-Frozen coherent bodies use exact relative offsets and collide with the bowl as a whole. Crushing removes body membership and creates dry grain content; dry grains use near-full contact separation, normal damping, and tangential friction rather than liquid viscosity. Spoon contact radius is 0.24 units plus parcel radius, and it affects liquid, dough and powder without directly dragging coherent blocks.
+Frozen coherent bodies use exact relative offsets and collide with the bowl as a whole. Crushing removes body membership and creates dry grain content; dry grains use near-full contact separation, normal damping, and tangential friction rather than liquid viscosity. Spoon contact radius is 0.42 units plus parcel radius, and it affects liquid, dough and powder without directly dragging coherent blocks.
 
-Density sorting acts only on inverted contacts: an already ordered heavy/light interface receives no separating impulse. The range fades at 1.15 pair diameters. Granular support and wall friction use mass-scaled contact radii instead of a fixed support distance, so fine grains cannot rest above an air gap. The laboratory draws full pixel footprints with colour flecks for grain texture at both resolutions.
+Density sorting acts only on inverted contacts: an already ordered heavy/light interface receives no separating impulse. Its range fades at the local fluid-neighbour radius. Granular support and wall friction use mass-scaled contact radii instead of a fixed support distance, so fine grains cannot rest above an air gap. The laboratory draws full pixel footprints with colour flecks for grain texture at both resolutions.
 
 Worlds start with six liquids and two dry powder jars (IDs 10–11); guild reagent IDs 7–9 keep their unlocks. Powders share the existing affinity, dough, dissolution, stirring, heating and inventory rules. Their measured bulk quantities use the same ml capacity units. The rack labels powders and uses an Add action. Save version 3 appends missing powders and 240 ml stock to v1/v2 shops once, preserving pinned ingredients, order targets and particle snapshots. Generated customer witnesses continue to use liquid recipes until powder-and-solvent witnesses are supported.
 
-Powder content is a conserved local dry-material mass fraction. Compatible touching condensed parcels exchange it gradually using the same original affinity envelope as other mixing properties. Limited solvent produces cohesive, yielding dough; high solvent dilution below 18% dry content requires sustained dissolution before solid grains become liquid. Residual liquid rheology returns below 15% dry content. Gas shares compatible chemical/color mixing but never supplies liquid solvent. Coherent blocks remain excluded from mixing until crushed or melted. Powder content and dissolution progress are saved, validated, and migrated for older saves. Thermal melting remains a separate phase process.
+Powder content is a conserved local dry-material mass fraction. Compatible
+condensed contacts exchange it only with recent local spoon work, independently
+of falling or convection velocity. Gradual kneading changes hydrated grains to
+Phase.LIQUID and uses the solvent's melting threshold, so room-temperature dough
+does not immediately refreeze. Dough uses strongly dissipative liquid shear and
+no granular support, rigid links or elastic bonds. Its measured viscosity reads
+the same concentration-dependent rheology as the solver. Extra stirred solvent
+smoothly removes the dough contribution below 12% dry content. Freeze/melt cycles
+preserve that dry mass fraction. Gas never supplies liquid solvent.
+
+A shop packing scale of 0.6 makes actual grain footprints finer without increasing
+particle count. Radius uses mass/baseDensity (represented volume) in the shop;
+thus equally measured portions of different densities have comparable parcel
+sizes. Partial bottling shrinks parcels while preserving mass and stock quantities.
+Generic sandbox packing keeps its original defaults. Resting sand uses about a
+33-degree friction angle with a small static breakaway margin and revalidates support every step. Small contact skin
+tolerances keep the fine pile static; deep overlap, missing support and spoon
+motion remain mobile. There are no rigid connections between dry grains.
+
+Powder fraction, kneading progress and solvent melting threshold survive saves.
+Spontaneous stirring activity and cached resting flags are never restored.

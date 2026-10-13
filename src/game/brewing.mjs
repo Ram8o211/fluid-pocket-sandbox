@@ -9,7 +9,7 @@ import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress'];
+const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature'];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -17,6 +17,8 @@ export class BrewingSession {
   constructor(ingredients, equipment = {}) {
     this.ingredients = ingredients; this.equipment = equipment;
     this.engine = new SimulationEngine(PARTICLE_CAPACITY);
+    this.engine.ps.packingScale = .6;
+    this.engine.ps.volumePacking = true;
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
     this.engine.env.environmentDensity = ROOM_DENSITY;
     this.engine.env.gasBuoyancyUsesMaterialDensity = true;
@@ -30,6 +32,7 @@ export class BrewingSession {
     this.engine.rules.combustionHeatScale = .3;
     this.engine.env.ambientTemperature = ROOM_TEMPERATURE;
     this.engine.env.gravityStrength = 4.5; this.engine.setGravity(0, -1, 0);
+    this.engine.env.mobileContactBudget = true;
     // Bulk reagents are electrically neutral fluids. Conductivity still drives
     // charge exchange and alchemy, but point-charge repulsion must not levitate
     // their small, low-mass parcels against gravity.
@@ -49,7 +52,7 @@ export class BrewingSession {
     // Contact ranges track the finer particle spacing. The sandbox defaults are
     // untouched; local neighbours keep full cauldrons within the mobile budget.
     this.engine.rules.interactionRadiusScale = .5;
-    this.engine.grid.cellSize = .29;
+    this.engine.grid.cellSize = .15;
     this.engine.grid.configure(this.engine.env.box);
     this.previousPhases = new Int32Array(PARTICLE_CAPACITY);
     // Pinned ingredients in old saves retain all measured properties, with the
@@ -127,6 +130,8 @@ export class BrewingSession {
       const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
       const amount = falloff * Math.min(.52, Math.max(.015, dt) * 9) * clamp(intensity, 0, 1);
       ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
+      ps.stirActivity[i] = Math.max(ps.stirActivity[i], falloff * Math.min(1, speed) * Math.sqrt(clamp(intensity, 0, 1)));
+      ps.grainRest[i] = 0;
       affected++;
     }
     if (affected) this.history.stirred += Math.min(6, speed) * dt;
@@ -220,6 +225,7 @@ export class BrewingSession {
     const ps = this.engine.ps;
     for (const key of SAVE_FIELDS) {
       const values = saved.particles[key];
+      if (values === undefined && key === 'solventMeltingTemperature') { ps[key].set(ps.meltingTemperature); continue; }
       if (values === undefined && (key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount' || key === 'powderContent' || key === 'dissolutionProgress')) { ps[key].fill(0); continue; }
       if (!Array.isArray(values) || values.length !== saved.count || values.some(v => !Number.isFinite(v))) throw new Error('Invalid saved particle data.');
       ps[key].set(values);
@@ -235,6 +241,8 @@ export class BrewingSession {
     if (saved.particles.powderContent === undefined) for (let i=0;i<ps.count;i++) ps.powderContent[i]=ps.phase[i]===Phase.SOLID&&ps.solidSubdivision[i]>=.55?1:0;
     if (saved.particleMl !== PARTICLE_ML) this.refineLegacyParticles();
     ps.px.set(ps.x); ps.py.set(ps.y);
+    ps.stirActivity.fill(0); // Reload never supplies new spoon work.
+    ps.grainRest.fill(0);
     this.history = { ...HISTORY(), ...saved.history }; this.cost = { ...saved.cost };
     this.portions = (saved.portions || []).map(p => ({ ...p })); this.bottles = saved.bottles || 0;
     this.engine.time = saved.time || 0; this.engine.stepIndex = saved.stepIndex || 0;
