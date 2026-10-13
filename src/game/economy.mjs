@@ -5,13 +5,14 @@ import { SAVE_VERSION } from './contracts.mjs';
 import { clamp } from '../simulation/math.mjs';
 import { createForaging } from './gathering.mjs';
 import { createExperimentState } from './experiments.mjs';
+import { observedPotion } from './knowledge.mjs';
 
 export const SANDBOX_STOCK = 240;
 
 export const UPGRADES = Object.freeze([
   { id: 'densimeter', name: 'Density stone', cost: 35, sales: 1, description: 'Weigh each brew and reveal its density.' },
   { id: 'viscometer', name: 'Flow glass', cost: 55, sales: 2, description: 'Measure texture and volatility.' },
-  { id: 'analyzer', name: 'Arcane prism', cost: 85, sales: 3, description: 'Reveal magical intensity and lasting stability.' },
+  { id: 'analyzer', name: 'Arcane prism', cost: 85, sales: 3, description: 'Measure physical stability and arcane glow. Potion effects are learned through experiments.' },
   { id: 'furnace', name: 'Copper furnace', cost: 110, sales: 4, description: 'A stronger flame and finer thermal controls.' },
   { id: 'cauldron', name: 'Deep cauldron', cost: 140, sales: 5, description: 'Increase capacity to 320 ml.', level: 1 },
   { id: 'reagents', name: 'Guild reagents I', cost: 95, sales: 4, description: 'Discover a rare extract; includes 120 ml.', level: 1 },
@@ -80,6 +81,7 @@ export function buyUpgrade(state, index) {
 export function completeSale(state) {
   if (state.mode === 'sandbox') throw new Error('Sandbox experiments do not advance shop commissions.');
   if (!state.pendingBottle || !state.order || state.soldOrderIds.includes(state.order.id)) throw new Error('This vial has already been sold.');
+  if (state.order.conceptVersion === 1 && !observedPotion(state, state.pendingBottle)) throw new Error('Test this batch in the Experiments room before serving it.');
   const sale = priceSale(state.pendingBottle, state.order, state.reputation);
   if (state.coins + sale.payment < sale.expenses) throw new Error('You need one coin for a fresh vial.');
   const repayment = Math.min(state.debt || 0, Math.floor(sale.payment * .35));
@@ -101,7 +103,10 @@ export function nextCustomer(state) {
 
 export function recordDiscovery(state, sample, name = '') {
   if (!sample || sample.volume < 1) throw new Error('Measure or bottle a potion first.');
-  const discovery = { id: `discovery-${state.completed}-${state.discoveries.length}`, name: String(name || `Experiment ${state.discoveries.length + 1}`).trim().slice(0, 40), sample: structuredClone(sample), orderId: state.order?.id };
+  const observation = observedPotion(state, sample);
+  const discovery = { id: crypto.randomUUID(), name: String(name || `Experiment ${state.discoveries.length + 1}`).trim().slice(0, 40), sample: structuredClone(sample), orderId: state.order?.id,
+    tested: Boolean(observation), observations: structuredClone(observation?.observations || []), trialId: observation?.id || null,
+    preparation: structuredClone(observation?.preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history }) };
   state.discoveries.unshift(discovery); state.discoveries = state.discoveries.slice(0, 80);
   return discovery;
 }

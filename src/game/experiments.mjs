@@ -38,7 +38,7 @@ export function splitPotionSample(sample, requestedMl = 5) {
 /** Resolves the very same particle-derived properties used by potion scoring.
  * Callers transfer the actual dose from the cauldron or vial first. The sample
  * is never edited and reports keep independent snapshots of the observations. */
-export function runExperiment(state, sample, subjectId, volume = 5, now = Date.now()) {
+export function runExperiment(state, sample, subjectId, volume = 5, now = Date.now(), preparation = null) {
   if (!Number.isFinite(now) || now < 0) throw new Error('Invalid experiment time.');
   if (volume > 50) throw new Error('Experiment doses must be 50 ml or smaller.');
   const experiments = state.experiments || createExperimentState();
@@ -49,7 +49,8 @@ export function runExperiment(state, sample, subjectId, volume = 5, now = Date.n
   const assessment = assessEffects(dose, subject, dose.volume);
   const serial = experiments.serial + 1;
   const report = { ...assessment, id: `trial-${serial}`, serial, subjectName: subject.name, at: now,
-    sample: dose, sampleId: sample.id || null, volume: dose.volume, subjectId: subject.id, kind: subject.kind };
+    sample: dose, sampleId: sample.id || null, volume: dose.volume, subjectId: subject.id, kind: subject.kind,
+    preparation: structuredClone(preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history || {} }) };
   subject.stats = { ...assessment.after }; subject.trials++; subject.lastTestAt = now;
   experiments.serial = serial; experiments.records.unshift(structuredClone(report));
   experiments.records.length = Math.min(experiments.records.length, EXPERIMENT_RECORD_LIMIT);

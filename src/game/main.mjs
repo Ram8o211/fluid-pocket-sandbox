@@ -9,7 +9,8 @@ import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
 import { icon, bottleSprite, ingredientSprite, naturalLandscapeSprite, experimentSubjectSprite, portraitSprite, workshopBackground } from './art.mjs';
 import { resourceStatus, gatherIngredient } from './gathering.mjs';
 import { runExperiment, resetExperimentSubject, splitPotionSample } from './experiments.mjs';
-import { EFFECT_DEFINITIONS, EFFECT_PROPERTIES } from './effects.mjs';
+import { EFFECT_DEFINITIONS, EFFECT_PROPERTIES, describeEffects } from './effects.mjs';
+import { observedPotion, discoveryKnowledge } from './knowledge.mjs';
 import { ShopAudio } from './audio.mjs';
 import { AdaptiveQuality } from '../performance/AdaptiveQuality.mjs';
 
@@ -26,6 +27,7 @@ let sandboxLoaded = null, roomTimer = 0, currentRoom = null, experimentReport = 
 const isSandbox = () => state?.mode === 'sandbox';
 const rawIngredient = i => Boolean(i.form && !['liquid', 'powder'].includes(i.form));
 const ingredientUnit = i => i.form && i.form !== 'liquid' ? 'measures' : 'ml';
+const requirementDescription = r => r.comparison === 'maximum' ? `At most ${(r.target * 100).toFixed(1)}% · unwanted effect` : propertyDescription(r.property, r.target);
 
 function notify(message) {
   $('toast').textContent = message; $('toast').hidden = false;
@@ -105,7 +107,9 @@ function renderAll() {
   $('orderNumber').textContent = `COMMISSION ${state.completed + 1} · ${order.volume} ML`;
   $('orderBudget').innerHTML = `${order.budget} ${icon('coin')}`;
   $('customerDialogue').textContent = order.customer.dialogue;
-  $('requirements').innerHTML = order.requirements.map(r => `<div class="requirement">${r.property === 'color' ? `<span class="colour-swatch" style="background:${escape(r.target)}"></span>` : icon(r.property === 'temperature' ? 'flame' : r.property === 'potency' ? 'star' : r.property === 'stability' ? 'frost' : 'measure')}<div><span class="req-label">${PROPERTIES[r.property].label.toUpperCase()}${r.hard ? ' · REQUIRED' : ''}</span><span class="req-target">${escape(propertyDescription(r.property, r.target))}</span></div></div>`).join('');
+  const requirementRow = r => `<div class="requirement${r.comparison === 'maximum' ? ' unwanted-effect' : ''}">${r.property === 'color' ? `<span class="colour-swatch" style="background:${escape(r.target)}"></span>` : icon(r.property === 'temperature' || r.property === 'fire' ? 'flame' : r.property === 'freeze' || r.property === 'stability' ? 'frost' : EFFECT_PROPERTIES.includes(r.property) || r.property === 'potency' ? 'star' : 'measure')}<div><span class="req-label">${PROPERTIES[r.property].label.toUpperCase()}${r.comparison === 'maximum' ? ' · LIMIT' : r.hard ? ' · REQUIRED' : ''}</span><span class="req-target">${escape(requirementDescription(r))}</span></div></div>`;
+  const wanted = order.requirements.filter(r => r.comparison !== 'maximum'), limits = order.requirements.filter(r => r.comparison === 'maximum');
+  $('requirements').innerHTML = wanted.map(requirementRow).join('') + (limits.length ? `<details class="order-limits"><summary>Unwanted effects · ${limits.length} limits</summary><div class="requirements">${limits.map(requirementRow).join('')}</div></details>` : '');
   $('orderClue').textContent = order.clue;
   for (const [id, sprite, label] of [['measureBtn', 'measure', 'Inspect'], ['inventoryBtn', 'inventory', 'Ingredients'], ['bookBtn', 'book', 'Recipe book'], ['upgradesBtn', 'guild', 'Guild']]) $(id).innerHTML = icon(sprite) + `<span>${label}</span>`;
   $('natureBtn').innerHTML = `${icon('leaf')}<span>Wild garden</span>`;
@@ -115,7 +119,7 @@ function renderAll() {
 }
 function renderRack() {
   const rack = $('ingredientRack'), scroll = rack.scrollLeft, ingredients = availableIngredients(state.world, state.equipment);
-  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${escape(i.form || 'liquid')} · ${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)} ${ingredientUnit(i)}</small></button>`).join('');
+  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${escape(i.form || 'liquid')} · ${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)} ${ingredientUnit(i)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
   rack.scrollLeft = scroll;
   const ingredient = ingredients.find(i => i.id === selected) || ingredients[0]; selected = ingredient.id;
   $('selectedName').textContent = ingredient.name + (ingredient.form && ingredient.form !== 'liquid' ? ` · ${ingredient.form}` : '');
@@ -155,13 +159,13 @@ function updateHUD() {
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
 }
 const TUTORIAL = [
-  'Welcome, apprentice! Start with Plain Water. Gather plants and stones in the Wild garden.',
-  'Each tap pours 20 ml. Pour three times to fill the customer’s 60 ml vial.',
-  'Grind a little raw ingredient, then stir it into plenty of water. At least six parts water helps powders dissolve.',
-  'Flame speeds up mixing. The lid traps steam: turn Flame off or use Frost, then wait for condensation.',
-  'Inspect the brew. Try a 5 ml dose in the Experiments room to discover its effects before selling.',
-  'Tap Bottle to seal the measured liquid in a vial. Only liquid can be bottled.',
-  'Tap Sell in the vial panel. A close match earns more coins. Your shop saves automatically.'
+  'Read the customer’s desired effects. Open Ingredients to learn the known effects of each plain ingredient and plan your mixture.',
+  'Start with water. Brew more than the customer’s vial so you can spare 5 ml for an experiment.',
+  'Choose ingredients with promising effects. Grind a small amount and stir with plenty of water; at least six parts water helps extraction.',
+  'Stir until the powder dissolves. Flame can help, but heat and frost may change the result. You decide how to prepare it.',
+  'Test a 5 ml dose in the Experiments room. Testing reveals this batch’s effects and its match to the customer’s request.',
+  'Compare your observations with the request. Adjust and retest, or bottle a suitable potion and remember the tested formula.',
+  'Serve your tested potion. Closer effects earn more coins. Each new or changed batch must be tested before serving.'
 ];
 function updateTutorial() {
   if (!state) return;
@@ -174,7 +178,7 @@ function advanceTutorial() {
   if (state.tutorial === 0 && brew.occupiedVolume > 0) state.tutorial = 1;
   if (state.tutorial === 1 && brew.liquidVolume >= state.order.volume - .1) state.tutorial = 2;
   if (state.tutorial === 2 && brew.history.stirred > .15) state.tutorial = 3;
-  if (state.tutorial === 3 && brew.history.heatEnergy + brew.history.coldEnergy > .2) state.tutorial = 4;
+  if (state.tutorial === 3 && brew.history.stirred > 1) state.tutorial = 4;
   updateTutorial();
 }
 function pour(crushed = false) {
@@ -210,7 +214,8 @@ function measuredRows(sample, reveal = false) {
     return `<div class="measure-row${unlocked ? '' : ' locked'}"><span class="measure-label">${spec.label}</span><span class="measure-value">${unlocked ? `${property === 'color' ? `<span class="inline-swatch" style="background:${escape(value)}"></span>` : ''}${escape(propertyDescription(property, value))}` : `Unlock ${tools[property]} at the guild`}</span></div>`;
   }).join('');
 }
-function effectRows(sample) {
+function effectRows(sample, knowledge = null) {
+  if (!knowledge) return `<div class="unknown-effects"><strong>Mixture effects unknown</strong><p>You know the plain ingredients. Test this batch in the Experiments room to discover its effects. A changed brew needs another test.</p><div class="effects-grid">${EFFECT_PROPERTIES.map(key => `<div class="effect-reading locked"><span>${escape(EFFECT_DEFINITIONS[key].label)}</span><strong>?</strong></div>`).join('')}</div>`;
   return `<div class="effects-grid">${EFFECT_PROPERTIES.map(key => {
     const spec = EFFECT_DEFINITIONS[key], value = Math.max(0, Math.min(1, Number(sample[key] || 0)));
     return `<div class="effect-reading" style="--effect-color:${spec.color}"><span>${escape(spec.label)}</span><strong>${Math.round(value * 100)}%</strong><div class="effect-meter"><span style="width:${value * 100}%"></span></div></div>`;
@@ -220,10 +225,12 @@ function showInstruments() {
   if (!state) return;
   const sample = state.pendingBottle || brew.inspect();
   if (!sample) { sheet('Measuring bench', '<p>Pour an ingredient first. The thermometer and colour lens are ready; the guild can equip your bench with more instruments.</p><button class="primary" data-action="guild">Visit the guild</button>'); return; }
-  latestInspection = { ...sample, portions: sample.portions || brew.portions.map(p => ({ ...p })) };
-  if (state.tutorial >= 4 && state.tutorial < 6) { state.tutorial = 5; updateTutorial(); persist(); }
+  const liquid = state.pendingBottle || brew.inspectLiquid();
+  latestInspection = liquid || { ...sample, portions: sample.portions || brew.portions.map(p => ({ ...p })) };
+  const observation = observedPotion(state, liquid);
+  persist();
   audio.play('measure');
-  sheet('Measuring bench', `<div class="vial-preview"><img src="${bottleSprite(sample.color)}" alt="Your measured potion"><div><h3>${Math.round(state.pendingBottle ? sample.volume : brew.liquidVolume)} ml in ${state.pendingBottle ? 'your vial' : 'the cauldron'}</h3><p>A careful measurement makes a better brew.</p></div></div>${measuredRows(sample)}<h3>Magic & chemistry</h3>${effectRows(sample)}<div class="snapshot-info">${Math.round(sample.liquidFraction * 100)}% liquid · ${Math.round(sample.history.elapsed)} seconds brewed · ${state.pendingBottle ? 'Sealed vial' : `${brew.vaporVolume.toFixed(1)} ml steam under the lid`} · ${(sample.history.condensed || 0).toFixed(1)} ml recondensed</div><button class="primary" data-action="experiments">Test this potion</button><button class="secondary" data-action="save-inspection">Save this discovery</button><details><summary>How do these measurements work?</summary><p>Physical, magical and chemical properties travel with the particles and mix on contact. Water dilutes all effects; crushed compatible ingredients dissolve gradually. Glowing particles hint at latent magic before a potion is used. A test dose reads the actual liquid and records how the subject responds. °A is the guild’s normalized temperature scale.</p></details>`);
+  sheet('Measuring bench', `<div class="vial-preview"><img src="${bottleSprite(sample.color)}" alt="Your measured potion"><div><h3>${Math.round(state.pendingBottle ? sample.volume : brew.liquidVolume)} ml in ${state.pendingBottle ? 'your vial' : 'the cauldron'}</h3><p>Instruments measure physical properties. Experiments reveal potion effects.</p></div></div>${measuredRows(sample)}<h3>Magic & chemistry · liquid potion</h3>${effectRows(liquid, observation)}${observation && !isSandbox() ? `<h3>Observed customer match</h3>${breakdownHTML(assessPotion(liquid, state.order))}` : ''}<div class="snapshot-info">${Math.round(sample.liquidFraction * 100)}% liquid · ${Math.round(sample.history.elapsed)} seconds brewed · ${state.pendingBottle ? 'Sealed vial' : `${brew.vaporVolume.toFixed(1)} ml steam under the lid`} · ${(sample.history.condensed || 0).toFixed(1)} ml recondensed</div><button class="primary" data-action="experiments">Test this potion</button><button class="secondary" data-action="save-inspection">${observation ? 'Save tested discovery' : 'Save untested formula'}</button><details><summary>How do these measurements work?</summary><p>Water dilutes the known ingredient effects; grinding, compatibility, stirring and temperature affect what reaches the liquid. Glows are clues. A measured experiment consumes potion and records its effects. Adding ingredients or changing the batch can invalidate an earlier test. °A is the guild’s temperature scale.</p></details>`);
 }
 function bottle() {
   if (state.stage === 'sale') { moveToNext(); return; }
@@ -234,17 +241,18 @@ function bottle() {
   audio.play('measure'); renderAll(); persist(); showVial();
 }
 function breakdownHTML(result) {
-  return `<div class="order-breakdown">${result.breakdown.map(row => `<div class="measure-row"><span class="measure-label">${PROPERTIES[row.property].label}</span><span class="measure-value">${escape(propertyDescription(row.property, row.actual))}<span class="target-note">Wanted: ${escape(propertyDescription(row.property, row.target))}${row.hard ? ' · required' : ''} · ${row.met ? 'within tolerance' : 'outside tolerance'}</span><span class="meter${row.met ? '' : ' fail'}"><span style="width:${Math.round(row.similarity * 100)}%"></span></span></span><strong>${Math.round(row.similarity * 100)}%</strong></div>`).join('')}</div>`;
+  return `<div class="order-breakdown">${result.breakdown.map(row => `<div class="measure-row"><span class="measure-label">${PROPERTIES[row.property].label}</span><span class="measure-value">${escape(propertyDescription(row.property, row.actual))}<span class="target-note">Wanted: ${escape(requirementDescription(row))} · ${row.met ? 'within tolerance' : 'outside tolerance'}</span><span class="meter${row.met ? '' : ' fail'}"><span style="width:${Math.round(row.similarity * 100)}%"></span></span></span><strong>${Math.round(row.similarity * 100)}%</strong></div>`).join('')}</div>`;
 }
 function showVial() {
   const vial = state.pendingBottle; if (!vial) return;
+  const observation = observedPotion(state, vial);
+  latestInspection = vial;
   if (isSandbox()) {
-    latestInspection = vial;
-    sheet('Sandbox potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><h3>${vial.volume.toFixed(1)} ml sealed vial</h3><p>Experiment freely and record your discoveries.</p></div></div>${effectRows(vial)}<button class="primary" data-action="experiments">Test a dose</button><button class="secondary" data-action="save-inspection">Save formula</button><button class="secondary" data-action="confirm-discard">Discard vial & keep brewing</button>`); return;
+    sheet('Sandbox potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><h3>${vial.volume.toFixed(1)} ml sealed vial</h3><p>Experiment freely and record your discoveries.</p></div></div>${effectRows(vial, observation)}<button class="primary" data-action="experiments">Test a dose</button><button class="secondary" data-action="save-inspection">Save formula</button><button class="secondary" data-action="confirm-discard">Discard vial & keep brewing</button>`); return;
   }
-  latestInspection = vial; const sale = priceSale(vial, state.order, state.reputation);
-  const ingredientsCost = vial.cost.ingredients.toFixed(1);
-  sheet('Your bottled potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><div class="score">${Math.round(sale.quality)}<small> / 100 match</small></div><p>${vial.volume.toFixed(1)} / ${state.order.volume} ml · Sealed and ready</p><p>Expected offer: ${sale.payment} coins</p></div></div>${breakdownHTML(sale)}${effectRows(vial)}<p class="quiet">Reagents used: ${ingredientsCost} coins · Vial and energy: ${sale.expenses.toFixed(1)} coins. ${sale.quantityRatio < .99 ? 'A short vial lowers the offer.' : 'Extra volume never increases the customer’s budget.'}</p><button class="primary" data-action="sell">Sell to ${escape(state.order.customer.name)} · ${sale.payment} coins</button><button class="secondary" data-action="experiments">Test 5 ml before selling</button><button class="secondary" data-action="save-inspection">Save formula to recipe book</button><div class="action-list"><button class="danger-button" data-action="discard-vial">Discard vial and try again</button><button data-action="supplies">Visit supplies</button></div>`);
+  const sale = observation ? priceSale(vial, state.order, state.reputation) : null;
+  const estimate = sale ? `<div class="score">${Math.round(sale.quality)}<small> / 100 observed match</small></div><p>Expected offer: ${sale.payment} coins</p>` : '<div class="score">?<small> / 100 unknown match</small></div><p>Offer unknown · test this potion to estimate it.</p>';
+  sheet('Your bottled potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div>${estimate}<p>${vial.volume.toFixed(1)} / ${state.order.volume} ml · Sealed and ready</p></div></div>${sale ? breakdownHTML(sale) : ''}${effectRows(vial, observation)}<p class="quiet">Reagents used: ${vial.cost.ingredients.toFixed(1)} coins · A short vial lowers the offer. Testing a sealed vial consumes its sale quantity.</p><button class="primary" data-action="sell"${!observation && state.order.conceptVersion === 1 ? ' disabled' : ''}>${!observation && state.order.conceptVersion === 1 ? 'Test before serving' : `Sell to ${escape(state.order.customer.name)}${sale ? ` · ${sale.payment} coins` : ' · offer unknown'}`}</button><button class="secondary" data-action="experiments">Test 5 ml before selling</button><button class="secondary" data-action="save-inspection">${observation ? 'Save tested formula' : 'Save untested formula'}</button><div class="action-list"><button class="danger-button" data-action="discard-vial">Discard vial and try again</button><button data-action="supplies">Visit supplies</button></div>`);
 }
 function sell() {
   completeSale(state); state.tutorial = 7;
@@ -253,7 +261,7 @@ function sell() {
 function showSale() {
   const sale = state.lastSale; if (!sale) return;
   latestInspection = sale.sample;
-  sheet(sale.quality >= 90 ? 'A splendid commission' : sale.acceptable ? 'Commission complete' : 'A lesson in alchemy', `<div class="vial-preview"><img src="${portraitSprite(sale.customer.portraitSeed, sale.quality >= 90 ? 'happy' : sale.acceptable ? 'neutral' : 'sad')}" alt="${escape(sale.customer.name)}" style="width:64px;height:64px"><div><div class="score">${Math.round(sale.quality)}<small> / 100 quality</small></div><p>${escape(sale.customer.name)} · ${escape(sale.customer.role)}</p></div></div><p class="sale-dialogue">“${escape(sale.reaction)}”</p><div class="sale-coins">${icon('coin')}+${sale.payment}</div><div class="profit-line"><span>Profit after reagent, energy and vial costs</span><strong>${sale.profit >= 0 ? '+' : ''}${sale.profit.toFixed(1)}</strong></div><div class="profit-line"><span>Shop reputation</span><strong>${sale.reputationDelta >= 0 ? '+' : ''}${sale.reputationDelta}</strong></div>${sale.repayment ? `<p class="quiet">${sale.repayment} coins repaid to the guild.</p>` : ''}${breakdownHTML(sale)}<p class="progress-note">${state.completed === 1 ? 'The guild now offers a density stone. Spend your earnings to learn more about every brew.' : `You have completed ${state.completed} commissions. Visit the guild for new tools and reagents.`}</p><button class="primary" data-action="next">Welcome the next customer</button><button class="secondary" data-action="save-inspection">Remember this formula</button>`);
+  sheet(sale.quality >= 90 ? 'A splendid commission' : sale.acceptable ? 'Commission complete' : 'A lesson in alchemy', `<div class="vial-preview"><img src="${portraitSprite(sale.customer.portraitSeed, sale.quality >= 90 ? 'happy' : sale.acceptable ? 'neutral' : 'sad')}" alt="${escape(sale.customer.name)}" style="width:64px;height:64px"><div><div class="score">${Math.round(sale.quality)}<small> / 100 quality</small></div><p>${escape(sale.customer.name)} · ${escape(sale.customer.role)}</p></div></div><p class="sale-dialogue">“${escape(sale.reaction)}”</p><div class="sale-coins">${icon('coin')}+${sale.payment}</div><div class="profit-line"><span>Profit after reagent, energy and vial costs</span><strong>${sale.profit >= 0 ? '+' : ''}${sale.profit.toFixed(1)}</strong></div><div class="profit-line"><span>Shop reputation</span><strong>${sale.reputationDelta >= 0 ? '+' : ''}${sale.reputationDelta}</strong></div>${sale.repayment ? `<p class="quiet">${sale.repayment} coins repaid to the guild.</p>` : ''}${observedPotion(state, sale.sample) ? breakdownHTML(sale) : '<p class="quiet">The customer has judged your potion. Its precise effects remain unknown until you experiment with the formula.</p>'}<p class="progress-note">${state.completed === 1 ? 'The guild now offers a density stone. Spend your earnings to learn more about every brew.' : `You have completed ${state.completed} commissions. Visit the guild for new tools and reagents.`}</p><button class="primary" data-action="next">Welcome the next customer</button><button class="secondary" data-action="save-inspection">Remember this formula</button>`);
 }
 async function moveToNext() {
   const button = $('sheetContent').querySelector('[data-action="next"]'); if (button) button.disabled = true;
@@ -266,9 +274,9 @@ function showInventory() {
     const cost = Math.ceil(i.price * 60);
     const trade = Math.floor(i.price * 60 * .55);
     const tradeable = trade > 0 && !state.foraging.nodes.some(node => node.ingredientId === i.id && node.unlimited);
-    return `<div class="stock-row"><img src="${ingredientSprite(i)}" alt=""><div class="stock-info"><strong>${escape(i.name)} · ${escape(i.form || 'liquid')}</strong><p>${isSandbox() ? 'Infinite' : Math.floor(state.inventory[i.id] || 0)} ${ingredientUnit(i)} in stock</p><p>${escape(i.lore)}</p>${!isSandbox() && tradeable ? `<button data-trade="${i.id}"${(state.inventory[i.id] || 0) < 60 ? ' disabled' : ''}>Trade 60 · +${trade} coins</button>` : ''}</div>${!isSandbox() ? `<button data-restock="${i.id}"${state.coins < cost ? ' disabled' : ''}>Buy 60<br>${cost} coins</button>` : ''}</div>`;
+    return `<div class="stock-row"><img src="${ingredientSprite(i)}" alt=""><div class="stock-info"><strong>${escape(i.name)} · ${escape(i.form || 'liquid')}</strong><p>${isSandbox() ? 'Infinite' : Math.floor(state.inventory[i.id] || 0)} ${ingredientUnit(i)} in stock</p><p>${escape(i.lore)}</p><details class="plain-ingredient-effects"><summary>Known plain ingredient effects</summary>${effectRows(i.material, true)}</details>${!isSandbox() && tradeable ? `<button data-trade="${i.id}"${(state.inventory[i.id] || 0) < 60 ? ' disabled' : ''}>Trade 60 · +${trade} coins</button>` : ''}</div>${!isSandbox() ? `<button data-restock="${i.id}"${state.coins < cost ? ' disabled' : ''}>Buy 60<br>${cost} coins</button>` : ''}</div>`;
   }).join('');
-  sheet('Ingredient supplies', `<p>${isSandbox() ? 'Every ingredient is unlimited. Grinding and pouring still use the same particle simulation.' : 'Gather ingredients for free in the Wild garden, or buy raw stock from the village.'} Each dry measure occupies 1 ml of cauldron capacity. Grind plants and stones, then stir a small amount into plenty of water.</p><button class="primary" data-action="nature">Go gathering</button>${rows}${!isSandbox() ? `<details><summary>Apprentice emergency fund</summary><p>If your total coins and remaining stock are worth less than 15 coins, the guild offers a 25 coin loan. You repay 30 coins from future sales. Only one loan can be outstanding.</p><button data-action="loan">Request guild loan</button><p>Outstanding debt: ${state.debt || 0} coins</p></details>` : ''}`);
+  sheet('Ingredient supplies', `<p>${isSandbox() ? 'Every ingredient is unlimited. Grinding and pouring still use the same particle simulation.' : 'Gather ingredients for free in the Wild garden, or buy raw stock from the village.'} These plain ingredient effects are known from the start. Mixture effects must be discovered by testing. Each dry measure occupies 1 ml of cauldron capacity. Grind plants and stones, then stir a small amount into plenty of water.</p><button class="primary" data-action="nature">Go gathering</button>${rows}${!isSandbox() ? `<details><summary>Apprentice emergency fund</summary><p>If your total coins and remaining stock are worth less than 15 coins, the guild offers a 25 coin loan. You repay 30 coins from future sales. Only one loan can be outstanding.</p><button data-action="loan">Request guild loan</button><p>Outstanding debt: ${state.debt || 0} coins</p></details>` : ''}`);
 }
 function resourceText(status) {
   if (status.locked) return 'Requires a guild reagent unlock';
@@ -319,27 +327,30 @@ function subjectAppearance(subject) {
   return 'healthy';
 }
 function showExperiments() {
-  const available = state.pendingBottle?.volume || brew.liquidVolume, report = experimentReport;
+  const available = state.pendingBottle?.volume || brew.liquidVolume, report = experimentReport || state.experiments.records[0];
   const cards = Object.values(state.experiments.subjects).map(subject => `<article class="subject-card"><img src="${experimentSubjectSprite(subject.id, subjectAppearance(subject))}" alt="${escape(subject.name)}, ${subjectAppearance(subject)}"><h3>${escape(subject.name)}</h3><p>${escape(subject.description)}</p><p class="subject-stats">${subject.stats.alive ? `Vitality ${Math.round(subject.stats.health)}%` : 'Life extinguished'}${subject.kind === 'plant' ? ` · Growth ${Math.round(subject.stats.growth)}%` : ''} · ${subject.trials} trials</p><button data-test="${subject.id}"${available < 1 || !subject.stats.alive ? ' disabled' : ''}>Test ${Math.min(5, available).toFixed(available < 5 ? 1 : 0)} ml</button><button class="reset-subject" data-reset-subject="${subject.id}">Reset subject</button></article>`).join('');
   const observedChanges = report ? Object.entries({ health: 'Health', vitality: 'Energy', growth: 'Growth', strength: 'Strength', love: 'Affection', transformation: 'Transformation', burning: 'Fire aura', freezing: 'Frost' }).filter(([key]) => Math.abs(report.after[key] - report.before[key]) > .05).map(([key, label]) => `<div class="observed-change"><span>${label}</span><strong>${report.before[key].toFixed(1)} → ${report.after[key].toFixed(1)}</strong></div>`).join('') : '';
-  const reportHTML = report ? `<section id="experimentReport" class="experiment-report" role="status"><div class="eyebrow">TRIAL ${report.serial} · ${report.volume.toFixed(1)} ML</div><h3>${escape(report.subjectName)}</h3><ul>${report.observations.map(line => `<li>${escape(line)}</li>`).join('')}</ul>${observedChanges}${effectRows(report.sample)}<p>${report.safe ? 'No harmful response observed at this dose.' : 'Harmful effects observed. Review the composition before serving.'}</p></section>` : '<p id="experimentReport" class="empty-note">Choose a subject to observe a measured dose. Reset a subject to compare potions from the same starting condition.</p>';
-  sheet('Experiments room', `<p class="room-intro">Try your potion on an animal, a plant or a mineral before selling. Each test uses real liquid from your ${state.pendingBottle ? 'sealed vial' : 'cauldron'}.</p><div class="experiment-supply">${available.toFixed(1)} ml available · ${state.pendingBottle ? 'Testing reduces the vial’s sale quantity' : 'Brew a little extra for your tests'}</div><div class="subjects-grid">${cards}</div>${reportHTML}${state.experiments.records.length ? `<details><summary>Observation journal · ${state.experiments.records.length} trials</summary>${state.experiments.records.slice(0, 8).map(record => `<p><strong>${escape(record.subjectName)}</strong> · ${record.volume.toFixed(1)} ml · ${escape(record.observations.join(' '))}</p>`).join('')}</details>` : ''}<button class="primary" data-action="${state.pendingBottle ? 'review-vial' : 'close'}">${state.pendingBottle ? 'Return to vial' : 'Return to brewing'}</button>`);
+  const reportHTML = report ? `<section id="experimentReport" class="experiment-report" role="status"><div class="eyebrow">TRIAL ${report.serial} · ${report.volume.toFixed(1)} ML</div><h3>${escape(report.subjectName)}</h3><ul>${report.observations.map(line => `<li>${escape(line)}</li>`).join('')}</ul>${observedChanges}<h3>Discovered effects · tested sample</h3>${effectRows(report.sample, true)}${!isSandbox() ? `<h3>Match of tested effects</h3>${breakdownHTML(assessPotion({ ...report.sample, volume: state.order.volume }, state.order))}` : ''}<button class="secondary" data-observation="${report.serial}">Remember this tested formula</button><p>${report.safe ? 'No harmful response observed at this dose.' : 'Harmful effects observed. Review the composition before serving.'}</p></section>` : '<p id="experimentReport" class="empty-note">The effects of this mixture are unknown until you test a measured dose. Reset a subject to compare potions from the same starting condition.</p>';
+  sheet('Experiments room', `<p class="room-intro">Discover your mixture’s effects on an animal, a plant or a mineral, compare with the customer’s request, then adjust and retest. Each test uses real liquid from your ${state.pendingBottle ? 'sealed vial' : 'cauldron'}.</p><div class="experiment-supply">${available.toFixed(1)} ml available · ${state.pendingBottle ? 'Testing reduces the vial’s sale quantity' : 'Brew a little extra for your tests'}</div><div class="subjects-grid">${cards}</div>${reportHTML}${state.experiments.records.length ? `<details><summary>Observation journal · ${state.experiments.records.length} trials</summary>${state.experiments.records.slice(0, 8).map(record => `<p><strong>${escape(record.subjectName)}</strong> · ${record.volume.toFixed(1)} ml · ${escape(record.observations.join(' '))}</p>`).join('')}</details>` : ''}<button class="primary" data-action="${state.pendingBottle ? 'review-vial' : 'close'}">${state.pendingBottle ? 'Return to vial' : 'Return to brewing'}</button>`);
   currentRoom = 'experiments';
 }
 function testPotion(subjectId) {
   const subject = state.experiments.subjects[subjectId];
   if (!subject?.stats.alive) throw new Error('Reset this subject before another experiment.');
+  const preparation = structuredClone(state.pendingBottle || brew.inspectLiquid());
   let sample;
   if (state.pendingBottle) {
     const split = splitPotionSample(state.pendingBottle, 5);
-    experimentReport = runExperiment(state, split.dose, subjectId, split.dose.volume);
+    experimentReport = runExperiment(state, split.dose, subjectId, split.dose.volume, Date.now(), preparation);
     state.pendingBottle = split.remaining;
     if (!split.remaining) state.stage = 'brewing';
   } else {
     if (brew.liquidVolume < 1) throw new Error('Add water and dissolve ground ingredients before testing.');
     sample = brew.takeSample(5);
-    experimentReport = runExperiment(state, sample, subjectId, sample.volume);
+    experimentReport = runExperiment(state, sample, subjectId, sample.volume, Date.now(), preparation);
   }
+  latestInspection = preparation;
+  if (state.tutorial < 5) state.tutorial = 5;
   audio.play('measure'); renderAll(); persist(); showExperiments();
   requestAnimationFrame(() => {
     const result = $('experimentReport');
@@ -360,28 +371,28 @@ function showGuild() {
 function showBook() {
   const rows = state.discoveries.map((d, index) => {
     const sample = d.sample;
-    const portions = sample.portions || [];
+    const portions = d.preparation?.portions || sample.portions || [];
     const grouped = new Map();
     for (const p of portions) {
       const key = `${p.ingredientId}:${Boolean(p.crushed)}`, prior = grouped.get(key);
       grouped.set(key, { ...p, ml: (prior?.ml || 0) + p.ml });
     }
-    return `<div class="recipe-row"><img src="${bottleSprite(sample.color)}" alt=""><div class="recipe-info"><strong>${escape(d.name)}</strong><p>${Math.round(sample.volume)} ml · ${escape(propertyDescription('color', sample.color))} · ${escape(propertyDescription('temperature', sample.temperature))}</p><ul>${[...grouped.values()].map(p => {
+    return `<div class="recipe-row"><img src="${bottleSprite(sample.color)}" alt=""><div class="recipe-info"><strong>${escape(d.name)}</strong><small class="formula-knowledge">${d.tested ? 'Tested discovery' : 'Untested formula · effects unknown'}</small><p>${Math.round(sample.volume)} ml · ${escape(propertyDescription('color', sample.color))} · ${escape(propertyDescription('temperature', sample.temperature))}</p><ul>${[...grouped.values()].map(p => {
       const ingredient = state.world.ingredients.find(i => i.id === p.ingredientId);
       return `<li>${p.ml.toFixed(1)} ${ingredient ? ingredientUnit(ingredient) : 'ml'} ${escape(ingredient?.name || 'reacted ingredient')}${p.crushed ? ' · ground' : ''}</li>`;
-    }).join('')}</ul><p>${Math.round(sample.history.elapsed)} s brewed · ${sample.history.heatEnergy.toFixed(1)} heat energy · ${sample.history.coldEnergy.toFixed(1)} frost energy · ${sample.history.stirred.toFixed(1)} stirring</p><button data-recipe="${index}">Read measurements</button>${portions.length ? `<button data-prepare="${index}">Prepare these portions</button>` : ''}</div></div>`;
+    }).join('')}</ul><p>${Math.round(sample.history.elapsed)} s brewed · ${sample.history.heatEnergy.toFixed(1)} heat energy · ${sample.history.coldEnergy.toFixed(1)} frost energy · ${sample.history.stirred.toFixed(1)} stirring</p><button data-recipe="${index}">${d.tested ? 'Read discoveries' : 'Read formula'}</button>${portions.length ? `<button data-prepare="${index}">Prepare these portions</button>` : ''}</div></div>`;
   }).join('');
-  sheet('Your recipe book', `<p>Keep discoveries from your own experiments. A recorded formula remembers the measured potion and its preparation.</p>${rows || '<p class="empty-note">The pages are waiting. Inspect a brew or bottle a potion, then save your first discovery.</p>'}<p class="quiet">Pouring a recorded formula only transfers its ingredients. Stir and control the temperature yourself; the engine determines the new result.</p>`);
+  sheet('Your recipe book', `<p>Your experiments build your knowledge. Tested discoveries retain their observed effects; untested formulas remain hypotheses.</p>${rows || '<p class="empty-note">The pages are waiting. Test a mixture in the Experiments room and remember its formula.</p>'}${state.experiments.records.length ? `<h3>Discovered experiment formulas</h3>${state.experiments.records.slice(0, 12).map(record => `<div class="journal-formula"><strong>Trial ${record.serial} · ${escape(record.subjectName)}</strong><p>${escape(record.observations.join(' '))}</p><button data-observation="${record.serial}">Save tested formula</button></div>`).join('')}` : ''}<p class="quiet">Pouring a recorded formula only transfers its ingredients. Stir and control the temperature yourself; the engine determines the new result.</p>`);
 }
 function showDiscovery(sample) {
   latestInspection = sample;
-  sheet('Record a discovery', `<p>Name this ${Math.round(sample.volume)} ml ${escape(propertyDescription('color', sample.color).toLowerCase())} brew.</p><input id="discoveryName" class="name-input" maxlength="40" placeholder="e.g. Moonlit travelling tonic" aria-label="Discovery name"><button class="primary" data-action="record-discovery">Write in recipe book</button>`);
+  sheet('Record a discovery', `<p>${observedPotion(state, sample) ? 'Tested discovery. Name this' : 'Untested formula: its effects remain unknown. Name this'} ${Math.round(sample.volume)} ml ${escape(propertyDescription('color', sample.color).toLowerCase())} brew.</p><input id="discoveryName" class="name-input" maxlength="40" placeholder="e.g. Moonlit travelling tonic" aria-label="Discovery name"><button class="primary" data-action="record-discovery">Write in recipe book</button>`);
 }
 function prepareRecipe(index) {
   if (state.pendingBottle || state.stage === 'sale' || brew.engine.ps.count) throw new Error('Finish your sale and clean the cauldron before preparing a formula.');
   const discovery = state.discoveries[index]; if (!discovery) throw new Error('Formula not found.');
   const grouped = new Map();
-  for (const p of discovery.sample.portions || []) {
+  for (const p of discovery.preparation?.portions || discovery.sample.portions || []) {
     const key = `${p.ingredientId}:${Boolean(p.crushed)}`, prior = grouped.get(key);
     grouped.set(key, { ingredientId: p.ingredientId, ml: (prior?.ml || 0) + p.ml, crushed: Boolean(p.crushed) });
   }
@@ -395,7 +406,7 @@ function prepareRecipe(index) {
   closeSheet(); renderRack(); updateHUD(); persist(); notify('Portions poured. Stir and apply the recorded heat or frost.');
 }
 function showSettings() {
-  sheet('Shop settings', `<label class="setting-row">Gentle sound effects<input id="soundSetting" type="checkbox"${state.settings.sound ? ' checked' : ''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics === 'balanced' ? ' selected' : ''}>Crisp · balanced</option><option value="eco"${state.settings.graphics === 'eco' ? ' selected' : ''}>Low · battery saver</option></select></label><p class="quiet">Both presets use the same 2D physics and potion quantities. Battery saver renders at 30 frames per second with fewer glows. Crisp mode uses finer material pixels.</p><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Replay tutorial</button><button data-action="menu">Main menu</button><a href="./sandbox.html?mode=2D">Original physics sandbox</a></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><h3>How to brew</h3><ol class="help-list"><li>Read the request. Ask for a clue if needed.</li><li>Gather plants, mushrooms and stones in the Wild garden. Depleted patches regrow over time.</li><li>Start with plain water. Select a raw ingredient and Grind & add, or add it whole and crush it with the Pestle inside the cauldron.</li><li>Use at least six parts water for one part ground ingredient to dissolve it. Hold Stir or drag through the brew. Less water makes thick liquid dough when kneaded; untouched dry grains remain solid.</li><li>Flame and Frost change energy and phases. Particle glows hint at strength, love, death, transformation, fire and freezing magic.</li><li>Inspect magic and chemistry. Test a 5 ml dose on a subject in the Experiments room; the dose consumes actual potion.</li><li>Bottle liquid after trapped steam condenses. Sell the vial and save useful formulas. Sandbox offers infinite resources and saves separately.</li></ol><details><summary>Save and simulation details</summary><p>The world, stock, resource recovery, experiments, vial and full cauldron save on this browser. Panels pause brewing while you read; natural resources continue recovering with time. Temperature, phases and particle properties are restored. A frozen coherent body is rebuilt on load. Export your save before clearing browser data.</p></details>`);
+  sheet('Shop settings', `<label class="setting-row">Gentle sound effects<input id="soundSetting" type="checkbox"${state.settings.sound ? ' checked' : ''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics === 'balanced' ? ' selected' : ''}>Crisp · balanced</option><option value="eco"${state.settings.graphics === 'eco' ? ' selected' : ''}>Low · battery saver</option></select></label><p class="quiet">Both presets use the same 2D physics and potion quantities. Battery saver renders at 30 frames per second with fewer glows. Crisp mode uses finer material pixels.</p><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Replay tutorial</button><button data-action="menu">Main menu</button><a href="./sandbox.html?mode=2D">Original physics sandbox</a></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><h3>How to brew</h3><ol class="help-list"><li>Read the desired effects and limits. The customer gives an outcome; you choose the formula.</li><li>Gather plants, mushrooms and stones in the Wild garden. Depleted patches regrow over time.</li><li>Start with plain water. Select a raw ingredient and Grind & add, or add it whole and crush it with the Pestle inside the cauldron.</li><li>Use at least six parts water for one part ground ingredient to dissolve it. Hold Stir or drag through the brew. Less water makes thick liquid dough when kneaded; untouched dry grains remain solid.</li><li>Flame and Frost change energy and phases. Particle glows hint at strength, love, death, transformation, fire and freezing magic.</li><li>Read the known effects in Ingredients. Mixtures start unknown: test 5 ml in the Experiments room, compare the discovered effects, and adjust and retest until you are satisfied.</li><li>Bottle liquid after trapped steam condenses. Sell the vial and save useful formulas. Sandbox offers infinite resources and saves separately.</li></ol><details><summary>Save and simulation details</summary><p>The world, stock, resource recovery, experiments, vial and full cauldron save on this browser. Panels pause brewing while you read; natural resources continue recovering with time. Temperature, phases and particle properties are restored. A frozen coherent body is rebuilt on load. Export your save before clearing browser data.</p></details>`);
 }
 function exportSave() {
   const blob = new Blob([encodeSave(state, brew)], { type: 'application/json' }), url = URL.createObjectURL(blob), anchor = document.createElement('a');
@@ -475,9 +486,14 @@ function bindUI() {
     if (button.dataset.restock) { const result = restock(state, Number(button.dataset.restock)); renderAll(); persist(); showInventory(); notify(`Refilled ${result.quantity} ml for ${result.cost} coins.`); return; }
     if (button.dataset.trade) { const result = tradeStock(state, Number(button.dataset.trade)); renderAll(); persist(); showInventory(); notify(`Traded ${result.quantity} ml for ${result.payment} coins.`); return; }
     if (button.dataset.upgrade) { const upgrade = buyUpgrade(state, Number(button.dataset.upgrade)); brew.equipment = state.equipment; audio.play('sale'); renderAll(); persist(); showGuild(); notify(`${upgrade.name} is ready.`); return; }
+    if (button.dataset.observation) {
+      const report = state.experiments.records.find(record => record.serial === Number(button.dataset.observation));
+      if (!report) throw new Error('Experiment not found.');
+      showDiscovery(report.preparation?.mass ? report.preparation : report.sample); return;
+    }
     if (button.dataset.recipe) {
       selectedRecipe = state.discoveries[Number(button.dataset.recipe)];
-      sheet(selectedRecipe.name, `${measuredRows(selectedRecipe.sample, true)}<h3>Magic & chemistry</h3>${effectRows(selectedRecipe.sample)}<div class="snapshot-info">Peak temperature ${Math.round(selectedRecipe.sample.history.peakTemperature * 100)}°A · ${selectedRecipe.sample.history.evaporated.toFixed(1)} ml evaporated</div><button class="primary" data-action="book">Back to recipe book</button>`); return;
+      sheet(selectedRecipe.name, `${measuredRows(selectedRecipe.sample, true)}<h3>Magic & chemistry</h3>${effectRows(selectedRecipe.sample, discoveryKnowledge(selectedRecipe))}<div class="snapshot-info">Peak temperature ${Math.round(selectedRecipe.sample.history.peakTemperature * 100)}°A · ${selectedRecipe.sample.history.evaporated.toFixed(1)} ml evaporated</div><button class="primary" data-action="book">Back to recipe book</button>`); return;
     }
     if (button.dataset.prepare) { prepareRecipe(Number(button.dataset.prepare)); return; }
     switch (button.dataset.action) {

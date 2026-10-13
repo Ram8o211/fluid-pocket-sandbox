@@ -7,7 +7,7 @@
  * @typedef {{id:number, name:string, material:object, price:number, starter:boolean, lore:string, form?:string}} Ingredient
  * @typedef {{volume:number, mass:number, color:string, density:number, viscosity:number, temperature:number, volatility:number, stability:number, potency:number, strength:number, love:number, death:number, transformation:number, fire:number, freeze:number, acidity:number, poison:number, effects:object, liquidFraction:number, composition:object, history:object, cost:{ingredients:number,energy:number}}} PotionSample
  * @typedef {{id:string, name:string, role:string, portraitSeed:number, dialogue:string}} Customer
- * @typedef {{property:string, target:number|string, tolerance:number, weight:number, hard:boolean}} Requirement
+ * @typedef {{property:string, target:number|string, tolerance:number, weight:number, hard:boolean, comparison?:string, minimum?:number}} Requirement
  * @typedef {{id:string, customer:Customer, requirements:Requirement[], volume:number, budget:number, difficulty:number, witness:object, clue:string}} CustomerOrder
  * @typedef {{thermometer:boolean, densimeter:boolean, viscometer:boolean, analyzer:boolean, furnace:number, cauldron:number, reagents:number}} LaboratoryEquipment
  * @typedef {{version:number, seed:WorldSeed, coins:number, reputation:number, completed:number, inventory:object, equipment:LaboratoryEquipment, discoveries:object[], order:CustomerOrder, pendingBottle:PotionSample|null, lastSale:object|null, tutorial:number, settings:object, brew:object|null}} ShopState
@@ -28,7 +28,7 @@ export const PROPERTIES = Object.freeze({
   temperature: { label: 'Temperature', tolerance: .09 },
   volatility: { label: 'Volatility', tolerance: .14 },
   stability: { label: 'Stability', tolerance: 16 },
-  potency: { label: 'Magic', tolerance: 14 },
+  potency: { label: 'Arcane glow', tolerance: 14 },
   strength: { label: 'Strength', tolerance: .12 },
   love: { label: 'Love', tolerance: .12 },
   death: { label: 'Death', tolerance: .09 },

@@ -3,7 +3,7 @@ import { availableIngredients, seedNumber } from './world.mjs';
 import { BrewingSession } from './brewing.mjs';
 import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { propertyDescription } from './potion.mjs';
-import { describeEffects } from './effects.mjs';
+import { describeEffects, EFFECT_PROPERTIES, EFFECT_DEFINITIONS } from './effects.mjs';
 
 const NAMES = ['Mira', 'Oswin', 'Rowan', 'Elara', 'Bram', 'Sylvie', 'Aldric', 'Tamsin', 'Fern', 'Corin', 'Nessa', 'Hugo'];
 const ROLES = ['wandering bard', 'forest keeper', 'village knight', 'moon scholar', 'herbalist', 'castle cook'];
@@ -24,7 +24,7 @@ export function simulateWitness(world, recipe, equipment = {}) {
   return brew.bottle(recipe.volume);
 }
 
-export function generateOrder(world, completed = 0, equipment = {}) {
+function generatePhysicalOrder(world, completed = 0, equipment = {}) {
   const rng = mulberry32(seedNumber(`${world.seed}:order:${completed}`));
   const ingredients = availableIngredients(world, equipment), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
   const liquids = ingredients.filter(i => !i.form || i.form === 'liquid');
@@ -68,4 +68,65 @@ export function generateOrder(world, completed = 0, equipment = {}) {
     clue: completed === 0 ? `Your first commission: pour ${volume} ml of ${sources[0]}. Three 20 ml pours will do.` : `I like the character of ${sources.join(' with ')}.${recipe.crush ? ' Crush the raw ingredient, then stir it into the water to extract its properties.' : ''}${recipe.heat ? ' Gently warmed, please.' : recipe.cool ? ' A brief touch of frost would be lovely.' : ' A calm, well-mixed brew would suit me.'}`,
     targetDescriptions: Object.fromEntries(requirements.map(r => [r.property, propertyDescription(r.property, r.target)]))
   };
+}
+
+const EFFECT_PURPOSES = Object.freeze({
+  strength: 'build strength for a long journey', love: 'bring affection and calm to a restless companion',
+  transformation: 'transform an enchanted garden', fire: 'carry a gentle fire enchantment',
+  freeze: 'bring frost to the summer storeroom', acidity: 'etch an old stone carving',
+  poison: 'control pests in a sealed garden', death: 'perform a carefully measured shadow ritual'
+});
+const EFFECT_SEQUENCE = ['strength', 'love', 'freeze', 'transformation', 'fire', 'acidity', 'poison', 'death'];
+
+/** Customers describe an outcome. A private simulated witness proves that the
+ * unlocked ingredients and visible dose controls can achieve it; it never
+ * becomes a customer clue or a player recipe. Legacy inert worlds keep their
+ * pinned physical commissions until the player opens a modern world. */
+export function generateOrder(world, completed = 0, equipment = {}) {
+  const ingredients = availableIngredients(world, equipment);
+  if (!ingredients.some(i => EFFECT_PROPERTIES.some(key => i.material[key] > .01))) return generatePhysicalOrder(world, completed, equipment);
+  const rng = mulberry32(seedNumber(`${world.seed}:effects-order:${completed}`));
+  const solvent = ingredients.find(i => i.solvent) || ingredients.find(i => !i.form || i.form === 'liquid');
+  if (!solvent) throw new Error('A customer potion needs an available liquid solvent.');
+  const candidates = ingredients.filter(i => i.id !== solvent.id && Math.abs(i.material.miscibility - solvent.material.miscibility) < .06);
+  const possible = EFFECT_SEQUENCE.filter(key => candidates.some(i => i.material[key] >= .15));
+  if (!possible.length) return generatePhysicalOrder(world, completed, equipment);
+  const desired = possible[completed % possible.length];
+  const strongest = key => candidates.slice().sort((a, b) => b.material[key] - a.material[key])[0];
+  const primary = strongest(desired), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
+  const opposes = ingredient => primary.material.fire > .1 && ingredient.material.freeze > .1 || primary.material.freeze > .1 && ingredient.material.fire > .1;
+  const complements = possible.filter(key => key !== desired && strongest(key).id !== primary.id && !opposes(strongest(key)));
+  const secondaryEffect = completed >= 2 && complements.length ? complements[Math.floor(rng() * complements.length)] : null;
+  const secondary = secondaryEffect ? strongest(secondaryEffect) : null;
+  const volume = completed === 0 ? 60 : difficulty < 3 ? 80 : 100;
+  const water = secondary ? Math.max(140, volume + 20) : volume + 20;
+  const portion = ingredient => ({ ingredientId: ingredient.id, ml: 10, crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form)) });
+  const recipe = { portions: [{ ingredientId: solvent.id, ml: water }, portion(primary), ...(secondary ? [portion(secondary)] : [])], volume,
+    ticks: secondary ? 320 : 280, thermalTicks: 0, heat: 0, cool: 0, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
+  let sample = simulateWitness(world, recipe, equipment);
+  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] >= .01);
+  if (sample.volume < volume - .001 || !wanted.includes(desired)) {
+    // Some pinned legacy raw materials may not extract reliably. Try a known
+    // compatible strength infusion rather than request an unattainable effect.
+    const fallback = strongest(possible[0]);
+    recipe.portions = [{ ingredientId: solvent.id, ml: volume + 20 }, portion(fallback)];
+    recipe.ticks = 280; sample = simulateWitness(world, recipe, equipment);
+    wanted = possible.filter(key => sample[key] >= .01).slice(0, 1);
+  }
+  if (!wanted.length || sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
+  /** @type {import('./contracts.mjs').Requirement[]} */
+  const requirements = wanted.map(property => ({ property, target: sample[property], tolerance: Math.max(.002, Math.min(PROPERTIES[property].tolerance, sample[property] * .35)),
+    weight: 3, hard: false, minimum: sample[property] * .3, comparison: 'target' }));
+  for (const property of ['poison', 'death', 'acidity', 'fire', 'freeze']) {
+    if (wanted.includes(property)) continue;
+    const ceiling = Math.max(property === 'acidity' ? .035 : .015, sample[property] * 1.3 + .005);
+    requirements.push({ property, target: Math.min(1, ceiling), tolerance: .008, weight: .4, hard: true, comparison: 'maximum' });
+  }
+  const purpose = wanted.map(key => EFFECT_PURPOSES[key]).join(' and ');
+  const customer = { id: `customer-${completed}`, name: NAMES[Math.floor(rng() * NAMES.length)], role: ROLES[Math.floor(rng() * ROLES.length)],
+    portraitSeed: Math.floor(rng() * 0xffffffff), dialogue: `I need a potion to ${purpose}. Match these effects as closely as you can, and keep unwanted effects below my limits.` };
+  const clue = 'Read the known effects of your plain ingredients, choose your own mixture, then grind and stir with water. Reserve a little extra for a test in the Experiments room. Adjust your brew from what you observe.';
+  return { id: `${world.seed}-${completed}`, conceptVersion: 1, customer, requirements, volume, difficulty,
+    budget: Math.round(43 + difficulty * 14 + wanted.length * 6 + rng() * 8), witness: recipe, clue,
+    targetDescriptions: Object.fromEntries(requirements.map(r => [r.property, r.comparison === 'maximum' ? `At most ${Math.round(Number(r.target) * 100)}% ${EFFECT_DEFINITIONS[r.property].label.toLowerCase()}` : propertyDescription(r.property, r.target)])) };
 }

@@ -20,12 +20,12 @@ export function assessPotion(sample, order) {
   if (!sample || sample.volume < 1 || sample.mass <= 0 || !order.requirements.length)
     return { quality: 0, quantityRatio: 0, acceptable: false, breakdown: [], hardFailures: [] };
   const breakdown = order.requirements.map(r => {
-    const actual = sample[r.property], error = propertyError(r.property, actual, r.target);
+    const actual = sample[r.property], error = r.comparison === 'maximum' ? Math.max(0, actual - r.target) : propertyError(r.property, actual, r.target);
     return { ...r, actual, error, similarity: toleranceSimilarity(error, r.tolerance), met: error <= r.tolerance };
   });
   const weight = breakdown.reduce((s, r) => s + r.weight, 0);
   const match = breakdown.reduce((s, r) => s + r.weight * r.similarity, 0) / Math.max(.001, weight);
-  const hardFailures = breakdown.filter(r => r.hard && !r.met).map(r => r.property);
+  const hardFailures = breakdown.filter(r => r.hard && !r.met || r.minimum !== undefined && (!Number.isFinite(r.actual) || r.actual < r.minimum)).map(r => r.property);
   const quantityRatio = clamp(sample.volume / order.volume, 0, 1);
   const quality = Math.round(1000 * match * quantityRatio * clamp(sample.liquidFraction, 0, 1) * (hardFailures.length ? .35 : 1)) / 10;
   return { quality, quantityRatio, acceptable: quality >= 25 && quantityRatio >= .5 && !hardFailures.length, breakdown, hardFailures };

@@ -62,6 +62,7 @@ export class BrewingSession {
     this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 };
     this.portions = []; this.actions = []; this.heat = 0; this.cool = 0;
     this.bottles = 0; this.lastPour = null;
+    this.batchId = crypto.randomUUID();
   }
   get capacity() { return CAPACITY_ML[clamp(this.equipment.cauldron || 0, 0, 2)]; }
   get liquidVolume() {
@@ -87,6 +88,7 @@ export class BrewingSession {
     const ps = this.engine.ps;
     const quantity = Math.max(0, Math.floor(Math.min(requestedMl, infinite ? Infinity : inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, (ps.capacity - ps.count) * PARTICLE_ML) + .00001));
     if (!quantity) return 0;
+    if (!ps.count) this.batchId = crypto.randomUUID();
     const massBefore = ps.totalMass();
     const start = ps.count, x = ingredientId % 2 ? -1.2 : 1.2;
     const count = this.engine.emit(ingredientId, { x, y: .95, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
@@ -185,7 +187,14 @@ export class BrewingSession {
   }
   inspect() {
     const ps = this.engine.ps;
-    return measurePotion(this.engine, Array.from({ length: ps.count }, (_, index) => ({ index, mass: ps.mass[index] })), this.history, this.cost);
+    const sample = measurePotion(this.engine, Array.from({ length: ps.count }, (_, index) => ({ index, mass: ps.mass[index] })), this.history, this.cost);
+    return sample && { ...sample, batchId: this.batchId };
+  }
+  inspectLiquid() {
+    const ps = this.engine.ps, selections = [];
+    for (let index = 0; index < ps.count; index++) if (ps.phase[index] === Phase.LIQUID) selections.push({ index, mass: ps.mass[index] });
+    const sample = measurePotion(this.engine, selections, this.history, this.cost);
+    return sample && { ...sample, batchId: this.batchId, portions: this.portions.map(portion => ({ ...portion })) };
   }
   bottle(requestedMl) {
     return this.drainLiquid(requestedMl);
@@ -217,19 +226,22 @@ export class BrewingSession {
     this.bottles++;
     const id = `vial-${this.bottles}-${Math.round(this.history.elapsed * 1000)}`;
     if (ps.count === 0) { this.engine.reset(); this.thermal.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 }; }
-    return { ...sample, id, portions: bottledPortions };
+    return { ...sample, id, batchId: this.batchId, portions: bottledPortions };
   }
   clean() {
     const wasted = { ...this.cost, volume: this.occupiedVolume };
     this.engine.reset(); this.thermal.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 };
     this.portions = []; this.actions = []; this.heat = this.cool = 0;
+    this.batchId = crypto.randomUUID();
     return wasted;
   }
   snapshot() {
     const ps = this.engine.ps;
-    return { particleMl: PARTICLE_ML, count: ps.count, particles: Object.fromEntries(SAVE_FIELDS.map(k => [k, Array.from(ps[k].subarray(0, ps.count))])), materials: [...this.engine.materials.values()], thermal: this.thermal.snapshot(), mixtures: this.engine.reactions.mixtures.snapshot(), history: { ...this.history }, cost: { ...this.cost }, portions: this.portions.map(p => ({ ...p })), bottles: this.bottles, time: this.engine.time, stepIndex: this.engine.stepIndex };
+    return { batchId: this.batchId, particleMl: PARTICLE_ML, count: ps.count, particles: Object.fromEntries(SAVE_FIELDS.map(k => [k, Array.from(ps[k].subarray(0, ps.count))])), materials: [...this.engine.materials.values()], thermal: this.thermal.snapshot(), mixtures: this.engine.reactions.mixtures.snapshot(), history: { ...this.history }, cost: { ...this.cost }, portions: this.portions.map(p => ({ ...p })), bottles: this.bottles, time: this.engine.time, stepIndex: this.engine.stepIndex };
   }
   restore(saved) {
+    if (saved?.batchId !== undefined && (typeof saved.batchId !== 'string' || !saved.batchId || saved.batchId.length > 80)) throw new Error('Invalid saved batch identity.');
+    this.batchId = saved?.batchId || crypto.randomUUID();
     if (!saved) return;
     if (!Number.isInteger(saved.count) || saved.count < 0 || saved.count > this.engine.ps.capacity) throw new Error('Invalid saved cauldron.');
     if (!saved.particles || !saved.materials?.length) throw new Error('Incomplete saved cauldron.');

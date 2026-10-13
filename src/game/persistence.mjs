@@ -5,6 +5,8 @@ import { PROPERTIES } from './contracts.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
 import { createForaging } from './gathering.mjs';
 import { createExperimentState, EXPERIMENT_SUBJECTS, EXPERIMENT_RECORD_LIMIT } from './experiments.mjs';
+import { generateOrder } from './orders.mjs';
+import { observedPotion } from './knowledge.mjs';
 
 export const SAVE_KEY = 'alchemists-shop-save';
 export const SANDBOX_SAVE_KEY = 'alchemists-shop-sandbox-save';
@@ -37,13 +39,20 @@ export function migrateSave(raw) {
       lastSale: raw.lastSale ? { ...raw.lastSale, sample: migrateSample(raw.lastSale.sample) } : null };
   }
   if (raw.version !== SAVE_VERSION) throw new Error('Unsupported shop save. It has been preserved.');
+  // Switch an untouched commission to the effects concept without replacing an
+  // in-progress brew, bottled potion, inventory, or completed customer sale.
+  if (raw.mode === 'shop' && raw.order?.conceptVersion !== 1 && raw.stage === 'brewing' && !raw.pendingBottle && !raw.brew?.count && raw.world?.ingredients?.length)
+    raw = { ...raw, order: generateOrder(raw.world, raw.completed, raw.equipment) };
+  raw.discoveries = (raw.discoveries || []).map(discovery => discovery.tested === undefined ? { ...discovery,
+    tested: Boolean(observedPotion(raw, discovery.sample)), observations: observedPotion(raw, discovery.sample)?.observations || [] } : discovery);
   return raw;
 }
 
 export function validateSave(state) {
   const nonnegative = n => Number.isFinite(n) && n >= 0;
   const validEffects = source => EFFECT_PROPERTIES.every(key => Number.isFinite(source?.[key]) && source[key] >= 0 && source[key] <= 1);
-  const validSample = sample => sample && nonnegative(sample.volume) && sample.volume > 0 && nonnegative(sample.mass) && sample.mass > 0 &&
+  const validBatch = source => source.batchId === undefined || typeof source.batchId === 'string' && source.batchId.length > 0 && source.batchId.length <= 80;
+  const validSample = sample => sample && validBatch(sample) && nonnegative(sample.volume) && sample.volume > 0 && nonnegative(sample.mass) && sample.mass > 0 &&
     sample.cost && Object.values(sample.cost).every(nonnegative) && Number.isFinite(sample.temperature) && validEffects(sample);
   if (typeof state.seed !== 'string' || !state.seed || !nonnegative(state.coins) || !nonnegative(state.reputation) || state.reputation > 100 || !Number.isInteger(state.completed) || state.completed < 0) throw new Error('Invalid shop totals.');
   if (!state.world?.ingredients?.length || state.world.seed !== state.seed) throw new Error('Missing world ingredients.');
@@ -62,8 +71,10 @@ export function validateSave(state) {
   if (!state.order?.requirements?.length || !(state.order.volume > 0) || !(state.order.budget > 0)) throw new Error('Missing customer order.');
   for (const r of state.order.requirements) {
     if (!Object.hasOwn(PROPERTIES, r.property) || !(r.tolerance > 0) || !(r.weight > 0) || (r.property === 'color' ? !/^#[a-f0-9]{6}$/i.test(r.target) : !Number.isFinite(r.target))) throw new Error('Invalid order target.');
+    if (r.comparison !== undefined && !['target', 'maximum'].includes(r.comparison) || r.minimum !== undefined && (!nonnegative(r.minimum) || r.minimum > Number(r.target))) throw new Error('Invalid effect requirement.');
   }
   if (state.pendingBottle && !validSample(state.pendingBottle)) throw new Error('Invalid saved vial.');
+  for (const discovery of state.discoveries) if (!validSample(discovery.sample) || typeof discovery.tested !== 'boolean' || !Array.isArray(discovery.observations) || discovery.observations.some(line => typeof line !== 'string')) throw new Error('Invalid saved discovery.');
   if (!['brewing', 'inspection', 'sale'].includes(state.stage)) throw new Error('Invalid shop state.');
   if (!['shop', 'sandbox'].includes(state.mode)) throw new Error('Invalid game mode.');
   if (state.mode === 'sandbox' && (state.coins !== 0 || state.reputation !== 0 || state.completed !== 0 || state.debt !== 0 || state.soldOrderIds.length)) throw new Error('Sandbox experiments cannot contain shop progression.');
@@ -90,6 +101,7 @@ export function validateSave(state) {
       !validEffects(record.effects) || typeof record.safe !== 'boolean' || !Number.isFinite(record.doseMl) || record.doseMl <= 0 || record.doseMl > 50 ||
       !validStats(record.before) || !validStats(record.after) || !Array.isArray(record.observations) || record.observations.some(text => typeof text !== 'string')) throw new Error('Invalid saved experiment record.');
     recordIds.add(record.id);
+    if (record.preparation?.mass && (!validSample(record.preparation) || !Array.isArray(record.preparation.portions) || record.preparation.portions.some(portion => !ids.has(portion.ingredientId) || !nonnegative(portion.ml)))) throw new Error('Invalid tested formula.');
   }
   return state;
 }
