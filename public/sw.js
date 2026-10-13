@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-v18';
+const CACHE = 'alchemist-shop-effects-23';
 const CORE = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const CORE = [
   './src/game/effects.mjs',
   './src/game/gathering.mjs',
   './src/game/experiments.mjs',
+  './src/game/knowledge.mjs',
   './src/game/potion.mjs',
   './src/game/brewing.mjs',
   './src/game/cauldron.mjs',

@@ -70,9 +70,9 @@ try {
   assert.equal(initial.world.ingredients.filter(i => i.form === 'liquid').length, 1);
   assert.ok(initial.world.ingredients.some(i => i.form === 'plant'));
   assert.ok(initial.world.ingredients.some(i => i.form === 'stone'));
-  assert.match(await page.locator('[data-ingredient="10"]').textContent(), /Stone/i);
+  assert.match(await page.locator('[data-ingredient="10"]').textContent(), /Chalk|Stone/i);
   await pourRecipe(page, initial.order.witness); await page.waitForTimeout(550);
-  assert.match(await page.locator('#volume').textContent(), /60 \/ 60/);
+  assert.ok(Number((await page.locator('#volume').textContent()).split('/')[0]) >= initial.order.volume);
   // Hold-assisted stirring and a real circular spoon gesture.
   const stir = await page.locator('#stirBtn').boundingBox();
   await page.mouse.move(stir.x + stir.width / 2, stir.y + stir.height / 2); await page.mouse.down(); await page.waitForTimeout(450); await page.mouse.up();
@@ -86,13 +86,23 @@ try {
   await page.locator('#coolBtn').click(); await page.waitForTimeout(250);
   for (let i = 0; i < 3; i++) await page.locator('#coolBtn').click();
   await page.locator('#measureBtn').click();
-  assert.match(await page.locator('#sheetContent').textContent(), /60 ml|60\.0 ml/);
+  assert.match(await page.locator('#sheetContent').textContent(), /ml in the cauldron/);
+  assert.match(await page.locator('#sheetContent').textContent(), /Mixture effects unknown/);
+  assert.equal(await page.locator('.effect-reading strong').first().textContent(), '?');
   assert.match(await page.locator('#sheetContent').textContent(), /°A/);
   const activeSave = await readSave(page);
-  assert.equal(activeSave.brew.count, 240); assert.equal(activeSave.brew.particleMl, .25);
+  assert.equal(activeSave.brew.count, initial.order.witness.portions.reduce((sum,p) => sum+p.ml,0)*4); assert.equal(activeSave.brew.particleMl, .25);
   assert.match(await page.locator('#labStatus').textContent(), /SEALED/);
   assert.ok(activeSave.brew.history.stirred > 0); assert.ok(activeSave.brew.history.heatEnergy > 0); assert.ok(activeSave.brew.history.coldEnergy > 0);
-  await page.locator('[data-action="save-inspection"]').click(); await page.locator('#discoveryName').fill('First travelling tonic');
+  assert.ok(initial.order.requirements.some(r => r.property === 'strength' && r.target > 0));
+  await page.locator('[data-action="experiments"]').click();
+  await page.locator('[data-test="rabbit"]').click();
+  assert.match(await page.locator('#experimentReport').textContent(), /Discovered effects/);
+  assert.notEqual(await page.locator('#experimentReport .effect-reading strong').first().textContent(), '?');
+  const firstTest = await readSave(page);
+  assert.equal(firstTest.experiments.records.length, 1);
+  assert.ok(firstTest.experiments.records[0].sample.strength > .01);
+  await page.locator('#experimentReport [data-observation]').click(); await page.locator('#discoveryName').fill('First travelling tonic');
   assert.equal(await page.locator('#discoveryName').inputValue(),'First travelling tonic');
   await page.locator('[data-action="record-discovery"]').click();
   assert.match(await page.locator('#sheetContent').textContent(), /First travelling tonic/);
@@ -100,12 +110,15 @@ try {
   await mkdir('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/mobile-workshop.png', fullPage: true });
   await bottleAndSell(page); const firstSale = await readSave(page);
   assert.equal(firstSale.completed, 1); assert.ok(firstSale.coins > initial.coins); assert.ok(firstSale.lastSale.quality >= 90); assert.equal(firstSale.pendingBottle, null);
-  assert.equal(firstSale.discoveries.length, 1); assert.ok(firstSale.inventory[1] < initial.inventory[1]);
+  assert.equal(firstSale.discoveries.length, 1); assert.equal(firstSale.discoveries[0].tested, true); assert.ok(firstSale.inventory[1] < initial.inventory[1]);
   await page.screenshot({ path: 'test-results/customer-sale.png', fullPage: true });
   await page.locator('[data-action="next"]').click(); await page.waitForSelector('body[data-game-state="brewing"]', { timeout });
   await page.locator('#upgradesBtn').click(); await page.locator('[data-upgrade="0"]').click(); await page.locator('[data-action="close"]').first().click();
   const second = await readSave(page); assert.ok(second.equipment.densimeter);
-  await pourRecipe(page, second.order.witness); await page.waitForTimeout(550); await bottleAndSell(page);
+  if ((await readSave(page)).brew.count) { await page.locator('#cleanBtn').click(); await page.locator('[data-action="confirm-clean"]').click(); }
+  await pourRecipe(page, second.order.witness); await page.waitForTimeout(550);
+  await page.locator('#experimentsBtn').click(); await page.locator('[data-test="beetle"]').click();
+  await page.locator('[data-action="close"]').first().click(); await bottleAndSell(page);
   const twoSales = await readSave(page); assert.equal(twoSales.completed, 2); assert.ok(twoSales.lastSale.quality >= 95);
   await page.locator('[data-action="next"]').click(); await page.waitForSelector('body[data-game-state="brewing"]', { timeout });
   // Extraction recipes can leave a small excess after the customer's vial.
@@ -231,11 +244,12 @@ try {
   assert.ok(whole.brew.particles.powderContent.every(p => p === 0));
   await page.screenshot({path:'test-results/whole-raw-ingredient.png',fullPage:true});
   await page.locator('[data-ingredient="1"]').click();await clickDose(page,40);await page.locator('#pourBtn').click();
+  const beforeRoomTest = await readSave(page);
   await page.locator('#experimentsBtn').click();
   await page.locator('[data-test="rabbit"]').click();
   assert.ok((await page.locator('#experimentReport').textContent()).length > 20);
-  const tested = await readSave(page); assert.equal(tested.experiments.records.length, 1); assert.equal(tested.experiments.records[0].volume,5);
-  assert.equal(tested.experiments.subjects.rabbit.trials,1);
+  const tested = await readSave(page); assert.equal(tested.experiments.records.length, beforeRoomTest.experiments.records.length + 1); assert.equal(tested.experiments.records[0].volume,5);
+  assert.equal(tested.experiments.subjects.rabbit.trials,beforeRoomTest.experiments.subjects.rabbit.trials + 1);
   await page.locator('[data-reset-subject="rabbit"]').click();
   assert.equal((await readSave(page)).experiments.subjects.rabbit.trials,0);
   await page.screenshot({path:'test-results/experiments-room.png',fullPage:true});
@@ -272,8 +286,53 @@ try {
   assert.equal(await page.getByText('Startup failed', { exact: false }).count(), 0);
   assert.ok((await page.locator('#materialSelect').textContent()).length > 5);
   await page.screenshot({ path: 'test-results/original-sandbox.png', fullPage: true });
+  // The discovery loop also applies to sealed vials, saved hypotheses, reloads,
+  // and newly prepared batches. Exercise it through visible controls alone.
+  const discoveryContext = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
+  const discoveryPage = await discoveryContext.newPage(); failurePage = discoveryPage;
+  discoveryPage.on('pageerror', error => errors.push(error.message));
+  discoveryPage.on('response', response => { if (response.status() >= 400) failedResponses.push(response.url()); });
+  await discoveryPage.goto(base); await discoveryPage.waitForSelector('body[data-game-ready="true"]', { timeout });
+  await discoveryPage.locator('#worldSeed').fill('discovery-acceptance');
+  await discoveryPage.locator('#newWorldBtn').click(); await discoveryPage.waitForSelector('body[data-game-state="brewing"]', { timeout });
+  const discoveryStart = await readSave(discoveryPage);
+  await discoveryPage.locator('#inventoryBtn').click();
+  await discoveryPage.locator('.plain-ingredient-effects summary').nth(1).click();
+  assert.match(await discoveryPage.locator('.plain-ingredient-effects').nth(1).textContent(), /86%/);
+  await discoveryPage.locator('[data-action="close"]').first().click();
+  await pourRecipe(discoveryPage, discoveryStart.order.witness);
+  await discoveryPage.locator('#bottleBtn').click();
+  assert.match(await discoveryPage.locator('.score').textContent(), /unknown match/);
+  assert.doesNotMatch(await discoveryPage.locator('#sheetContent').textContent(), /Expected offer:/);
+  assert.match(await discoveryPage.locator('[data-action="sell"]').textContent(), /Test before serving/);
+  assert.equal(await discoveryPage.locator('[data-action="sell"]').isDisabled(), true);
+  await discoveryPage.locator('[data-action="save-inspection"]').click();
+  await discoveryPage.locator('#discoveryName').fill('Untested hypothesis'); await discoveryPage.locator('[data-action="record-discovery"]').click();
+  assert.equal((await readSave(discoveryPage)).discoveries[0].tested, false);
+  await discoveryPage.locator('[data-action="close"]').first().click(); await discoveryPage.locator('#bottleBtn').click();
+  await discoveryPage.locator('[data-action="experiments"]').click(); await discoveryPage.locator('[data-test="rabbit"]').click();
+  assert.match(await discoveryPage.locator('#experimentReport').textContent(), /Discovered effects/);
+  await discoveryPage.screenshot({ path: 'test-results/discovered-potion-effects.png', fullPage: true });
+  await discoveryPage.locator('[data-action="review-vial"]').click();
+  assert.match(await discoveryPage.locator('.score').textContent(), /\d+.*observed match/);
+  assert.match(await discoveryPage.locator('#sheetContent').textContent(), /Expected offer:/);
+  const knownVial = await readSave(discoveryPage); assert.ok(Math.abs(knownVial.pendingBottle.volume - 55) < .001);
+  await discoveryPage.locator('[data-action="save-inspection"]').click(); await discoveryPage.locator('#discoveryName').fill('Learned strength');
+  await discoveryPage.locator('[data-action="record-discovery"]').click();
+  assert.equal((await readSave(discoveryPage)).discoveries[0].tested, true);
+  await discoveryPage.locator('[data-recipe="1"]').click();
+  assert.match(await discoveryPage.locator('#sheetContent').textContent(), /Mixture effects unknown/);
+  await discoveryPage.reload(); await discoveryPage.locator('#continueBtn').click();
+  await discoveryPage.waitForSelector('[data-action="sell"]', { timeout });
+  assert.match(await discoveryPage.locator('#sheetContent').textContent(), /Expected offer:/);
+  assert.equal((await readSave(discoveryPage)).experiments.records.length, 1);
+  await discoveryPage.locator('[data-action="discard-vial"]').click(); await discoveryPage.locator('[data-action="confirm-discard"]').click();
+  await discoveryPage.locator('#cleanBtn').click(); await discoveryPage.locator('[data-action="confirm-clean"]').click();
+  await pourRecipe(discoveryPage, discoveryStart.order.witness); await discoveryPage.locator('#bottleBtn').click();
+  assert.match(await discoveryPage.locator('.score').textContent(), /unknown match/, 'a learned recipe does not automatically test a new batch');
+  await discoveryContext.close();
   assert.deepEqual(failedResponses, [], 'Missing deployment assets'); assert.deepEqual(errors, [], 'Browser initialization/runtime errors');
-  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two orders, raw ingredient grinding, real stir/heat/frost, settling, retained steam, pestle, stirring-only liquid dough, fine pixels, stock/save conservation, experiment dosing and reset, nature depletion, separate infinite sandbox, touch, responsive layouts and original sandbox.`);
+  console.log(`Browser acceptance OK (${live ? 'LIVE Pages' : 'project-path build'}): two effect orders, unknown mixture and offer gates, sealed-vial discoveries, saved hypotheses, new-batch retesting, raw ingredient grinding, real stir/heat/frost, settling, retained steam, pestle, stirring-only liquid dough, fine pixels, stock/save conservation, experiment dosing and reset, nature depletion, separate infinite sandbox, touch, responsive layouts and original sandbox.`);
 } catch(error) {
   try {await mkdir('test-results',{recursive:true});await failurePage.screenshot({path:'test-results/browser-failure.png',fullPage:true});await writeFile('test-results/browser-failure-save.json',JSON.stringify(await readSave(failurePage)));if(await failurePage.locator('#sheet').evaluate(e=>e.open))await failurePage.locator('[data-action="close"]').first().click();if(await failurePage.locator('#menuBtn').isVisible())await failurePage.locator('#menuBtn').click();await writeFile('test-results/browser-failure-save.json',JSON.stringify(await readSave(failurePage)));} catch { /* Preserve the original assertion. */ }
   throw error;

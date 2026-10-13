@@ -157,3 +157,11 @@ The Node test suite covers phase placement from ambient temperature, solid subdi
 Vercel builds with `npm run build` and serves `dist/`. GitHub remains the source of truth; active development stays on `feature/procedural-fluid-sandbox-mvp` until browser/mobile QA is complete.
 
 
+# Effect commissions and experimental discoveries
+
+Customers request one or more potion effects, with limits on unwanted effects. The first commission already requires strength; neutral water cannot fulfil an effect request. Better concentration matches earn larger offers. Orders are validated against an attainable preparation using unlocked ingredients, but customer dialogue and clues never reveal that recipe. Older in-progress commissions are preserved when continuing an existing save.
+
+The effects of plain ingredients are visible on the rack and in Ingredients from the start. A mixture starts unknown. Inspecting it, bottling it, buying the Arcane prism, or saving an untested formula does not reveal its effects or its expected offer. Consume a real dose in the Experiments room to observe effects, compare them with the request, and decide whether to adjust and retest. Physical instruments still provide preparation clues.
+
+Experiment records retain the observed sample and its full preparation. Named recipes distinguish tested discoveries from untested hypotheses; previous trials are also available in the recipe book. Testing knowledge follows the batch through bottling, smaller sealed quantities, and save/restore. New ingredients, material changes, or meaningful temperature changes invalidate the current reading. A fresh preparation requires a fresh trial even when it follows a learned recipe. A modern effect commission can only be served after a valid test of that batch; its offer remains unknown until then.
+

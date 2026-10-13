@@ -46,3 +46,15 @@
 .observed-change{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #536044;font-size:10px;color:#dbe1bd}
 .observed-change strong{color:#cae2aa}
 @media(max-width:360px){.dose-selector{gap:2px}.dose-selector button{min-width:25px;padding:4px}.ingredient-title{gap:4px}.ingredient-title strong{max-width:135px}.room-navigation button{font-size:10px;padding:8px 4px}.resource-card{gap:6px;grid-template-columns:25px minmax(0,1fr) auto}.resource-card>img{width:24px;height:32px}.subjects-grid{gap:6px}.subject-card{padding:8px 5px}}
+.unknown-effects { padding: 14px; border: 1px dashed #a08b71; background: #272330; border-radius: 8px; }
+.unknown-effects p { color: #c6b69c; font-size: 13px; line-height: 1.6; }
+.unknown-effects .effect-reading { opacity: .65; }
+.ingredient-effects { color: #e1c77b; font-size: 10px; line-height: 1.5; }
+.plain-ingredient-effects { margin: 10px 0; }
+.plain-ingredient-effects summary { color: #e1c77b; cursor: pointer; }
+.formula-knowledge { display: block; margin: 5px 0; color: #e1c77b; }
+.journal-formula { padding: 12px 0; border-top: 1px solid #665244; }
+.journal-formula p { font-size: 13px; line-height: 1.6; }
+.order-limits { grid-column: 1 / -1; font-size: 12px; color: #68503e; }
+.order-limits summary { min-height: 32px; padding: 8px 0; cursor: pointer; }
+.order-limits .requirements { margin-top: 8px; }

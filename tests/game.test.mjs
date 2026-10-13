@@ -10,6 +10,7 @@ import { encodeSave, decodeSave, saveShop, loadShop, SAVE_KEY } from '../src/gam
 import { FIXED_STEP, SAVE_VERSION } from '../src/game/contracts.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { effectiveLiquidViscosity } from '../src/simulation/FluidSolver.mjs';
+import { runExperiment, resetExperimentSubject } from '../src/game/experiments.mjs';
 
 const world = generateLiquidWorld('test-guild');
 function setup() { const state = newShop(world); return { state, brew: new BrewingSession(world.ingredients, state.equipment) }; }
@@ -214,10 +215,12 @@ test('complete repeated commissions through physics, assessment, sale and progre
   for (let i = 0; i < 7; i++) {
     const brew = new BrewingSession(gameplayWorld.ingredients, state.equipment), recipe = state.order.witness;
     for (const p of recipe.portions) {
-      if (state.inventory[p.ingredientId] < p.ml) restock(state, p.ingredientId, 120);
+      if (state.inventory[p.ingredientId] < p.ml) restock(state, p.ingredientId, Math.max(120, p.ml - state.inventory[p.ingredientId]));
       brew.pour(p.ingredientId, p.ml, state.inventory, { crushed: Boolean(p.crushed) });
     }
     for (let tick = 0; tick < recipe.ticks; tick++) { brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0); if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP); brew.step(); }
+    resetExperimentSubject(state, 'stone');
+    const trial = brew.takeSample(5); runExperiment(state, trial, 'stone', trial.volume);
     state.pendingBottle = brew.bottle(recipe.volume); const sale = completeSale(state);
     assert.equal(sale.quality, 100); assert.ok(sale.profit > 0); assert.equal(state.completed, i + 1);
     if (i === 0) buyUpgrade(state, 0); if (i === 2) buyUpgrade(state, 2); if (i === 4) buyUpgrade(state, 4);
