@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-v17';
+const CACHE = 'alchemist-shop-v18';
 const CORE = [
   './',
   './index.html',
@@ -50,13 +50,13 @@ self.addEventListener('fetch', event => {
   if (url.origin !== location.origin || !url.pathname.startsWith(new URL(self.registration.scope).pathname)) return;
   const networkFirst = event.request.mode === 'navigate' || /\.(?:mjs|js|css|html)$/.test(url.pathname);
   if (networkFirst) {
-    event.respondWith(fetch(event.request).then(response => {
+    event.respondWith(fetch(event.request, { cache: "reload" }).then(response => {
       if (response.ok) {
         const copy = response.clone();
         caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(() => {});
       }
       return response;
-    }).catch(() => caches.match(event.request)));
+    }).catch(() => caches.match(event.request, { ignoreSearch: true })));
     return;
   }
   event.respondWith(caches.match(event.request).then(hit => hit || fetch(event.request).then(response => {

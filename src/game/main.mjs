@@ -560,7 +560,7 @@ function boot() {
   $('continueBtn').disabled = !loaded.state;
   $('saveMessage').textContent = loaded.error || 'Your shop saves automatically on this device.';
   bindUI(); document.body.dataset.gameState = 'menu'; document.body.dataset.gameReady = 'true';
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register(new URL('../../sw.js', import.meta.url)).catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register(new URL('../../sw.js', import.meta.url), { updateViaCache: 'none' }).then(registration => registration.update()).catch(() => {});
   requestAnimationFrame(loop);
 }
 try { boot(); }
