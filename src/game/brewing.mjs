@@ -305,7 +305,21 @@ export class BrewingSession {
     for (let i = 0; i < saved.count; i++) if (ps.mass[i] <= 0 || ![0, 1, 2].includes(ps.phase[i])) throw new Error('Invalid saved particle mass or phase.');
     for (let i=0;i<saved.count;i++) if(ps.powderContent[i]<0||ps.powderContent[i]>1||ps.dissolutionProgress[i]<0||ps.dissolutionProgress[i]>1) throw new Error('Invalid saved powder wetness.');
     for (const key of EFFECT_PROPERTIES) for (let i = 0; i < saved.count; i++) if (ps[key][i] < 0 || ps[key][i] > 1) throw new Error('Invalid saved potion effect.');
-    for (const material of saved.materials) this.engine.registerMaterial({ ...material, particleRadius: clamp(material.particleRadius, .10, .11) });
+    // Ingredient definitions in the saved world are the source of truth for
+    // innate magic. Older cauldron snapshots can contain an obsolete +8
+    // placeholder that must not overwrite a negative garden rune on resume.
+    const ingredientMagic = new Map(this.ingredients.map(ingredient => [ingredient.material.id, ingredient.material]));
+    for (const material of saved.materials) {
+      const original = ingredientMagic.get(material.id);
+      const canonicalMagic = original ? {
+        arcaneThreshold: original.arcaneThreshold,
+        magicDecayTemperature: original.magicDecayTemperature,
+        ...Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, original[key] ?? 0]))
+      } : {};
+      this.engine.registerMaterial({
+        ...material, ...canonicalMagic, particleRadius: clamp(material.particleRadius, .10, .11)
+      });
+    }
     ps.count = saved.count;
     for (let i = 0; i < ps.count; i++) {
       if (saved.particles.mixtureAmount === undefined) ps.mixtureAmount[i] = ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
@@ -321,7 +335,19 @@ export class BrewingSession {
     this.engine.time = saved.time || 0; this.engine.stepIndex = saved.stepIndex || 0;
     this.engine.sanitize(); this.confineCauldron();
     this.thermal.restore(saved.thermal, ps);
-    this.engine.reactions.mixtures.restore(saved.mixtures, ps);
+    const mixtures = this.engine.reactions.mixtures;
+    mixtures.restore(saved.mixtures, ps);
+    // Repair stale parcel rune values in existing saves, not just the inspector.
+    // Only pure ingredients are reset; mixed parcels retain their transition
+    // state and acquire their new recipe threshold when blending completes.
+    for (let i = 0; i < ps.count; i++) {
+      const recipe = mixtures.root(ps.mixtureGroup[i])?.arcaneRecipe;
+      if (recipe?.sourceCount === 1) ps.arcaneThreshold[i] = recipe.threshold;
+      else if (ps.mixtureGroup[i] === 0) {
+        const original = ingredientMagic.get(ps.materialId[i]);
+        if (original) ps.arcaneThreshold[i] = original.arcaneThreshold;
+      }
+    }
     // Reconstruct rigid body membership if a save contained frozen liquid.
     this.engine.grid.rebuild(ps, this.engine.env.box);
     for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.SOLID) this.engine.solid.initializeParticle(ps, i, true, this.engine.grid);
