@@ -11,11 +11,14 @@ import { CAULDRON_INTERIOR } from './cauldron.mjs';
 export class LiquidFunFluid {
   constructor(runtime = globalThis) {
     const required = ['b2World', 'b2Vec2', 'b2BodyDef', 'b2EdgeShape',
-      'b2ParticleSystemDef', 'b2ParticleDef'];
+      'b2ParticleSystemDef', 'b2ParticleGroupDef', 'b2PolygonShape'];
     if (required.some(name => typeof runtime[name] !== 'function'))
       throw new Error('Google LiquidFun runtime has not loaded.');
     this.r = runtime;
     this.world = new runtime.b2World(new runtime.b2Vec2(0, -4.5));
+    // The upstream wrapper allocates these two scratch buffers per world but
+    // provides no JS destructor. Remember them for explicit session disposal.
+    this.scratchPointers = [runtime._transBuf?.byteOffset, runtime._vec2Buf?.byteOffset];
     // Upstream lfjs fixture bindings resolve this global for their lookup.
     runtime.world = this.world;
     const pot = this.world.CreateBody(new runtime.b2BodyDef());
@@ -31,7 +34,7 @@ export class LiquidFunFluid {
     this.definition.destroyByAge = false;
     this.definition.dampingStrength = .17;
     this.definition.pressureStrength = .12;
-    this.definition.viscousStrength = .33;
+    this.definition.viscousStrength = .08;
     this.definition.surfaceTensionNormalStrength = .16;
     this.definition.surfaceTensionPressureStrength = .12;
     this.definition.staticPressureStrength = .28;
@@ -40,6 +43,40 @@ export class LiquidFunFluid {
     this.indices = [];
     this.frames = 0;
     this.rebuilds = 0;
+    this.disposed = false;
+  }
+  allocate(count) {
+    if (!count) return;
+    // The official CreateParticle scalar binding passes stack addresses as
+    // group/userData pointers, corrupting flags and deleting/reordering parcels.
+    // Its bulk shape binding correctly initializes real groups. Seed an exact
+    // count on a unit lattice, then replace all coordinates before any Step.
+    const columns = Math.min(count, 48), rows = Math.floor(count / columns);
+    const remainder = count % columns;
+    const seed = (width, height) => {
+      const def = new this.r.b2ParticleGroupDef();
+      def.flags = (this.r.b2_waterParticle || 0) | (this.r.b2_viscousParticle || 0)
+        | (this.r.b2_tensileParticle || 0) | (this.r.b2_staticPressureParticle || 0);
+      def.stride = 1;
+      const shape = new this.r.b2PolygonShape();
+      shape.vertices = [[-.25, -.25], [width - .75, -.25],
+        [width - .75, height - .75], [-.25, height - .75]]
+        .map(([x, y]) => new this.r.b2Vec2(x, y));
+      def.shape = shape;
+      const group = this.system.CreateParticleGroup(def);
+      if (group.GetParticleCount() !== width * height)
+        throw new Error('LiquidFun particle allocation failed.');
+    };
+    seed(columns, rows);
+    if (remainder) seed(remainder, 1);
+  }
+  buffers(count) {
+    const position = this.system.GetPositionBuffer(), velocity = this.system.GetVelocityBuffer();
+    // These views use the real native count. Upstream GetParticleCount() doubles
+    // it; extending a short view hides particle loss and reads unrelated memory.
+    if (position.length !== count * 2 || velocity.length !== count * 2)
+      throw new Error('LiquidFun particle buffers lost alignment.');
+    return { position, velocity };
   }
   /** Keep actual LiquidFun particle indices aligned to the current packed
    * game arrays after pours, spills, phase changes and bottling/removal.
@@ -57,36 +94,26 @@ export class LiquidFunFluid {
     // allocation still grows dynamically when this helper is absent.
     if (typeof this.system.SetMaxParticleCount === 'function')
       this.system.SetMaxParticleCount(ps.capacity);
-    const def = new this.r.b2ParticleDef();
-    // Upstream b2ParticleDef initializes color as b2Vec2; replace it with
-    // its actual b2ParticleColor to avoid undefined channel values in C++.
-    if (typeof this.r.b2ParticleColor === 'function')
-      def.color = new this.r.b2ParticleColor(255, 255, 255, 255);
-    // No built-in color mixing: magical colors belong to the game's live
-    // chemical channels, not to the physical engine's particle pigments.
-    def.flags = this.r.b2_waterParticle;
-    for (const i of indices) {
-      def.position.Set(ps.x[i], ps.y[i]);
-      def.velocity.Set(ps.vx[i], ps.vy[i]);
-      const id = this.system.CreateParticle(def);
-      if (id < 0) throw new Error('LiquidFun particle allocation failed.');
-    }
+    this.allocate(indices.length);
     this.indices = indices;
     this.rebuilds++;
   }
   step(ps, dt, gravity) {
+    if (this.disposed) throw new Error('LiquidFun session has been disposed.');
+    this.r.world = this.world;
     this.synchronize(ps);
     this.world.SetGravity(new this.r.b2Vec2(gravity.x, gravity.y));
     const indices = this.indices, count = indices.length;
     if (!count) { this.frames++; return; }
-    let position = this.system.GetPositionBuffer();
-    let velocity = this.system.GetVelocityBuffer();
-    if (position.length < count * 2)
-      position = new Float32Array(position.buffer, position.byteOffset, count * 2);
-    if (velocity.length < count * 2)
-      velocity = new Float32Array(velocity.buffer, velocity.byteOffset, count * 2);
-    if (position.length !== count * 2 || velocity.length !== count * 2)
-      throw new Error('LiquidFun particle buffers lost alignment.');
+    // A partial vial drains mass from every parcel without removing indices.
+    // Native systems have one radius: scale it by mean parcel area so the
+    // remaining liquid shrinks physically as well as in the inventory/renderer.
+    let volume = 0;
+    for (const i of indices) volume += ps.mixtureAmount?.[i] ?? .25;
+    const radius = this.definition.radius * Math.sqrt(Math.max(.0001, volume / count) / .25);
+    if (typeof this.system.SetRadius === 'function' && Math.abs(radius - this.system.radius) > .000001)
+      this.system.SetRadius(radius);
+    let { position, velocity } = this.buffers(count);
     // External impulses (spoon, density buoyancy, collisions) are already
     // stored in the game's velocities. Reuse them directly in the native solve.
     for (let k = 0; k < count; k++) {
@@ -96,16 +123,7 @@ export class LiquidFunFluid {
       velocity[j] = ps.vx[i]; velocity[j + 1] = ps.vy[i];
     }
     this.world.Step(dt, 6, 3);
-    position = this.system.GetPositionBuffer();
-    velocity = this.system.GetVelocityBuffer();
-    // Some upstream Emscripten testbed builds expose only half the active
-    // position-buffer view after their first Step. Their native storage still
-    // owns the full float2 array, so extend the typed view, never copy from
-    // undefined values or drop/misidentify ingredient parcels.
-    if (position.length < count * 2)
-      position = new Float32Array(position.buffer, position.byteOffset, count * 2);
-    if (velocity.length < count * 2)
-      velocity = new Float32Array(velocity.buffer, velocity.byteOffset, count * 2);
+    ({ position, velocity } = this.buffers(count));
     for (let k = 0; k < count; k++) {
       const i = indices[k], j = k * 2;
       if (!Number.isFinite(position[j]) || !Number.isFinite(position[j + 1])
@@ -114,7 +132,7 @@ export class LiquidFunFluid {
           index:i, step:this.frames, count, x:position[j], y:position[j+1],
           vx:velocity[j], vy:velocity[j+1], sourceX:ps.x[i], sourceY:ps.y[i],
           phase:ps.phase[i], inputVX:ps.vx[i], inputVY:ps.vy[i],
-          nativeCount:this.system.GetParticleCount(), positionLength:position.length,
+          nativeCount:position.length / 2, positionLength:position.length,
           velocityLength:velocity.length,
           finite:{x:Number.isFinite(position[j]),y:Number.isFinite(position[j+1]),
             vx:Number.isFinite(velocity[j]),vy:Number.isFinite(velocity[j+1])}
@@ -129,5 +147,16 @@ export class LiquidFunFluid {
     this.world.DestroyParticleSystem(this.system);
     this.system = this.world.CreateParticleSystem(this.definition);
     this.frames = 0;
+  }
+  dispose() {
+    if (this.disposed) return;
+    const module = this.r.Module;
+    if (typeof module?._b2World_Delete === 'function') {
+      module._b2World_Delete(this.world.ptr);
+      for (const pointer of this.scratchPointers) if (pointer) module._free(pointer);
+    } else this.world.DestroyParticleSystem(this.system);
+    if (this.r.world === this.world) this.r.world = null;
+    this.indices.length = 0;
+    this.disposed = true;
   }
 }

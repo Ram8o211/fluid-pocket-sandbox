@@ -13,15 +13,17 @@ const PURPOSES = ['for a long journey', 'for the evening feast', 'to mend a tire
  * It proves feasibility; it is not a recipe lookup or an alternative evaluator. */
 export function simulateWitness(world, recipe, equipment = {}) {
   const brew = new BrewingSession(world.ingredients, equipment);
-  const stock = Object.fromEntries(world.ingredients.map(i => [i.id, 10000]));
-  for (const portion of recipe.portions) brew.pour(portion.ingredientId, portion.ml, stock, { crushed: Boolean(portion.crushed) });
-  for (let tick = 0; tick < recipe.ticks; tick++) {
-    brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0);
-    if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP);
-    brew.step(FIXED_STEP);
-  }
-  brew.setThermal(0);
-  return brew.bottle(recipe.volume);
+  try {
+    const stock = Object.fromEntries(world.ingredients.map(i => [i.id, 10000]));
+    for (const portion of recipe.portions) brew.pour(portion.ingredientId, portion.ml, stock, { crushed: Boolean(portion.crushed) });
+    for (let tick = 0; tick < recipe.ticks; tick++) {
+      brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0);
+      if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP);
+      brew.step(FIXED_STEP);
+    }
+    brew.setThermal(0);
+    return brew.bottle(recipe.volume);
+  } finally { brew.dispose(); }
 }
 
 function generatePhysicalOrder(world, completed = 0, equipment = {}) {

@@ -13,6 +13,7 @@
     "build": "node scripts/build.mjs",
     "e2e": "node scripts/e2e-smoke.mjs",
     "test:browser": "node scripts/browser-test.mjs",
+    "test:liquidfun": "node scripts/liquidfun-smoke.mjs",
     "benchmark:game": "node scripts/benchmark-game.mjs"
   },
   "engines": {

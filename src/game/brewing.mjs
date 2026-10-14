@@ -77,6 +77,7 @@ export class BrewingSession {
     this.batchId = crypto.randomUUID();
   }
   get capacity() { return CAPACITY_ML[clamp(this.equipment.cauldron || 0, 0, 2)]; }
+  dispose() { this.engine.liquidFun?.dispose(); }
   get liquidVolume() {
     const ps = this.engine.ps; let ml = 0;
     for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.LIQUID) ml += ps.mass[i] / Math.max(.04, ps.density[i]);

@@ -84,8 +84,7 @@ export class SimulationEngine{
     // LiquidFun replaces the liquid fluid-motion solve in the potion cauldron.
     // Gas/granular mechanics and the subsequent thermal/chemical passes remain
     // in the original typed arrays, preserving all nonphysical state.
-    this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider,Boolean(this.liquidFun));
-    this.liquidFun?.step(this.ps,dt,this.gravity);
+    this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider,Boolean(this.liquidFun),this.liquidFun?()=>this.liquidFun.step(this.ps,dt,this.gravity):null);
     this.molds.collide(this.ps,planar);this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);
     if(this.rules.densityDrivenCondensation)updateGasDensity(this.ps,this.grid,this.rules,this.env);
     for(let i=0;i<this.ps.count;i++)applyBuoyancy(this.ps,i,this.gravity,this.env,dt);
