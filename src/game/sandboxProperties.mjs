@@ -1,4 +1,5 @@
 import { EFFECT_PROPERTIES, readEffects } from './effects.mjs';
+import { arcaneRecipe } from '../simulation/ArcaneSolver.mjs';
 
 // The ArcaneSolver uses this temperature margin and a 0.4-second charge.
 const ARCANE_MARGIN = .015;
@@ -15,7 +16,7 @@ function awakeningDetails(threshold, effects, charged = 0, converted = 0) {
     : threshold - ARCANE_MARGIN > MIN_TEMPERATURE);
   return { arcaneThreshold: threshold, awakeningDirection: direction,
     awakeningReachable: reachable, dominantEffect: dominantEffect(effects),
-    awakeningCharge: charged, awakenedFraction: converted };
+    awakeningCharge: charged, awakenedFraction: converted, awakeningEffects: effects };
 }
 
 
@@ -29,7 +30,8 @@ export function sandboxIngredientProperties(ingredient) {
     name: ingredient.name,
     form: ingredient.form || 'liquid',
     effects: readEffects(m),
-    ...awakeningDetails(m.arcaneThreshold ?? 8, readEffects(m)),
+    ...awakeningDetails(m.arcaneThreshold ?? 8,
+      arcaneRecipe([{ amount: 1, threshold: m.arcaneThreshold ?? 8, effects: m }])?.effects || readEffects(m)),
     meltingTemperature: m.meltingTemperature,
     boilingTemperature: m.boilingTemperature,
     combustionTemperature: m.combustionTemperature,
@@ -88,12 +90,14 @@ export function sandboxMixtureProperties(brew) {
     const homogeneous = dispersion <= 0.035;
     const sources = [...group.sources].sort((a, b) => b[1] - a[1])
       .map(([id, mass]) => ({ id, name: names.get(id) || 'Ingredient ' + id, fraction: mass / group.mass }));
+    const recipe = group.id.startsWith('group:') ? mixtures?.root?.(Number(group.id.slice(6)))?.arcaneRecipe : null;
     return {
       id: group.id, label: 'Pot mixture ' + (index + 1),
       mass: group.mass, count: group.count, sources, homogeneous, dispersion,
       temperature: average('temperature'),
       effects: Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
-      ...awakeningDetails(average('arcaneThreshold'), Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
+      ...awakeningDetails(recipe?.threshold ?? average('arcaneThreshold'),
+        recipe?.effects ?? Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
         average('arcaneCharge'), average('arcaneConverted')),
       meltingTemperature: average('meltingTemperature'),
       boilingTemperature: average('boilingTemperature'),

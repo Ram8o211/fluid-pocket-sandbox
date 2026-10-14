@@ -48,6 +48,7 @@ export class BrewingSession {
     this.engine.rules.thermalDiffusionRate = 1.2;
     this.thermal = new CauldronThermal();
     this.engine.reactions.mixtures = new MixtureSolver();
+    this.engine.reactions.mixtures.materials = this.engine.materials;
     this.engine.iterations = 1;
     this.engine.boundaryCollider = () => this.confineCauldron();
     this.engine.env.granularWallSupport = cauldronGranularWallSupport;
@@ -176,7 +177,7 @@ export class BrewingSession {
       this.history.lidCoolingEnergy += thermal.lidCooling;
       this.cost.energy += Math.abs(thermal.supplied) * .025;
       this.engine.step(dt);
-      stepArcana(ps, dt, this.engine.reactions);
+      stepArcana(ps, dt, this.engine.reactions, this.engine.reactions.mixtures);
       for (let i = 0; i < previousCount; i++) if (this.previousPhases[i] === Phase.GAS && ps.phase[i] === Phase.LIQUID) this.history.condensed += ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
       let mass = 0, activation = 0;
       for (let i = 0; i < ps.count; i++) { mass += ps.mass[i]; activation += Math.max(0, ps.temperature[i] - .42) * ps.mass[i]; this.history.peakTemperature = Math.max(this.history.peakTemperature, ps.temperature[i]); }

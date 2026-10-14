@@ -3,7 +3,7 @@ import { Phase } from '../simulation/Phase.mjs';
 import { workshopBackground, magicGlowSprite } from './art.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
-import { MAGIC_PROPERTIES, EFFECT_DEFINITIONS } from './effects.mjs';
+import { mixedMagicGlow } from './magicLight.mjs';
 import { paintMaterialParticles } from './MaterialRaster.mjs';
 
 const MAGIC_GLOW_LIMIT = 160;
@@ -14,9 +14,9 @@ export class LaboratoryRenderer extends PlanarRenderer {
   constructor(canvas, brew) {
     super(canvas, brew.engine); this.brew = brew; this.background = workshopBackground();
     this.quality = 'balanced'; this.spoon = null; this.frame = 0; this.graphics.effectsScale = 1;
-    this.magicSprites = MAGIC_PROPERTIES.map(key => magicGlowSprite(EFFECT_DEFINITIONS[key].color));
+    this.glowSprites = new Map();
     this.magicX = new Float32Array(MAGIC_GLOW_LIMIT); this.magicY = new Float32Array(MAGIC_GLOW_LIMIT);
-    this.magicType = new Uint8Array(MAGIC_GLOW_LIMIT); this.magicIntensity = new Float32Array(MAGIC_GLOW_LIMIT);
+    this.magicColor = new Array(MAGIC_GLOW_LIMIT); this.magicIntensity = new Float32Array(MAGIC_GLOW_LIMIT);
     this.magicCount = 0; this.resize(true);
   }
   resize() {
@@ -70,8 +70,8 @@ export class LaboratoryRenderer extends PlanarRenderer {
     for (let i = 0; i < 5; i++) rect(78, 148 + i * 11, 6, 2, '#d0b387');
     ctx.restore();
     ctx.save(); traceCauldron(ctx, t); ctx.clip();
-    this.drawMagicGlows(ctx, t);
     this.drawFluid(ctx, t);
+    this.drawMagicGlows(ctx, t);
     this.drawEffects(ctx, t); ctx.restore(); ctx.globalAlpha = 1;
     ctx.save(); ctx.scale(factor, factor);
     rect(80, 100, 224, 4, '#e0b675'); rect(78, 104, 228, 5, '#b67642'); rect(80, 109, 224, 3, '#64383a');
@@ -116,36 +116,39 @@ export class LaboratoryRenderer extends PlanarRenderer {
     }
     ctx.restore(); this.frame++;
   }
+  getGlowSprite(colour) {
+    if (!this.glowSprites) this.glowSprites = new Map();
+    let sprite = this.glowSprites.get(colour);
+    if (sprite) return sprite;
+    sprite = magicGlowSprite(colour);
+    // Per-renderer LRU. Quantized palette also bounds global sprite variants.
+    if (this.glowSprites.size >= 96) this.glowSprites.delete(this.glowSprites.keys().next().value);
+    this.glowSprites.set(colour, sprite);
+    return sprite;
+  }
   drawMagicGlows(ctx, t) {
     this.magicCount = 0;
     const effectsScale = Math.max(0, Math.min(1, this.graphics?.effectsScale ?? 1));
     if (effectsScale <= .01) return;
     const ps = this.sim.ps, limit = Math.max(1, Math.round((this.quality === 'eco' ? 48 : MAGIC_GLOW_LIMIT) * effectsScale));
-    // Even enormous brews render a fixed number of cached lights. A stable
-    // particle stride avoids flickering or scanning every parcel every frame.
     const stride = Math.max(1, Math.ceil(ps.count / limit));
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < ps.count; i += stride) {
-      let dominant = -1, intensity = .025;
-      for (let m = 0; m < MAGIC_PROPERTIES.length; m++) {
-        const value = ps[MAGIC_PROPERTIES[m]]?.[i] || 0;
-        if (value > intensity) { dominant = m; intensity = value; }
-      }
-      if (dominant < 0) continue;
+      const aura = mixedMagicGlow(ps, i);
+      if (!aura) continue;
       const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
       const stirring = Math.min(1, Math.hypot(ps.vx[i], ps.vy[i]) * .45);
       const warm = Math.max(0, Math.min(1, (ps.temperature[i] - .28) * 2));
       const mixed = ps.mixtureProgress[i] || 0;
-      // Latent magic is always readable, before any recipe has been activated.
-      // Local motion and warmth bring out a brighter, gently breathing aura.
       const activity = Math.min(1, stirring * .65 + warm * .45 + mixed * .3);
       const pulse = .94 + .06 * Math.sin(this.sim.time * (2 + activity * 3) + i * .7);
-      const radius = Math.max(t.scale / 40 * 4, effectiveParticleRadius(ps, i, true) * t.scale * 2.3) * (1 + activity * .18);
-      ctx.globalAlpha = (.13 + intensity * .3) * (1 + activity * .45) * pulse * effectsScale;
-      ctx.drawImage(this.magicSprites[dominant], x - radius, y - radius, radius * 2, radius * 2);
+      const radius = Math.max(t.scale / 40 * 4, effectiveParticleRadius(ps, i, true) * t.scale * 2.5) *
+        (1 + aura.intensity * .45 + activity * .15);
+      ctx.globalAlpha = Math.min(1, (.15 + aura.intensity * .7) * (1 + activity * .18) * pulse * effectsScale);
+      ctx.drawImage(this.getGlowSprite(aura.color), x - radius, y - radius, radius * 2, radius * 2);
       const mark = this.magicCount++;
-      this.magicX[mark] = x; this.magicY[mark] = y; this.magicType[mark] = dominant;
-      this.magicIntensity[mark] = intensity * (.55 + activity * .45);
+      this.magicX[mark] = x; this.magicY[mark] = y; this.magicColor[mark] = aura.color;
+      this.magicIntensity[mark] = aura.intensity * (.7 + activity * .3);
     }
     ctx.restore();
   }
@@ -158,7 +161,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
     for (let i = 0; effectsScale > .01 && i < this.magicCount; i += this.quality === 'eco' ? 3 : 2) {
       const pulse = .75 + .25 * Math.sin(this.sim.time * 3 + i * 2.3);
       ctx.globalAlpha = (.12 + this.magicIntensity[i] * .25) * pulse * effectsScale;
-      ctx.fillStyle = EFFECT_DEFINITIONS[MAGIC_PROPERTIES[this.magicType[i]]].color;
+      ctx.fillStyle = this.magicColor[i];
       ctx.fillRect(this.magicX[i], this.magicY[i] - texel, texel, texel);
     }
     for (let i = 0; i < ps.count; i++) {

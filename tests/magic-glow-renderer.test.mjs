@@ -1,15 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
-import { MAGIC_PROPERTIES } from '../src/game/effects.mjs';
+import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
+import { mixedMagicGlow } from '../src/game/magicLight.mjs';
 import { magicGlowSprite } from '../src/game/art.mjs';
 
 function setup(count = 1, quality = 'balanced', scale = 40) {
   const ps = { count };
-  for (const key of ['x', 'y', 'vx', 'vy', 'mass', 'particleRadius', 'temperature', 'mixtureProgress', ...MAGIC_PROPERTIES]) ps[key] = new Float32Array(count);
+  for (const key of ['x', 'y', 'vx', 'vy', 'mass', 'particleRadius', 'temperature', 'mixtureProgress', ...EFFECT_PROPERTIES]) ps[key] = new Float32Array(count);
   ps.mass.fill(.25); ps.particleRadius.fill(.1); ps.temperature.fill(.28);
-  const renderer = { sim: { ps, time: 0 }, quality, magicSprites: MAGIC_PROPERTIES.map(key => ({ key })),
-    magicX: new Float32Array(160), magicY: new Float32Array(160), magicType: new Uint8Array(160),
+  const cachedSprites = new Map();
+  const renderer = { sim: { ps, time: 0 }, quality, getGlowSprite: colour => {
+    if (!cachedSprites.has(colour)) cachedSprites.set(colour, { key: colour });
+    return cachedSprites.get(colour);
+  }, magicColor: new Array(160),
+    magicX: new Float32Array(160), magicY: new Float32Array(160),
     magicIntensity: new Float32Array(160), magicCount: 0 };
   const images = [], ctx = { save() {}, restore() {}, drawImage(sprite, x, y, w, h) { images.push({ sprite, x, y, w, h, alpha: this.globalAlpha }); } };
   const draw = () => LaboratoryRenderer.prototype.drawMagicGlows.call(renderer, ctx, { cx: 192 * scale / 40, cy: 158 * scale / 40, scale });
@@ -21,7 +26,7 @@ test('latent magic glows before mixing and follows the parcel dominant property'
   ps.love[0] = .35; ps.freeze[0] = .8;
   draw();
   assert.equal(images.length, 1);
-  assert.equal(images[0].sprite.key, 'freeze');
+  assert.equal(images[0].sprite.key, mixedMagicGlow(ps, 0).color);
   assert.ok(images[0].alpha > .1);
   assert.equal(renderer.magicCount, 1);
   assert.equal(ps.mixtureProgress[0], 0);
@@ -44,7 +49,7 @@ test('large magical brews respect fixed glow budgets, including battery saver', 
     ps.transformation.fill(.8); draw();
     assert.ok(images.length > 0 && images.length <= maximum);
     assert.equal(renderer.magicCount, images.length);
-    assert.ok(images.every(image => image.w < (quality === 'eco' ? 10 : 20)));
+    assert.ok(images.every(image => image.w < (quality === 'eco' ? 18 : 28)));
   }
 });
 
@@ -96,4 +101,30 @@ test('glow falloff is baked once and cached across particle frames', () => {
     assert.equal(first.width, 20); assert.equal(first.height, 20);
     assert.ok(texels > 200 && texels <= 400);
   } finally { globalThis.document = previousDocument; }
+});
+
+
+test('every magical property glows, including withering and venom', () => {
+  const { ps, images, draw } = setup(2);
+  ps.acidity[0] = .8; ps.poison[1] = .8;
+  draw();
+  assert.equal(images.length, 2);
+  assert.equal(images[0].sprite.key, mixedMagicGlow(ps, 0).color);
+  assert.equal(images[1].sprite.key, mixedMagicGlow(ps, 1).color);
+  assert.notEqual(images[0].sprite.key, images[1].sprite.key);
+});
+
+test('multi-property glow blends color and brightness from the full recipe', () => {
+  const { ps, images, draw } = setup();
+  ps.strength[0] = .33; ps.poison[0] = .66;
+  const blend = mixedMagicGlow(ps, 0);
+  const venomOnly = { ...ps, strength: new Float32Array([0]) };
+  assert.notEqual(blend.color, mixedMagicGlow(venomOnly, 0).color);
+  assert.equal(blend.intensity, Math.fround(.33) + Math.fround(.66));
+  draw();
+  assert.equal(images[0].sprite.key, blend.color);
+  assert.ok(images[0].alpha > .5, 'highly magical mixtures should visibly shine');
+  ps.strength[0] = 0; ps.poison[0] = .1;
+  draw();
+  assert.ok(images[1].alpha < images[0].alpha, 'a weakly enchanted material has a weaker halo');
 });
