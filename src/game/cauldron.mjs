@@ -61,11 +61,14 @@ export function confineCauldronParticle(ps, i) {
          const rebound = granular || ps.phase[i] === Phase.LIQUID ? 1 : 1.03;
         ps.vx[i] -= p.nx * normalSpeed * rebound;
         ps.vy[i] -= p.ny * normalSpeed * rebound;
-        if (granular) {
+        if (granular || ps.phase[i] === Phase.LIQUID) {
+          // Mild inelastic wall friction dissipates the last contact jitter
+          // in supported liquid layers, without damping free flowing streams.
           const tangentX = -p.ny, tangentY = p.nx;
           const slip = ps.vx[i]*tangentX + ps.vy[i]*tangentY;
-          ps.vx[i] -= tangentX*slip*.36;
-          ps.vy[i] -= tangentY*slip*.36;
+          const friction = granular ? .36 : .16;
+          ps.vx[i] -= tangentX*slip*friction;
+          ps.vy[i] -= tangentY*slip*friction;
         }
       }
       contact = true;
