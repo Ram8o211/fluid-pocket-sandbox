@@ -135,18 +135,18 @@ test('returning a mixed vial preserves its original affinity envelope and emerge
 
 test('the original arcane ratio and signed threshold survive fused materials, bottle splitting and return', () => {
   const brew = new BrewingSession(world.ingredients);
-  brew.pour(2, 10, {}, { infinite: true });
-  brew.pour(3, 20, {}, { infinite: true });
+  brew.pour(13, 10, {}, { infinite: true });
+  brew.pour(14, 20, {}, { infinite: true });
   const ps = brew.engine.ps, mixtures = brew.engine.reactions.mixtures;
   mixtures.beginFrame(ps);
   const a = mixtures.root(ps.mixtureGroup[0]), b = mixtures.root(ps.mixtureGroup[40]);
-  a.sourceAmounts.set(2, 10);
-  a.sourceAmounts.set(3, 20);
+  a.sourceAmounts.set(13, 10);
+  a.sourceAmounts.set(14, 20);
   a.amount = 30;
   a.min = Math.min(a.min, b.min); a.max = Math.max(a.max, b.max);
   b.parent = a.id;
-  const expected = (world.ingredients[1].material.arcaneThreshold * 10 +
-    world.ingredients[2].material.arcaneThreshold * 20) / 30;
+  const expected = (world.ingredients[12].material.arcaneThreshold * 10 +
+    world.ingredients[13].material.arcaneThreshold * 20) / 30;
   for (let i = 0; i < ps.count; i++) ps.mixtureGroup[i] = a.id;
   // A fusion can replace the material IDs, but it must not erase the recipe.
   const fused = brew.engine.resolveFusion(ps, 0, 40, ps.materialId[0], ps.materialId[40]);
