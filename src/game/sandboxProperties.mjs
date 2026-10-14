@@ -1,5 +1,24 @@
 import { EFFECT_PROPERTIES, readEffects } from './effects.mjs';
 
+// The ArcaneSolver uses this temperature margin and a 0.4-second charge.
+const ARCANE_MARGIN = .015;
+const MIN_TEMPERATURE = .01;
+const MAX_TEMPERATURE = 1.2;
+
+function dominantEffect(effects) {
+  return EFFECT_PROPERTIES.reduce((best, key) => effects[key] > (best ? effects[best] : .003) ? key : best, null);
+}
+function awakeningDetails(threshold, effects, charged = 0, converted = 0) {
+  const direction = threshold >= .33 ? 'above' : 'below';
+  const reachable = Number.isFinite(threshold) && (direction === 'above'
+    ? threshold + ARCANE_MARGIN < MAX_TEMPERATURE
+    : threshold - ARCANE_MARGIN > MIN_TEMPERATURE);
+  return { arcaneThreshold: threshold, awakeningDirection: direction,
+    awakeningReachable: reachable, dominantEffect: dominantEffect(effects),
+    awakeningCharge: charged, awakenedFraction: converted };
+}
+
+
 // Arcane temperatures use the game's native scale (0.50 = 50 °A).
 // Read live parcel values: recipe proportions alone cannot represent local
 // mixing, thermal decay, or the properties of a partially mixed cauldron.
@@ -10,6 +29,7 @@ export function sandboxIngredientProperties(ingredient) {
     name: ingredient.name,
     form: ingredient.form || 'liquid',
     effects: readEffects(m),
+    ...awakeningDetails(m.arcaneThreshold ?? 8, readEffects(m)),
     meltingTemperature: m.meltingTemperature,
     boilingTemperature: m.boilingTemperature,
     combustionTemperature: m.combustionTemperature,
@@ -20,9 +40,10 @@ export function sandboxIngredientProperties(ingredient) {
 const HOMOGENEITY_FIELDS = Object.freeze([
   'r', 'g', 'b', 'baseDensity', 'viscosity',
   'meltingTemperature', 'boilingTemperature', 'combustionTemperature',
+  'arcaneThreshold', 'magicDecayTemperature',
   ...EFFECT_PROPERTIES
 ]);
-const AVERAGE_FIELDS = Object.freeze([...HOMOGENEITY_FIELDS, 'temperature', 'magicDecayTemperature']);
+const AVERAGE_FIELDS = Object.freeze([...HOMOGENEITY_FIELDS, 'temperature', 'arcaneCharge', 'arcaneConverted']);
 
 export function sandboxMixtureProperties(brew) {
   const ps = brew?.engine?.ps;
@@ -72,6 +93,8 @@ export function sandboxMixtureProperties(brew) {
       mass: group.mass, count: group.count, sources, homogeneous, dispersion,
       temperature: average('temperature'),
       effects: Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
+      ...awakeningDetails(average('arcaneThreshold'), Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
+        average('arcaneCharge'), average('arcaneConverted')),
       meltingTemperature: average('meltingTemperature'),
       boilingTemperature: average('boilingTemperature'),
       combustionTemperature: average('combustionTemperature'),
