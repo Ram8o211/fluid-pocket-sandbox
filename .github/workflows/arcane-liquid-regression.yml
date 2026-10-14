@@ -13,6 +13,16 @@ on:
 permissions:
   contents: read
 jobs:
+  heat-stable-arcana:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/arcane-no-decay.test.mjs tests/arcane-recipe.test.mjs tests/magical-shop.test.mjs tests/sandbox-properties.test.mjs
   focused-regressions:
     runs-on: ubuntu-latest
     steps:
@@ -24,4 +34,4 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: node --test tests/arcane-playability.test.mjs tests/arcane-recipe.test.mjs tests/sandbox-properties.test.mjs tests/magical-shop.test.mjs tests/liquidfun-native.test.mjs tests/compact-materials.test.mjs tests/effect-discovery-loop.test.mjs tests/gathering.test.mjs tests/local-thermal-mixing.test.mjs tests/game.test.mjs
+      - run: node --test tests/arcane-no-decay.test.mjs tests/arcane-playability.test.mjs tests/arcane-recipe.test.mjs tests/sandbox-properties.test.mjs tests/magical-shop.test.mjs tests/liquidfun-native.test.mjs tests/compact-materials.test.mjs tests/effect-discovery-loop.test.mjs tests/gathering.test.mjs tests/local-thermal-mixing.test.mjs tests/game.test.mjs

@@ -23,7 +23,7 @@ function awakeningDetails(threshold, effects, charged = 0, converted = 0) {
 // Physical temperatures are normalized (0.50 = 50 °A); signed runes
 // have a distinct ±1200°A scale centred on room temperature.
 // Read live parcel values: recipe proportions alone cannot represent local
-// mixing, thermal decay, or the properties of a partially mixed cauldron.
+// mixing or the properties of a partially mixed cauldron.
 export function sandboxIngredientProperties(ingredient) {
   if (!ingredient?.material) return null;
   const m = ingredient.material;
@@ -35,15 +35,14 @@ export function sandboxIngredientProperties(ingredient) {
       arcaneRecipe([{ amount: 1, threshold: m.arcaneThreshold ?? 8, effects: m }])?.effects || readEffects(m)),
     meltingTemperature: m.meltingTemperature,
     boilingTemperature: m.boilingTemperature,
-    combustionTemperature: m.combustionTemperature,
-    magicDecayTemperature: m.magicDecayTemperature
+    combustionTemperature: m.combustionTemperature
   };
 }
 
 const HOMOGENEITY_FIELDS = Object.freeze([
   'r', 'g', 'b', 'baseDensity', 'viscosity',
   'meltingTemperature', 'boilingTemperature', 'combustionTemperature',
-  'arcaneThreshold', 'magicDecayTemperature',
+  'arcaneThreshold',
   ...EFFECT_PROPERTIES
 ]);
 const AVERAGE_FIELDS = Object.freeze([...HOMOGENEITY_FIELDS, 'temperature', 'arcaneCharge', 'arcaneConverted']);
@@ -108,8 +107,7 @@ export function sandboxMixtureProperties(brew) {
         average('arcaneCharge'), average('arcaneConverted')),
       meltingTemperature: average('meltingTemperature'),
       boilingTemperature: average('boilingTemperature'),
-      combustionTemperature: average('combustionTemperature'),
-      magicDecayTemperature: average('magicDecayTemperature')
+      combustionTemperature: average('combustionTemperature')
     };
   });
 }

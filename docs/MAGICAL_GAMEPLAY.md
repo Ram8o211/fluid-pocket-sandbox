@@ -18,9 +18,9 @@ values into the player’s ID.
   measures (96 with the garden toolkit). Toolkit harvests cost nine stamina.
   Water and the isolated sandbox remain renewable. Village parcels cap at 20,
   cost five times reagent value plus eight coins and have two-minute cooldowns.
-- **Magic:** `arcaneThreshold` and `magicDecayTemperature` use the material,
-  particle, sampling and conservative contact-transport paths. `heatSolubility`
-  widens the affinity envelope in warm contacts; it is opted in by the game.
+- **Magic:** `arcaneThreshold` uses the material, particle, sampling and
+  conservative contact-transport paths. `heatSolubility` widens the affinity
+  envelope in warm contacts; it is opted in by the game.
   `stepArcana` uses local temperature independently of phase changes. Crossing
   the mapped threshold by .015 physical temperature units for .4 seconds
   activates magic independently of whether the parcel is solid powder,
@@ -37,8 +37,10 @@ values into the player’s ID.
   channels and its strength (including gas and powder). Base ingredient
   enchantments are weak (max 12%) until a genuine threshold transition;
   older worlds migrate innate effects without overwriting in-progress brews.
-  Excess heat attenuates
-  live fields; irreversible awakening and heat damage are saved per particle.
+  Heating or cooling may trigger awakening, but can never diminish the
+  magical properties of a potion, even after awakening. Old serialized
+  `magicDecayTemperature` fields remain inert for save/vial compatibility.
+  Irreversible awakening state is saved per particle.
 - **Knowledge:** trials consume real potion and update one uniquely identified rabbit.
   A six-second recovery (three with the sanctuary) limits repeated exposure.
   All eight visual channels animate together in an isolation cage with a
@@ -59,7 +61,7 @@ values into the player’s ID.
   seals use the exact sealed fingerprint. A smaller dose retains
   identity, while new batches or altered effects invalidate IDs and seals.
 - **Reworking:** a sealed vial carries compact, versioned liquid parcels with
-  all material fields, temperature, heat damage, awakening state and original
+  all material fields, temperature, awakening state and original
   affinity envelopes. Testing scales their mass and mixture amount with the
   dose; consumed parcels never return. Pour back transfers the entire remainder
   after checking both volume and particle capacity. Unchanged pot parcels
@@ -100,7 +102,7 @@ controls fit phone screens using compact rows and horizontal scrolling.
 
 `tests/magical-shop.test.mjs` covers manual estimates, negotiated receipts,
 certification identity, truthful and bluff refunds, offline settlement, scarce
-harvests, heat solubility, irreversible decay and opposed-threshold awakening.
+harvests, heat solubility, heat-stable magic and opposed-threshold awakening.
 Browser acceptance covers visible actions and viewport bounds. Existing engine
 regressions retain the original sandbox’s physics and phase behavior.
 `tests/potion-return.test.mjs` covers conservation, full-pot cycles, irreversible

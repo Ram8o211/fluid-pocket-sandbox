@@ -44,7 +44,20 @@ async function cleanAndBottle(ingredientId, volume = 40) {
   await page.locator(`[data-ingredient="${ingredientId}"]`).click();
   await page.locator(`[data-dose="${volume}"]`).click();
   await page.locator('#pourBtn').click(); await tick(600);
+  if (ingredientId === 13) {
+    // Innate ingredients are deliberately weak. Awaken the real cold rune,
+    // then thaw the same potion before testing strong affection and overdose.
+    await page.locator('#coolBtn').click();
+    await page.locator('#thermalPower').press('End'); await closePanel();
+    await page.clock.runFor(6000);
+    await page.locator('#heatBtn').click();
+    await page.locator('#thermalPower').press('End'); await closePanel();
+    await page.clock.runFor(4000);
+    await page.locator('#heatBtn').click();
+    await page.locator('#thermalPower').press('Home'); await closePanel();
+  }
   await page.locator('#bottleBtn').click();
+  if (ingredientId === 13) assert.ok((await readState()).pendingBottle.love > .8, 'a real rune transition prepares a strong love potion');
   await page.locator('[data-action="experiments"]').first().click();
   return readState();
 }

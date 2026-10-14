@@ -92,11 +92,14 @@ test('harvesting requires timing and stamina, is bounded offline, and tending sp
   precise.inventory[2]=72;assert.throws(()=>gatherIngredient(precise,node.id,10,100000+node.regrowMs),/jar is full/);
   precise.inventory[2]=0;precise.foraging.stamina=0;precise.foraging.staminaAt=100000;assert.throws(()=>gatherIngredient(precise,node.id,10,100000),/Rest/);
 });
-test('warmth makes normally separating essences soluble and overheating erodes magic',()=>{
+test('warmth helps mixing without weakening already awakened magic',()=>{
   const ps=new ParticleSystem(2);const make=(id,threshold,strength)=>sanitizeMaterial({id,name:'essence',color:'#8aba98',arcaneThreshold:threshold,strength,magicDecayTemperature:.75,miscibility:.4});
   ps.add({x:0,y:0,z:0},make(1,8,.8));ps.add({x:.05,y:0,z:0},make(2,-8,.2));
   const ambient=warmedMiscibility(ps,0,1,.12,{heatSolubility:.95});ps.temperature.fill(.8);assert.ok(warmedMiscibility(ps,0,1,.12,{heatSolubility:.95})>ambient+.4);
-  const before=ps.strength[0];ps.arcaneConverted.fill(1);for(let i=0;i<40;i++)stepArcana(ps,.025);assert.ok(ps.strength[0]<before);assert.equal(ps.arcaneConverted[0],1);
+  const before=ps.strength[0];ps.arcaneConverted.fill(1);
+  for(let i=0;i<40;i++)stepArcana(ps,.025);
+  assert.equal(ps.strength[0],before,'hot ingredients retain their enchantments');
+  assert.equal(ps.arcaneConverted[0],1);
 });
 test('opposed unreachable awakening runes mix to a reachable threshold independently of phase points',()=>{
   const ps=new ParticleSystem(2);const make=(id,threshold)=>sanitizeMaterial({id,name:'essence',color:'#c199bb',density:1,strength:.4,love:.3,arcaneThreshold:threshold,meltingTemperature:.05,boilingTemperature:1.05});

@@ -156,8 +156,7 @@ function sandboxAwakening(properties) {
   return '<section class="sandbox-awakening" aria-label="Arcane supertransformation">' +
     '<div class="sandbox-awakening-title"><strong>✦ Arcane supertransformation</strong><span>' + status + '</span></div>' +
     '<div class="sandbox-awakening-grid"><div><small>Critical trigger</small><strong>' + condition + ' ' + threshold + ' (rune ' + rune + ')</strong></div>' +
-    '<div><small>Awakened effects</small><strong>' + (expected || 'None') + '</strong></div>' +
-    '<div><small>Magic decays above</small><strong>' + sandboxTemperature(properties.magicDecayTemperature) + '</strong></div></div>' +
+    '<div><small>Awakened effects</small><strong>' + (expected || 'None') + '</strong></div></div>' +
     '<p>' + explanation + '</p></section>';
 }
 function sandboxReadings(properties) {
