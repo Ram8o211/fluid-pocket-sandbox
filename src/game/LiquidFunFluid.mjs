@@ -81,6 +81,10 @@ export class LiquidFunFluid {
     if (!count) { this.frames++; return; }
     let position = this.system.GetPositionBuffer();
     let velocity = this.system.GetVelocityBuffer();
+    if (position.length < count * 2)
+      position = new Float32Array(position.buffer, position.byteOffset, count * 2);
+    if (velocity.length < count * 2)
+      velocity = new Float32Array(velocity.buffer, velocity.byteOffset, count * 2);
     if (position.length !== count * 2 || velocity.length !== count * 2)
       throw new Error('LiquidFun particle buffers lost alignment.');
     // External impulses (spoon, density buoyancy, collisions) are already
