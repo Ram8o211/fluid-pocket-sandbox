@@ -4,7 +4,8 @@ import { newShop } from './economy.mjs';
 import { PROPERTIES } from './contracts.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
 import { createForaging } from './gathering.mjs';
-import { createExperimentState, EXPERIMENT_SUBJECTS, EXPERIMENT_RECORD_LIMIT } from './experiments.mjs';
+import { createExperimentState, EXPERIMENT_RECORD_LIMIT } from './experiments.mjs';
+import { migrateRabbitColony, RABBIT_EVENT_LIMIT } from './rabbits.mjs';
 import { generateOrder } from './orders.mjs';
 import { observedPotion } from './knowledge.mjs';
 import { validatePotionContents } from './potionTransfer.mjs';
@@ -53,6 +54,7 @@ export function migrateSave(raw) {
   // in-progress brew, bottled potion, inventory, or completed customer sale.
   if (raw.mode === 'shop' && raw.order?.conceptVersion !== 2 && raw.stage === 'brewing' && !raw.pendingBottle && !raw.brew?.count && raw.world?.ingredients?.length)
     raw = { ...raw, order: generateOrder(raw.world, raw.completed, raw.equipment) };
+  raw = { ...raw, experiments: migrateRabbitColony(raw.experiments || createExperimentState(), Date.now()) };
   raw.discoveries = (raw.discoveries || []).map(discovery => discovery.tested === undefined ? { ...discovery,
     tested: Boolean(observedPotion(raw, discovery.sample)), observations: observedPotion(raw, discovery.sample)?.observations || [] } : discovery);
   return raw;
@@ -99,19 +101,60 @@ export function validateSave(state) {
   }
   const experiments = state.experiments;
   const validStats = stats => stats && typeof stats.alive === 'boolean' && ['health', 'vitality', 'growth', 'strength', 'love', 'transformation', 'burning', 'freezing'].every(key => nonnegative(stats[key]) && stats[key] <= 100);
-  if (!experiments?.subjects || !Array.isArray(experiments.records) || experiments.records.length > EXPERIMENT_RECORD_LIMIT || !Number.isInteger(experiments.serial) || experiments.serial < 0) throw new Error('Invalid saved experiments.');
-  for (const definition of EXPERIMENT_SUBJECTS) {
-    const subject = experiments.subjects[definition.id];
-    if (!subject || subject.id !== definition.id || subject.kind !== definition.kind || !validStats(subject.stats) || !Number.isInteger(subject.trials) || subject.trials < 0 || !nonnegative(subject.lastTestAt)) throw new Error('Invalid saved experiment subject.');
+  const safeIdentity = id => typeof id === 'string' && /^[a-z0-9][a-z0-9_-]{0,79}$/i.test(id);
+  const validExposure = source => source && EFFECT_PROPERTIES.every(key => nonnegative(source[key]) && source[key] <= 1e9);
+  const rabbitIds = new Set();
+  if (!Array.isArray(experiments?.rabbits) || !experiments.rabbits.length || experiments.rabbits.length > 36 || experiments.capacity !== 12 ||
+    !Array.isArray(experiments.records) || experiments.records.length > EXPERIMENT_RECORD_LIMIT || !Number.isInteger(experiments.serial) || experiments.serial < 0 ||
+    !Number.isSafeInteger(experiments.rabbitSerial) || experiments.rabbitSerial < 4 || !nonnegative(experiments.lastAdvancedAt) ||
+    !Number.isSafeInteger(experiments.eventSerial) || experiments.eventSerial < 0 || !Array.isArray(experiments.events) || experiments.events.length > RABBIT_EVENT_LIMIT) throw new Error('Invalid saved experiments.');
+  const validRabbit = rabbit => rabbit && /^rabbit-[1-9]\d{0,14}$/.test(rabbit.id) && Number(rabbit.id.slice(7)) <= experiments.rabbitSerial &&
+    typeof rabbit.name === 'string' && rabbit.name.length > 0 && rabbit.name.length <= 80 && rabbit.kind === 'animal' && rabbit.species === 'rabbit' &&
+    validStats(rabbit.stats) && validExposure(rabbit.exposure) && ['baby', 'adult'].includes(rabbit.age) && ['male', 'female'].includes(rabbit.sex) &&
+    ['pen', 'cage'].includes(rabbit.location) && Number.isSafeInteger(rabbit.trials) && rabbit.trials >= 0 &&
+    ['bornAt', 'adultAt', 'lastTestAt', 'readyAt', 'activeFireUntil', 'attackReadyAt', 'nextAttackAt', 'nextBreedAt', 'deathAt', 'courtshipUntil'].every(key => nonnegative(rabbit[key])) &&
+    rabbit.adultAt >= rabbit.bornAt && typeof rabbit.dangerous === 'boolean' && typeof rabbit.transformed === 'boolean' && nonnegative(rabbit.infantDoseMl) &&
+    (rabbit.courtingWith === null || safeIdentity(rabbit.courtingWith)) &&
+    (rabbit.causeOfDeath === null || typeof rabbit.causeOfDeath === 'string' && rabbit.causeOfDeath.length <= 100) &&
+    (rabbit.deathAppearance === null || ['collapsed', 'dissolved', 'charred', 'deformed', 'culled'].includes(rabbit.deathAppearance)) &&
+    rabbit.mutation && Number.isSafeInteger(rabbit.mutation.seed) && rabbit.mutation.seed >= 0 && rabbit.mutation.seed <= 4294967295 &&
+    ['creature', 'deformation'].includes(rabbit.mutation.outcome) &&
+    rabbit.mutation.traits && ['ears', 'horns', 'limbs', 'eyes', 'spine', 'tail', 'asymmetry'].every(key => nonnegative(rabbit.mutation.traits[key]) && rabbit.mutation.traits[key] <= 1) &&
+    /^#[a-f0-9]{6}$/i.test(rabbit.mutation.hue) &&
+    ['muscleMass', 'corrosion', 'scorch', 'aggression', 'mutationStage'].every(key => nonnegative(rabbit.stats[key]) && rabbit.stats[key] <= 100) &&
+    nonnegative(rabbit.stats.totalDoseMl) && rabbit.stats.totalDoseMl <= 1e9 &&
+    Number.isSafeInteger(rabbit.stats.doseCount) && rabbit.stats.doseCount >= 0;
+  for (const rabbit of experiments.rabbits) {
+    if (!validRabbit(rabbit) || rabbitIds.has(rabbit.id)) throw new Error('Invalid saved rabbit.');
+    rabbitIds.add(rabbit.id);
+  }
+  if (experiments.rabbits.filter(rabbit => rabbit.stats.alive).length > experiments.capacity ||
+    experiments.rabbits.filter(rabbit => rabbit.stats.alive && rabbit.location === 'cage').length > 1) throw new Error('Invalid rabbit enclosure.');
+  const validEvent = event => event && /^rabbit-event-[1-9]\d{0,14}$/.test(event.id) && Number(event.id.slice(13)) <= experiments.eventSerial &&
+    nonnegative(event.at) && typeof event.type === 'string' && event.type.length > 0 && event.type.length <= 40 &&
+    safeIdentity(event.rabbitId) && typeof event.message === 'string' && event.message.length <= 8000 &&
+    (event.relatedRabbitId == null || safeIdentity(event.relatedRabbitId));
+  const eventIds = new Set();
+  for (const event of experiments.events) {
+    if (!validEvent(event) || eventIds.has(event.id)) throw new Error('Invalid saved rabbit event.');
+    eventIds.add(event.id);
   }
   const recordIds = new Set();
   for (const record of experiments.records) {
-    if (!record || !experiments.subjects[record.subjectId] || typeof record.id !== 'string' || recordIds.has(record.id) ||
+    if (!record || !safeIdentity(record.subjectId) || typeof record.id !== 'string' || recordIds.has(record.id) ||
       !Number.isInteger(record.serial) || record.serial < 1 || record.serial > experiments.serial || !nonnegative(record.at) ||
       !Number.isFinite(record.volume) || record.volume <= 0 || !validSample(record.sample) || Math.abs(record.sample.volume - record.volume) > .00001 ||
       !validEffects(record.effects) || typeof record.safe !== 'boolean' || !Number.isFinite(record.doseMl) || record.doseMl <= 0 || record.doseMl > 50 ||
+      Math.abs(record.doseMl - record.volume) > .00001 ||
       !validStats(record.before) || !validStats(record.after) || !Array.isArray(record.observations) || record.observations.some(text => typeof text !== 'string')) throw new Error('Invalid saved experiment record.');
     recordIds.add(record.id);
+    if (record.doseExposure !== undefined && !validExposure(record.doseExposure) ||
+      record.beforeRabbit !== undefined && (!validRabbit(record.beforeRabbit) || record.beforeRabbit.id !== record.subjectId) ||
+      record.afterRabbit !== undefined && (!validRabbit(record.afterRabbit) || record.afterRabbit.id !== record.subjectId) ||
+      record.events !== undefined && (!Array.isArray(record.events) || record.events.length > RABBIT_EVENT_LIMIT || record.events.some(event => !validEvent(event)))) throw new Error('Invalid saved rabbit trial snapshot.');
+    if (record.beforeRabbit && Object.keys(record.before).some(key => record.beforeRabbit.stats[key] !== record.before[key]) ||
+      record.afterRabbit && (Object.keys(record.after).some(key => record.afterRabbit.stats[key] !== record.after[key]) || record.afterRabbit.lastTestAt !== record.at) ||
+      record.beforeRabbit && record.afterRabbit && record.afterRabbit.trials !== record.beforeRabbit.trials + 1) throw new Error('Inconsistent saved rabbit trial snapshot.');
     if (record.preparation?.mass && (!validSample(record.preparation) || !Array.isArray(record.preparation.portions) || record.preparation.portions.some(portion => !ids.has(portion.ingredientId) || !nonnegative(portion.ml)))) throw new Error('Invalid tested formula.');
   }
   if (!Array.isArray(state.potionIds) || state.potionIds.length > 80 || !Array.isArray(state.certificates) || state.certificates.length > 80 || !Array.isArray(state.deliveries) || state.deliveries.length > 100 || !Array.isArray(state.complaints) || state.complaints.length > 100 || !state.purchases) throw new Error('Missing magical shop records.');

@@ -83,7 +83,7 @@ test('inspection and recording an untested formula grant no mixture knowledge; a
 
 test('dilution, further extraction, heat, and a new batch invalidate a current mixture reading', () => {
   const state = newShop(generateWorld('retest-loop')), brew = prepare(state), dose = brew.takeSample(5);
-  runExperiment(state, dose, 'seedling', 5, 100);
+  runExperiment(state, dose, 'rabbit-2', 5, 100);
   const measured = brew.inspectLiquid(); assert.ok(observedPotion(state, measured));
   assert.ok(observedPotion(state, { ...measured, temperature: measured.temperature + .08 }), 'Temperature alone does not reveal or erase magical estimates');
   assert.equal(observedPotion(state, { ...measured, strength: measured.strength + .01 }), null);

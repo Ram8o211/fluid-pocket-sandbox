@@ -13,9 +13,9 @@ import { potionRecord } from './potionTransfer.mjs';
 export const SANDBOX_STOCK = 240;
 
 export const UPGRADES = Object.freeze([
-  { id: 'densimeter', name: 'Familiar feed', cost: 35, sales: 1, description: 'Restore familiars for comparative trials at a lower cost.' },
+  { id: 'densimeter', name: 'Rabbit breeder', cost: 35, sales: 1, description: 'Buy healthy adult rabbits for 6 coins instead of 8.' },
   { id: 'viscometer', name: 'Garden toolkit', cost: 55, sales: 2, description: 'Larger jars (96 measures) and harvests costing 9 stamina.' },
-  { id: 'analyzer', name: 'Familiar sanctuary', cost: 85, sales: 3, description: 'Your familiars recover twice as quickly between doses.' },
+  { id: 'analyzer', name: 'Rabbit sanctuary', cost: 85, sales: 3, description: 'Your rabbits rest half as long between doses. Changes and injuries remain.' },
   { id: 'furnace', name: 'Copper furnace', cost: 110, sales: 4, description: 'A stronger flame and finer thermal controls.' },
   { id: 'cauldron', name: 'Deep cauldron', cost: 140, sales: 5, description: 'Increase capacity to 320 ml.', level: 1 },
   { id: 'reagents', name: 'Guild reagents I', cost: 95, sales: 4, description: 'Discover a rare extract; includes a small starter harvest.', level: 1 },

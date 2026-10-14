@@ -78,6 +78,41 @@ html,body{height:100%;overflow-x:hidden}body:has(.shop-shell:not([hidden])){over
 .trial-stage-labels{display:flex;align-items:center;font-size:10px;color:#bce0c9;margin:0 0 3px}.trial-stage-labels>span:first-child{flex:0 0 22%;color:#e0ba7b;text-align:center}.trial-stage-labels>span:last-child{flex:1;text-align:center}#creatureCanvas{display:block;width:100%;height:auto;max-height:32dvh;border-radius:7px;object-fit:contain;background:#222435}.trial-playback{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:5px;margin-top:6px}.trial-playback button{min-height:44px;padding:4px;font-size:10px}.trial-controls{display:flex;gap:6px;overflow-x:auto;scroll-snap-type:x proximity;padding:6px 0 2px;scrollbar-width:thin}.trial-controls>label{flex:0 0 100px}.trial-controls>button{flex:0 0 auto;scroll-snap-align:start;white-space:nowrap;padding:5px 10px}.trial-quantity{margin:5px 0!important;text-align:center}.trial-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}.trial-actions button{font-size:10px;min-height:44px;margin:0!important;padding:6px}.trial-vial-link{width:100%;min-height:36px;font-size:10px;margin-top:5px;background:transparent}
 @media(max-height:650px){.subject-selector{margin-bottom:4px}.subject-selector button{min-height:54px}.subject-selector img{width:40px;height:32px}.trial-stage-labels{font-size:9px}.trial-playback{margin-top:4px}.trial-controls{padding-top:4px}.trial-quantity{font-size:9px!important}.trial-vial-link{min-height:30px;margin-top:3px}}
 
+/* Rabbit colony: the pen is interactive; the observation stage preserves anatomy. */
+.sheet:has(#rabbitPenCanvas){max-width:860px}
+.colony-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:3px 0 8px}
+.colony-toolbar>span{font-size:13px;color:#e7cc98;flex:1;white-space:nowrap}
+.colony-toolbar button{font-size:11px;min-height:44px;padding:6px 10px}
+.colony-help{margin:0 0 8px!important;color:#bfb8a2!important;font-size:11px!important}
+#rabbitPenCanvas{display:block;width:100%;height:auto;border:2px solid #827754;border-radius:7px;touch-action:manipulation;cursor:pointer;background:#252e32}
+.colony-alerts{font-size:11px;line-height:1.55;padding:8px 10px;margin:7px 0;background:#2b3b34;border:1px solid #678069;border-radius:4px;color:#c0d6b1;min-height:35px}
+.colony-alerts.danger-alert{color:#ffcab0;background:#502e31;border-color:#c07c61}
+.cull-active{color:#ffcab0!important;background:#683637!important;border-color:#ec9d76!important}
+.rabbit-selector{padding-bottom:5px;margin-top:9px;scroll-snap-type:x proximity}
+.rabbit-selector button{flex:0 0 116px;min-height:111px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;line-height:1.4;border-radius:5px}
+.rabbit-selector strong{font-size:12px;color:#efd6ab}
+.rabbit-selector span{font-size:10px;color:#bcbea9}
+.rabbit-selector small{font-size:9px;line-height:1.5;color:#c9b893;max-width:104px}
+.rabbit-selector .rabbit-card-glyph{display:block;height:30px;opacity:.9}
+.rabbit-selector img{width:34px;height:30px;object-fit:contain}
+.rabbit-selector .rabbit-dead{opacity:.58;border-color:#6f5660}
+.rabbit-detail-heading{display:flex;flex-wrap:wrap;gap:5px 12px;align-items:center;margin-top:13px;border-top:1px solid #715c46;padding-top:10px}
+.rabbit-detail-heading h3{font-family:Georgia,serif;font-size:22px;flex:1;margin:0!important}
+.rabbit-detail-heading>span{font-size:11px;color:#d7bb8e}
+.rabbit-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:7px 0 11px}
+.rabbit-actions button{font-size:11px;min-height:44px;padding:7px}
+.sheet #creatureCanvas{max-height:none;border-color:#958565;margin-top:2px}
+.sheet .trial-stage-labels>span:first-child{flex-basis:24%}
+.trial-controls>.quiet{align-self:center;white-space:nowrap;font-size:10px}
+.rabbit-notebook{background:#2b3030;border:1px solid #6c7357;padding:0 10px;border-radius:5px}
+.rabbit-trial-note{padding:10px 0;border-top:1px solid #4c5847;font-size:11px;line-height:1.55}
+.rabbit-trial-note strong{color:#d9c994;font-size:11px}
+.rabbit-trial-note p{margin:5px 0;font-size:10px!important;color:#a9bda0!important}
+.rabbit-trial-note ul{padding-left:16px;margin:5px 0;color:#c1d2b5}
+.colony-journal{padding-left:18px;line-height:1.7;font-size:11px;color:#c4c4ab}
+.potion-notes-label{font-size:12px;color:#d4c49d;display:block;margin-top:12px}
+.potion-notes{resize:vertical;min-height:88px;line-height:1.5;font-family:inherit}
+@media(max-width:480px){.colony-toolbar>span{flex:1 0 100%}.colony-toolbar button{flex:1;font-size:10px}.rabbit-selector button{flex-basis:103px}.rabbit-actions button{font-size:10px}.sheet:has(#rabbitPenCanvas) .sheet-body{padding:9px}.sheet:has(#rabbitPenCanvas) .trial-playback button{font-size:10px}.sheet:has(#rabbitPenCanvas) .trial-actions button{font-size:10px}}
 
 /* Expanded magical ledger: it shares the workbench flow, never overlays the pot. */
 .sandbox-notice{display:flex;align-items:center;justify-content:space-between;gap:6px}

@@ -103,7 +103,7 @@ test('reopening a certified vial invalidates its ID, seal and offer, while histo
   assert.equal(findPotionId(state, brew.inspectLiquid()), null); assert.equal(certificateFor(state, brew.inspectLiquid()), null);
   assert.throws(() => compilePotionId(state, brew.inspectLiquid(), estimates), /real dose/);
   brew.pour(1, 5, state.inventory); const adjusted = brew.takeSample(2);
-  runExperiment(state, adjusted, 'beetle', 2, 8000, brew.inspectLiquid());
+  runExperiment(state, adjusted, 'rabbit-2', 2, 8000, brew.inspectLiquid());
   assert.ok(compilePotionId(state, brew.inspectLiquid(), estimates, 'Adjusted attempt'));
 });
 
