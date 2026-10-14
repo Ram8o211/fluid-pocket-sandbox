@@ -18,8 +18,14 @@ export function arcaneRecipe(ingredients) {
   if (!sources.length) return null;
   const smallest = Math.min(...sources.map(source => source.amount));
   const total = sources.reduce((sum, source) => sum + source.amount, 0);
-  const threshold = sources.reduce((sum, source) =>
+  const signedAverage = sources.reduce((sum, source) =>
     sum + source.threshold * (source.amount / smallest), 0) / sources.length;
+  // Individual ingredients retain their signed cold/hot runes. A composed
+  // potion always has a strictly positive *temperature magnitude*, including
+  // cancellation (-1:+1 -> 0), without changing its ingredient proportions.
+  const threshold = sources.length > 1
+    ? Math.max(.001, Math.abs(signedAverage))
+    : signedAverage;
   const effects = Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, 0]));
   const single = sources.length === 1;
   for (const source of sources) {
