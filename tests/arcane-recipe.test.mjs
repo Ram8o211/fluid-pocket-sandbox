@@ -104,3 +104,27 @@ test('the live recipe transforms BOTH enchantments at their shared temperature',
     assert.equal(ps.love[i],0);
   }
 });
+
+test('a previously awakened ingredient resets its rune when a new recipe is formed', () => {
+  const a = material(1,.6,{strength:.8}), b = material(2,-.2,{poison:.9});
+  const ps = new ParticleSystem(2),mix = new MixtureSolver();
+  mix.materials = new Map([[1,a],[2,b]]);
+  ps.add({x:0,y:0,z:0,temperature:.9},a,Phase.LIQUID);
+  ps.add({x:.02,y:0,z:0,temperature:.9},b,Phase.LIQUID);
+  for(let k=0;k<20;k++)stepArcana(ps,.025);
+  assert.equal(ps.arcaneConverted[0],1);
+  assert.equal(ps.poison[0],0);
+  mix.beginFrame(ps);
+  mix.contact(ps,0,1,1,.2,.1,{baseMixingRate:10,mixingExponent:1});
+  mix.finishFrame(ps,{},.1);
+  assert.equal(ps.arcaneConverted[0],0,'forming a new mixture clears obsolete awakenings');
+  ps.temperature.fill(.1);
+  stepArcana(ps,.025,null,mix);
+  assert.equal(ps.arcaneConverted[0],0,'unblended parcels must not reawaken prematurely');
+  ps.mixtureProgress.fill(1);
+  for(let k=0;k<20;k++)stepArcana(ps,.025,null,mix);
+  assert.ok(Math.abs(mix.root(ps.mixtureGroup[0]).arcaneRecipe.threshold-.2)<1e-6);
+  assert.equal(ps.arcaneConverted[0],1);
+  assert.ok(Math.abs(ps.strength[0]-.495)<1e-6);
+  assert.ok(Math.abs(ps.poison[0]-.495)<1e-6);
+});
