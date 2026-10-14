@@ -98,7 +98,11 @@ export class LiquidFunFluid {
       const i = indices[k], j = k * 2;
       if (!Number.isFinite(position[j]) || !Number.isFinite(position[j + 1])
         || !Number.isFinite(velocity[j]) || !Number.isFinite(velocity[j + 1]))
-        throw new Error('LiquidFun returned a non-finite parcel.');
+        throw new Error('LiquidFun non-finite parcel ' + JSON.stringify({
+          index:i, step:this.frames, count, x:position[j], y:position[j+1],
+          vx:velocity[j], vy:velocity[j+1], sourceX:ps.x[i], sourceY:ps.y[i],
+          phase:ps.phase[i], inputVX:ps.vx[i], inputVY:ps.vy[i]
+        }));
       ps.x[i] = position[j]; ps.y[i] = position[j + 1];
       ps.vx[i] = velocity[j]; ps.vy[i] = velocity[j + 1];
     }
