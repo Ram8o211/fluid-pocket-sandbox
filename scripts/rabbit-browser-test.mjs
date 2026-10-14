@@ -4,6 +4,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
+// The game uses system fonts. Generated SVG images can keep Chromium's
+// document-wide font readiness pending after the visible text has rendered.
+process.env.PW_TEST_SCREENSHOT_NO_FONTS_READY = '1';
+
 // All colony changes go through the same visible controls as a player.
 // localStorage and offscreen canvases provide evidence without test-state injection.
 const live = process.env.SITE_URL;
@@ -25,7 +29,7 @@ async function screenshot(name) {
 }
 async function closePanel() { await page.locator('[data-action="close"]').first().click(); }
 async function selectRabbit(id) { await page.locator(`[data-subject="${id}"]`).click(); }
-async function tick(milliseconds) { await page.clock.fastForward(milliseconds); await page.clock.runFor(50); }
+async function tick(milliseconds) { await page.clock.fastForward(milliseconds); await page.clock.runFor(50); await page.clock.resume(); }
 async function administer(id, volume) {
   await selectRabbit(id);
   await page.locator('#trialDose').selectOption(String(volume));
@@ -53,10 +57,10 @@ async function cleanAndBottle(ingredientId, volume = 40) {
     // then thaw the same potion before testing strong affection and overdose.
     await page.locator('#coolBtn').click();
     await page.locator('#thermalPower').press('End'); await closePanel();
-    await page.clock.runFor(6000);
+    await page.clock.runFor(6000); await page.clock.resume();
     await page.locator('#heatBtn').click();
     await page.locator('#thermalPower').press('End'); await closePanel();
-    await page.clock.runFor(4000);
+    await page.clock.runFor(4000); await page.clock.resume();
     await page.locator('#heatBtn').click();
     await page.locator('#thermalPower').press('Home'); await closePanel();
   }
@@ -236,6 +240,7 @@ try {
   assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
   console.log(`Rabbit browser acceptance OK: finite colony, persistent repeat doses, equivalent volumes, isolation/return, culling, purchases/capacity, love births, fragile babies/maturation, save reload, mobile controls, ${visuals.progression.map(item => `${item.key}:${item.distinct}`).join(' ')} graphic stages, no page errors.`);
 } catch (error) {
+  if (page) console.error('Rabbit trial failure context:', await page.locator('#sheetContent').innerText().catch(() => 'Panel unavailable'), 'Page errors:', errors);
   if (page) { await screenshot('rabbit-browser-failure').catch(() => {}); await writeFile('test-results/rabbit-browser-failure-save.json', JSON.stringify(await readState(), null, 2)).catch(() => {}); }
   if (serverOutput.length) console.error(serverOutput.join(''));
   throw error;

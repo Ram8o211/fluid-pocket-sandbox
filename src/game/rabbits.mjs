@@ -160,6 +160,13 @@ export function buyRabbit(state, now = Date.now()) {
   return rabbit;
 }
 
+function interruptCourtship(experiments, rabbit) {
+  for (const partner of experiments.rabbits) if (partner.courtingWith === rabbit.id) {
+    partner.courtingWith = null; partner.courtshipUntil = 0;
+  }
+  rabbit.courtingWith = null; rabbit.courtshipUntil = 0;
+}
+
 export function moveRabbit(state, id, location, now = Date.now()) {
   validTime(now);
   if (!['pen', 'cage'].includes(location)) throw new Error('Choose the shared pen or isolation cage.');
@@ -168,10 +175,10 @@ export function moveRabbit(state, id, location, now = Date.now()) {
   if (!rabbit.stats.alive) throw new Error('A dead rabbit cannot be moved for another trial.');
   if (rabbit.location === location) return rabbit;
   if (location === 'cage') for (const other of experiments.rabbits) if (other.location === 'cage') {
-    other.location = 'pen'; other.courtingWith = null; other.courtshipUntil = 0;
+    interruptCourtship(experiments, other); other.location = 'pen';
     if (other.dangerous) { other.attackReadyAt = now + RABBIT_ATTACK_GRACE_MS; other.nextAttackAt = other.attackReadyAt; }
   }
-  rabbit.location = location; rabbit.courtingWith = null; rabbit.courtshipUntil = 0;
+  interruptCourtship(experiments, rabbit); rabbit.location = location;
   if (location === 'pen' && rabbit.dangerous) { rabbit.attackReadyAt = now + RABBIT_ATTACK_GRACE_MS; rabbit.nextAttackAt = rabbit.attackReadyAt; }
   appendRabbitEvent(experiments, 'move', `${rabbit.name} ${location === 'cage' ? 'is isolated for a trial' : 'returns to the shared pen'}.`, now, rabbit.id);
   return rabbit;

@@ -4,6 +4,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
+// Captures use the game's system fonts rather than waiting for font readiness
+// of unrelated generated SVG images in Chromium.
+process.env.PW_TEST_SCREENSHOT_NO_FONTS_READY = '1';
+
 // Exercise user-visible controls. Saved state is read solely for assertions
 // and reproducible recipe guidance; the browser never writes test state.
 const live=process.env.SITE_URL,base=live?new URL(live).href:'http://127.0.0.1:4176/fluid-pocket-sandbox/';

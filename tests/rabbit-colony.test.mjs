@@ -153,6 +153,34 @@ test('isolated rabbits and babies do not breed, and offline time never replays a
   assert.equal(state.experiments.rabbits.length, 4);
 });
 
+test('separating either courting partner cancels both timers and reunion requires a new courtship', () => {
+  for (const partnerIndex of [0, 1]) for (const returnByEviction of [false, true]) {
+    const state = stateAt(), [mother, father, spare, otherMale] = state.experiments.rabbits;
+    cullRabbit(state, otherMale.id, 0);
+    administer(mother, { love: 1 }, 5, 0);
+    advanceRabbits(state, 6000);
+    assert.equal(mother.courtingWith, father.id);
+    assert.equal(father.courtingWith, mother.id);
+    const interrupted = state.experiments.rabbits[partnerIndex], oldDeadline = mother.courtshipUntil;
+    moveRabbit(state, interrupted.id, 'cage', 6500);
+    for (const partner of [mother, father]) {
+      assert.equal(partner.courtingWith, null);
+      assert.equal(partner.courtshipUntil, 0);
+    }
+    assert.ok(!advanceRabbits(state, oldDeadline + 1).some(event => event.type === 'birth'));
+    const returnedAt = oldDeadline + 2;
+    if (returnByEviction) moveRabbit(state, spare.id, 'cage', returnedAt);
+    else moveRabbit(state, interrupted.id, 'pen', returnedAt);
+    assert.equal(interrupted.location, 'pen');
+    const reunion = advanceRabbits(state, returnedAt);
+    assert.ok(reunion.some(event => event.type === 'courtship'));
+    assert.ok(!reunion.some(event => event.type === 'birth'));
+    assert.ok(mother.courtshipUntil > returnedAt);
+    assert.equal(father.courtshipUntil, mother.courtshipUntil);
+    assert.ok(advanceRabbits(state, mother.courtshipUntil + 1).some(event => event.type === 'birth'));
+  }
+});
+
 test('legacy migration preserves injuries and history while current corruption remains visible to validation', () => {
   const legacy = { serial: 4, records: [{ id: 'trial-4', subjectId: 'rabbit' }], subjects: {
     rabbit: { id: 'rabbit', name: 'Old Moon', kind: 'animal', trials: 4, stats: { health: 25, vitality: 20,
