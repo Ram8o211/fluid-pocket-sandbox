@@ -32,6 +32,8 @@ export function performanceProfileFor(count,dimensionMode='3D'){
 }
 
 export class SimulationEngine{
+  /** @type {import('../game/LiquidFunFluid.mjs').LiquidFunFluid | null} */
+  liquidFun = null;
   /** @type {(() => void) | null} Optional vessel boundary, absent in the sandbox. */
   boundaryCollider = null;
   /** @type {Record<string,{width:number,height:number,depth:number}>} */
@@ -79,7 +81,12 @@ export class SimulationEngine{
       for(let i=0;i<this.ps.count;i++)if(this.ps.grainRest[i])this.ps.grainRest[i]=this.solid.settleGranularParticle(this.ps,this.grid,i,this.env,this.gravity,0,planar)?1:0;
       this.solid.grainCachePS=null;
     }
-    this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider);this.molds.collide(this.ps,planar);this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);
+    // LiquidFun replaces the liquid fluid-motion solve in the potion cauldron.
+    // Gas/granular mechanics and the subsequent thermal/chemical passes remain
+    // in the original typed arrays, preserving all nonphysical state.
+    this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider,Boolean(this.liquidFun));
+    this.liquidFun?.step(this.ps,dt,this.gravity);
+    this.molds.collide(this.ps,planar);this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);
     if(this.rules.densityDrivenCondensation)updateGasDensity(this.ps,this.grid,this.rules,this.env);
     for(let i=0;i<this.ps.count;i++)applyBuoyancy(this.ps,i,this.gravity,this.env,dt);
     if(this.stepIndex%profile.thermalStride===0)updateThermal(this.ps,this.grid,this.rules,this.env,dt*profile.thermalStride);
@@ -94,7 +101,7 @@ export class SimulationEngine{
     this.sanitize(this.stepIndex%profile.clampStride===0);this.boundaryCollider?.();this.stats.reactions=this.reactions.activeReactions+this.combustion.events;this.stats.combustions=this.combustion.events;this.stats.combustionMass=this.combustion.massConsumed;this.stats.gridCells=this.grid.cellCount;this.stats.phaseChanges=changes;this.stats.performanceTier=profile.tier;
   }
   sanitize(clampBox=true){const ps=this.ps,planar=this.env.dimensionMode==='2D',x=ps.x,y=ps.y,z=ps.z,vx=ps.vx,vy=ps.vy,vz=ps.vz,temp=ps.temperature,density=ps.density,potential=ps.electricPotential;for(let i=0;i<ps.count;i++){if(!Number.isFinite(x[i]))x[i]=0;if(!Number.isFinite(y[i]))y[i]=0;if(!Number.isFinite(z[i]))z[i]=0;if(!Number.isFinite(vx[i]))vx[i]=0;if(!Number.isFinite(vy[i]))vy[i]=0;if(!Number.isFinite(vz[i]))vz[i]=0;if(!Number.isFinite(temp[i]))temp[i]=0;if(!Number.isFinite(density[i]))density[i]=0;if(!Number.isFinite(potential[i]))potential[i]=0;if(!Number.isFinite(ps.incompressible[i]))ps.incompressible[i]=0;temp[i]=clamp(temp[i],0,1.2);density[i]=clamp(density[i],.04,2.5);potential[i]=clamp(potential[i],-1.5,1.5);ps.incompressible[i]=clamp(ps.incompressible[i],0,1);if(planar){z[i]=ps.pz[i]=0;vz[i]=0;}}if(clampBox)ps.clampToBox(this.env.box);}
-  reset(){this.ps.clear();this.time=0;this.stepIndex=0;this.performance=performanceProfileFor(0,this.env.dimensionMode);this.reactions.clearFrame();this.reactions.mixtures?.reset();this.pruneEmergentMaterials();this.stats.generatedMaterials=0;this.stats.performanceTier='FULL';this.solid.reset();this.molds.clear();this.combustion.resetFrame();this.combustionProductCache.clear();this.stats.combustions=0;this.stats.combustionMass=0;}
+  reset(){this.liquidFun?.reset();this.ps.clear();this.time=0;this.stepIndex=0;this.performance=performanceProfileFor(0,this.env.dimensionMode);this.reactions.clearFrame();this.reactions.mixtures?.reset();this.pruneEmergentMaterials();this.stats.generatedMaterials=0;this.stats.performanceTier='FULL';this.solid.reset();this.molds.clear();this.combustion.resetFrame();this.combustionProductCache.clear();this.stats.combustions=0;this.stats.combustionMass=0;}
 }
 
 
