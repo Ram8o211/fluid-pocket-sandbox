@@ -3,7 +3,7 @@ import { Phase } from '../simulation/Phase.mjs';
 import { workshopBackground, magicGlowSprite } from './art.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
-import { mixedMagicGlow } from './magicLight.mjs';
+import { mixedMagicGlow, particleMagicAuras, paintParticleMagicLights } from './magicLight.mjs';
 import { paintMaterialParticles } from './MaterialRaster.mjs';
 
 const MAGIC_GLOW_LIMIT = 160;
@@ -134,7 +134,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
     const stride = Math.max(1, Math.ceil(ps.count / limit));
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < ps.count; i += stride) {
-      const aura = mixedMagicGlow(ps, i);
+      const aura = this.magicAuras?.length === ps.count ? this.magicAuras[i] : mixedMagicGlow(ps, i);
       if (!aura) continue;
       const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
       const stirring = Math.min(1, Math.hypot(ps.vx[i], ps.vy[i]) * .45);
@@ -190,8 +190,14 @@ export class LaboratoryRenderer extends PlanarRenderer {
       this.matterLayer.width = t.w; this.matterLayer.height = t.h;
       this.matterPixels = this.matterContext.createImageData(t.w, t.h);
     }
-    this.drawCount = paintMaterialParticles(this.sim.ps, t, this.matterPixels.data,
+    const ps = this.sim.ps;
+    this.drawCount = paintMaterialParticles(ps, t, this.matterPixels.data,
       (ps, i, out) => this.particleColor(ps, i, out), this.colorScratch);
+    // The broad animated halos remain sampled for speed; this raster pass
+    // lights every actual particle with its live (or homogeneous) mixture magic.
+    this.magicAuras = particleMagicAuras(ps, this.sim.reactions?.mixtures);
+    this.glowingParticleCount = paintParticleMagicLights(ps, t, this.matterPixels.data,
+      this.magicAuras, this.graphics?.effectsScale ?? 1);
     this.matterContext.putImageData(this.matterPixels, 0, 0);
     ctx.globalAlpha = 1; ctx.drawImage(this.matterLayer, 0, 0);
   }
