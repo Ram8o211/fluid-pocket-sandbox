@@ -62,6 +62,19 @@ export class MixtureSolver {
         for (const [id, amount] of group.sourceAmounts) group.sourceAmounts.set(id, amount * fraction);
       } else group.sourceAmounts.clear();
     }
+    // Restored bottled parcels can carry a group without an older source map.
+    // Recover its initial ingredient amounts before building its arcane rune.
+    for (let i = 0; i < ps.count; i++) {
+      const group = this.root(ps.mixtureGroup[i]);
+      if (group && group.amount > 0 && group.sourceAmounts.size === 0) {
+        // Populate all members together, never just the first encounter.
+        for (let j = 0; j < ps.count; j++) {
+          if (this.root(ps.mixtureGroup[j])?.id !== group.id) continue;
+          group.sourceAmounts.set(ps.materialId[j],
+            (group.sourceAmounts.get(ps.materialId[j]) || 0) + ps.mixtureAmount[j]);
+        }
+      }
+    }
     for (let i = 0; i < ps.count; i++) {
       if (this.root(ps.mixtureGroup[i])) continue;
       let group = this.root(this.materialGroups.get(ps.materialId[i]));
