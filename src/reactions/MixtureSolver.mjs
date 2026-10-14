@@ -30,6 +30,17 @@ export class MixtureSolver {
     if (group && group.parent !== group.id) throw new Error('Invalid saved mixture membership.');
     return group;
   }
+  // Never silently invent the +8 default for a missing source material: it
+  // makes an actual cooling rune appear to require intense heating instead.
+  recipeFor(group) {
+    const sources = [...(group.sourceAmounts || [])];
+    if (!sources.length) return null;
+    const materials = sources.map(([id, amount]) => ({ material: this.materials?.get(id), amount }));
+    if (materials.some(({ material }) => !Number.isFinite(material?.arcaneThreshold))) return null;
+    return arcaneRecipe(materials.map(({ material, amount }) => ({
+      amount, threshold: material.arcaneThreshold, effects: material
+    })));
+  }
   beginFrame(ps) {
     if (this.previous.length < ps.capacity) {
       this.previous = new Float32Array(ps.capacity); this.signal = new Float32Array(ps.capacity); this.weight = new Float64Array(ps.capacity);
@@ -157,10 +168,7 @@ export class MixtureSolver {
     // never on transient parcel averages or which phase they are in.
     for (const group of this.groups.values()) {
       if (group.id !== group.parent || !group.amount) continue;
-      group.arcaneRecipe = arcaneRecipe([...group.sourceAmounts].map(([id, amount]) => {
-        const material = this.materials?.get(id);
-        return { amount, threshold: material?.arcaneThreshold ?? 8, effects: material };
-      }));
+      group.arcaneRecipe = this.recipeFor(group);
     }
     for (let i = 0; i < ps.count; i++) {
       const group = this.root(ps.mixtureGroup[i]);
@@ -204,10 +212,7 @@ export class MixtureSolver {
       }
     }
     for (const group of this.groups.values()) if (group.parent === group.id && group.sourceAmounts.size) {
-      group.arcaneRecipe = arcaneRecipe([...group.sourceAmounts].map(([id, amount]) => {
-        const material = this.materials?.get(id);
-        return { amount, threshold: material?.arcaneThreshold ?? 8, effects: material };
-      }));
+      group.arcaneRecipe = this.recipeFor(group);
     }
     this.nextId = saved.nextId;
   }
