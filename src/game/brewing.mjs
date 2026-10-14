@@ -8,6 +8,7 @@ import { CAPACITY_ML, FIXED_STEP, ROOM_TEMPERATURE, ROOM_DENSITY } from './contr
 import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSupport, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
+import { LiquidFunFluid } from './LiquidFunFluid.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
 import { capturePotionContents, restorePotionContents } from './potionTransfer.mjs';
 
@@ -20,6 +21,10 @@ export class BrewingSession {
   constructor(ingredients, equipment = {}) {
     this.ingredients = ingredients; this.equipment = equipment;
     this.engine = new SimulationEngine(PARTICLE_CAPACITY);
+    // The browser loads Google's unmodified official LiquidFun runtime before
+    // this module. Node/unit-only environments retain the old fallback engine.
+    // LiquidFun only integrates LIQUID motion, never magical or thermal fields.
+    if (typeof globalThis.b2World === 'function') this.engine.liquidFun = new LiquidFunFluid();
     this.engine.ps.packingScale = .6;
     this.engine.ps.volumePacking = true;
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
