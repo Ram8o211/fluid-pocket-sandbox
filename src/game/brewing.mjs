@@ -24,7 +24,10 @@ export class BrewingSession {
     // The browser loads Google's unmodified official LiquidFun runtime before
     // this module. Node/unit-only environments retain the old fallback engine.
     // LiquidFun only integrates LIQUID motion, never magical or thermal fields.
-    if (typeof globalThis.b2World === 'function') this.engine.liquidFun = new LiquidFunFluid();
+    if (typeof globalThis.b2World === 'function') {
+      this.engine.liquidFun = new LiquidFunFluid();
+      if (typeof document !== 'undefined') document.body.dataset.physicsEngine = 'liquidfun';
+    }
     this.engine.ps.packingScale = .6;
     this.engine.ps.volumePacking = true;
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
