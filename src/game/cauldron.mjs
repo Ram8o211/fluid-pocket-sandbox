@@ -54,7 +54,9 @@ export function confineCauldronParticle(ps, i) {
         // Dry grains and dough lose all inward normal speed: a collision may
         // stop or redirect sliding but must never reverse into elastic recoil.
         const granular = isPowder(ps,i);
-        const rebound = granular ? 1 : 1.03;
+        // All pot contacts are inelastic; the old 3% liquid restitution
+         // repeatedly re-injected energy into particles resting on the floor.
+         const rebound = 1;
         ps.vx[i] -= p.nx * normalSpeed * rebound;
         ps.vy[i] -= p.ny * normalSpeed * rebound;
         if (granular) {
