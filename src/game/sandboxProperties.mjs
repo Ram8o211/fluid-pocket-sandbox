@@ -9,13 +9,13 @@ function dominantEffect(effects) {
   return EFFECT_PROPERTIES.reduce((best, key) => effects[key] > (best ? effects[best] : .003) ? key : best, null);
 }
 function awakeningDetails(threshold, effects, charged = 0, converted = 0) {
-  const direction = threshold >= .33 ? 'above' : 'below';
+  const direction = threshold >= 0 ? 'above' : 'below';
   const reachable = Number.isFinite(threshold) && (direction === 'above'
     ? threshold + ARCANE_MARGIN < MAX_TEMPERATURE
     : threshold - ARCANE_MARGIN > MIN_TEMPERATURE);
   return { arcaneThreshold: threshold, awakeningDirection: direction,
     awakeningReachable: reachable, dominantEffect: dominantEffect(effects),
-    awakeningCharge: charged, awakenedFraction: converted };
+    awakeningCharge: charged, awakenedFraction: converted, awakeningEffects: effects };
 }
 
 
@@ -93,7 +93,8 @@ export function sandboxMixtureProperties(brew) {
       mass: group.mass, count: group.count, sources, homogeneous, dispersion,
       temperature: average('temperature'),
       effects: Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
-      ...awakeningDetails(average('arcaneThreshold'), Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
+      ...awakeningDetails(mixtures?.root?.(Number(group.id.split(':')[1]))?.arcaneRecipe?.threshold ?? average('arcaneThreshold'),
+        mixtures?.root?.(Number(group.id.split(':')[1]))?.arcaneRecipe?.effects ?? Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, average(key)])),
         average('arcaneCharge'), average('arcaneConverted')),
       meltingTemperature: average('meltingTemperature'),
       boilingTemperature: average('boilingTemperature'),
