@@ -25,7 +25,12 @@ try {
   assert.equal(await page.evaluate(()=>typeof b2World),'function','Google LiquidFun must be present');
   await page.locator('#worldSeed').fill('liquidfun-smoke');
   await page.locator('#newWorldBtn').click();
-  await page.waitForSelector('body[data-game-state="brewing"]',{timeout:10000});
+  try{await page.waitForSelector('body[data-game-state="brewing"]',{timeout:10000});}
+  catch(e){
+    const details=await page.evaluate(()=>({body:document.body?.dataset,html:document.body?.innerText?.slice(-850)}));
+    console.error('LIQUIDFUN BREW INIT DEBUG',JSON.stringify({details,errors,consoleErrors}));
+    throw e;
+  }
   assert.equal(await page.locator('body').getAttribute('data-physics-engine'),'liquidfun');
   await page.locator('[data-ingredient="1"]').click();
   await page.locator('[data-dose="5"]').click();
