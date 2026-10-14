@@ -99,7 +99,11 @@ try{
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Strength.*Love.*Death.*Transformation/s);
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Melt.*Boil.*Ignite/s);
   const cauldronAfter=await page.locator('#labCanvas').boundingBox();
-  assert.ok(cauldronAfter.height>60&&cauldronAfter.bottom<=await page.evaluate(()=>innerHeight+1));
+  // Playwright boundingBox() provides x/y/width/height (no `bottom` field).
+  // Validate the actual viewport bounds without silently comparing undefined.
+  const viewportHeight=await page.evaluate(()=>innerHeight);
+  assert.ok(cauldronAfter.height>60&&cauldronAfter.y>=-1&&cauldronAfter.y+cauldronAfter.height<=viewportHeight+1,
+    `Opening the inspector must leave the cauldron visible: ${JSON.stringify(cauldronAfter)} in ${viewportHeight}px viewport`);
   assert.ok(Math.abs(cauldronBefore.height-cauldronAfter.height)<80,'opening inspector must keep cauldron usable');
   await page.locator('#sandboxInspectIngredient').selectOption('13');
   assert.ok((await page.locator('#selectedName').textContent()).length>0);
