@@ -48,6 +48,7 @@ test('ingredient inspection reads magical effects and phase threshold temperatur
   assert.ok(Math.abs(read.awakeningTemperature - .13) < 1e-8);
   assert.equal(read.dominantEffect, 'strength');
   assert.equal(read.awakenedFraction, 0);
+  assert.equal('magicDecayTemperature' in read, false, 'legacy decay settings are not part of the inspector');
 });
 
 test('uniform same-group mixtures show actual live blended parcel magic and thermal thresholds', () => {
@@ -58,6 +59,7 @@ test('uniform same-group mixtures show actual live blended parcel magic and ther
   const [mixture] = sandboxMixtureProperties(brew);
   assert.equal(mixture.homogeneous, true);
   assert.equal(mixture.effects.strength, .32);
+  assert.equal('magicDecayTemperature' in mixture, false);
   assert.equal(mixture.boilingTemperature, .64);
   assert.equal(mixture.arcaneThreshold, .58);
   assert.equal(mixture.awakeningDirection, 'above');
