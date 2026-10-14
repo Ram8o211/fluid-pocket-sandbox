@@ -226,6 +226,22 @@ export class BrewingSession {
     const contents = experiment ? null : capturePotionContents(ps, selections, this.engine.reactions.mixtures, this.engine.materials);
     const bottledPortions = this.portions.map(p => ({ ...p, ml: p.ml * materialFraction }));
     for (let n = selections.length - 1; n >= 0; n--) { const { index, mass } = selections[n]; ps.mixtureAmount[index] *= 1 - fraction; ps.mass[index] -= mass; if (ps.mass[index] < .00001) ps.removeAt(index); }
+    // Bottling removes volume immediately; update source quantities too, even
+    // when the player returns the vial or adds new ingredients before a tick.
+    // Otherwise the next recipe incorrectly includes already-removed stock.
+    const mixtures = this.engine.reactions.mixtures, remaining = new Map();
+    for (let i = 0; i < ps.count; i++) {
+      const root = mixtures.root(ps.mixtureGroup[i]);
+      if (root) remaining.set(root.id, (remaining.get(root.id) || 0) + ps.mixtureAmount[i]);
+    }
+    for (const root of mixtures.groups.values()) {
+      if (root.parent !== root.id) continue;
+      const amount = remaining.get(root.id) || 0;
+      const scale = root.amount > 0 ? amount / root.amount : 0;
+      if (root.sourceAmounts instanceof Map) for (const [id, value] of root.sourceAmounts)
+        root.sourceAmounts.set(id, value * scale);
+      root.amount = amount;
+    }
     this.cost.ingredients -= cost.ingredients; this.cost.energy -= cost.energy;
     this.portions = this.portions.map(p => ({ ...p, ml: p.ml * (1 - materialFraction) })).filter(p => p.ml > .001);
     if (!experiment) this.heat = this.cool = 0;

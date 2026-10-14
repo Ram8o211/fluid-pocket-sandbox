@@ -132,3 +132,41 @@ test('returning a mixed vial preserves its original affinity envelope and emerge
   mixtures.beginFrame(ps);
   for (let i = 0; i < ps.count; i++) { const group = mixtures.root(ps.mixtureGroup[i]); near(group.min, .1); near(group.max, .9); }
 });
+
+test('the original arcane ratio and signed threshold survive fused materials, bottle splitting and return', () => {
+  const brew = new BrewingSession(world.ingredients);
+  brew.pour(13, 10, {}, { infinite: true });
+  brew.pour(14, 20, {}, { infinite: true });
+  const ps = brew.engine.ps, mixtures = brew.engine.reactions.mixtures;
+  mixtures.beginFrame(ps);
+  const a = mixtures.root(ps.mixtureGroup[0]), b = mixtures.root(ps.mixtureGroup[40]);
+  a.sourceAmounts.set(13, 10);
+  a.sourceAmounts.set(14, 20);
+  a.amount = 30;
+  a.min = Math.min(a.min, b.min); a.max = Math.max(a.max, b.max);
+  b.parent = a.id;
+  const expected = (world.ingredients[12].material.arcaneThreshold * 10 +
+    world.ingredients[13].material.arcaneThreshold * 20) / 30;
+  for (let i = 0; i < ps.count; i++) ps.mixtureGroup[i] = a.id;
+  // A fusion can replace the material IDs, but it must not erase the recipe.
+  const fused = brew.engine.resolveFusion(ps, 0, 40, ps.materialId[0], ps.materialId[40]);
+  for (let i = 0; i < ps.count; i++) ps.materialId[i] = fused;
+  const sealed = brew.bottle(20);
+  near(mixtures.root(ps.mixtureGroup[0]).amount, 10);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(13), 10 / 3);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(14), 20 / 3);
+  const remaining = splitPotionSample(sealed, 5).remaining;
+  const content = remaining.contents;
+  assert.ok(content.recipes?.length);
+  assert.ok(content.recipes[0].sources.length === 2);
+  assert.equal(ps.count > 0, true);
+  const restoredMl = brew.returnPotion(remaining);
+  near(restoredMl, 15);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(13), 25 / 3);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(14), 50 / 3);
+  mixtures.beginFrame(ps);
+  mixtures.finishFrame(ps, {}, .025);
+  const live = mixtures.root(ps.mixtureGroup[0]).arcaneRecipe;
+  near(live.threshold, expected, .0001);
+  near(mixtures.root(ps.mixtureGroup[ps.count - 1]).arcaneRecipe.threshold, live.threshold);
+});

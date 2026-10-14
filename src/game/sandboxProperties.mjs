@@ -10,7 +10,7 @@ function dominantEffect(effects) {
   return EFFECT_PROPERTIES.reduce((best, key) => effects[key] > (best ? effects[best] : .003) ? key : best, null);
 }
 function awakeningDetails(threshold, effects, charged = 0, converted = 0) {
-  const direction = threshold >= .33 ? 'above' : 'below';
+  const direction = threshold >= 0 ? 'above' : 'below';
   const reachable = Number.isFinite(threshold) && (direction === 'above'
     ? threshold + ARCANE_MARGIN < MAX_TEMPERATURE
     : threshold - ARCANE_MARGIN > MIN_TEMPERATURE);
@@ -88,9 +88,15 @@ export function sandboxMixtureProperties(brew) {
     // A compatibility group forms at first contact, before it has blended.
     // Its group mean must NOT be presented as an existing homogeneous potion.
     const homogeneous = dispersion <= 0.035;
-    const sources = [...group.sources].sort((a, b) => b[1] - a[1])
-      .map(([id, mass]) => ({ id, name: names.get(id) || 'Ingredient ' + id, fraction: mass / group.mass }));
-    const recipe = group.id.startsWith('group:') ? mixtures?.root?.(Number(group.id.slice(6)))?.arcaneRecipe : null;
+    const root = group.id.startsWith('group:') ? mixtures?.root?.(Number(group.id.slice(6))) : null;
+    // Show the SAME original volume shares the rune calculation uses. Live
+    // material IDs and particle masses can be distorted by density or fusion.
+    const shares = root?.sourceAmounts?.size ? root.sourceAmounts : group.sources;
+    const shareTotal = [...shares.values()].reduce((sum, amount) => sum + amount, 0);
+    const sources = [...shares].filter(([, amount]) => amount > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, amount]) => ({ id, name: names.get(id) || 'Ingredient ' + id, fraction: amount / shareTotal }));
+    const recipe = root?.arcaneRecipe;
     return {
       id: group.id, label: 'Pot mixture ' + (index + 1),
       mass: group.mass, count: group.count, sources, homogeneous, dispersion,

@@ -52,23 +52,63 @@ function unpack(contents) {
     ids.add(material.id);
   }
   if (rows.some(row => !ids.has(row[4]))) throw new Error('Missing bottled source.');
+  // Optional metadata for newer vials: each row retains its true ingredient
+  // provenance even after local material fusion has changed its materialId.
+  if (contents.recipes !== undefined || contents.recipeIndices !== undefined) {
+    if (!Array.isArray(contents.recipes) || !Array.isArray(contents.recipeIndices) ||
+      contents.recipes.length < 1 || contents.recipes.length > rows.length ||
+      contents.recipeIndices.length !== rows.length) throw new Error('Invalid bottled recipe groups.');
+    for (const recipe of contents.recipes) {
+      if (!recipe || !Array.isArray(recipe.sources) || !recipe.sources.length ||
+        recipe.sources.length > contents.materials.length || !Number.isFinite(recipe.min) ||
+        !Number.isFinite(recipe.max) || recipe.min < 0 || recipe.max > 1 || recipe.min > recipe.max)
+        throw new Error('Invalid bottled recipe provenance.');
+      const seen = new Set();
+      for (const [id, share] of recipe.sources) {
+        if (!Number.isInteger(id) || !ids.has(id) || seen.has(id) ||
+          !Number.isFinite(share) || share <= 0 || share > 1)
+          throw new Error('Invalid bottled recipe sources.');
+        seen.add(id);
+      }
+      if (Math.abs(recipe.sources.reduce((sum, [, share]) => sum + share, 0) - 1) > .00001)
+        throw new Error('Invalid bottled recipe shares.');
+    }
+    if (contents.recipeIndices.some(index => !Number.isInteger(index) || index < 0 || index >= contents.recipes.length))
+      throw new Error('Invalid bottled recipe index.');
+  }
   return rows;
 }
 
 export function capturePotionContents(ps, selections, mixtures, materials) {
-  const ids = new Set();
+  const ids = new Set(), recipeByGroup = new Map(), recipes = [], recipeIndices = [];
   const rows = selections.map(({ index, mass }) => {
-    const group = mixtures.root(ps.mixtureGroup[index]); ids.add(ps.materialId[index]);
-    return POTION_PARCEL_FIELDS.map(key => key === 'mass' ? mass : key === 'mixtureAmount' ? ps.mixtureAmount[index] * mass / ps.mass[index] :
-      key === 'affinityMin' ? group?.min ?? ps.miscibility[index] : key === 'affinityMax' ? group?.max ?? ps.miscibility[index] : ps[key][index]);
+    const group = mixtures.root(ps.mixtureGroup[index]);
+    const materialId = ps.materialId[index];
+    ids.add(materialId);
+    const key = group ? 'group:' + group.id : 'material:' + materialId;
+    if (!recipeByGroup.has(key)) {
+      const amounts = group?.sourceAmounts?.size ? [...group.sourceAmounts] : [[materialId, 1]];
+      const total = amounts.reduce((sum, [, amount]) => sum + amount, 0);
+      const sources = total > 0 ? amounts.filter(([, amount]) => amount > 0)
+        .map(([id, amount]) => [id, amount / total]) : [[materialId, 1]];
+      for (const [id] of sources) ids.add(id);
+      recipeByGroup.set(key, recipes.length);
+      recipes.push({ sources, min: group?.min ?? ps.miscibility[index], max: group?.max ?? ps.miscibility[index] });
+    }
+    recipeIndices.push(recipeByGroup.get(key));
+    return POTION_PARCEL_FIELDS.map(field => field === 'mass' ? mass :
+      field === 'mixtureAmount' ? ps.mixtureAmount[index] * mass / ps.mass[index] :
+      field === 'affinityMin' ? group?.min ?? ps.miscibility[index] :
+      field === 'affinityMax' ? group?.max ?? ps.miscibility[index] : ps[field][index]);
   });
-  return pack(rows, [...ids].map(id => materials.get(id)));
+  return { ...pack(rows, [...ids].map(id => materials.get(id))), recipes, recipeIndices };
 }
 
 export function scalePotionContents(contents, ratio) {
   const rows = unpack(contents);
   for (const row of rows) { row[0] *= ratio; row[1] *= ratio; }
-  return pack(rows, contents.materials);
+  return { ...pack(rows, contents.materials),
+    ...(contents.recipes ? { recipes: contents.recipes, recipeIndices: contents.recipeIndices } : {}) };
 }
 
 export function validatePotionContents(sample) {
@@ -119,42 +159,76 @@ export function restorePotionContents(engine, sample, capacity, ingredients) {
   if (occupied + amount > capacity + .0002) throw new Error(`Make room in the cauldron for ${sample.volume.toFixed(1)} ml first.`);
   const keyFor = row => row.slice(2).join(',');
   const targets = new Map(), planned = new Float64Array(ps.count), massAdded = new Float64Array(ps.count), incoming = new Map();
+  const existingShares = new Map();
+  const recipeFor = (row, index) => contents.recipes?.[contents.recipeIndices[index]]?.sources || [[row[4], 1]];
+  const addShares = (shares, sources, volume) => {
+    for (const [id, fraction] of sources) shares.set(id, (shares.get(id) || 0) + fraction * volume);
+  };
   for (let i = 0; i < ps.count; i++) {
     if (ps.phase[i] !== Phase.LIQUID) continue;
     const group = mixtures.root(ps.mixtureGroup[i]);
     const row = POTION_PARCEL_FIELDS.map(key => key === 'affinityMin' ? group?.min ?? ps.miscibility[i] : key === 'affinityMax' ? group?.max ?? ps.miscibility[i] : ps[key][i]);
     const key = keyFor(row); if (!targets.has(key)) targets.set(key, []); targets.get(key).push(i);
   }
-  for (const original of rows) {
-    const row = [...original], key = keyFor(row), slots = targets.get(key);
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const original = rows[rowIndex], row = [...original];
+    const recipeIndex = contents.recipeIndices?.[rowIndex] ?? -1;
+    const sources = recipeFor(original, rowIndex);
+    const key = keyFor(row), slots = targets.get(key);
     while (slots?.length && row[1] > .0000001) {
       const index = slots[slots.length - 1], space = Math.max(0, PARTICLE_ML - ps.mixtureAmount[index] - planned[index]);
       const returned = Math.min(space, row[1]), mass = row[0] * returned / row[1];
       planned[index] += returned; massAdded[index] += mass; row[0] -= mass; row[1] -= returned;
+      const root = mixtures.root(ps.mixtureGroup[index]);
+      const rootKey = root?.id ?? 'material:' + ps.materialId[index];
+      if (!existingShares.has(rootKey)) existingShares.set(rootKey, { root, shares: new Map(), volume: 0 });
+      const destination = existingShares.get(rootKey);
+      addShares(destination.shares, sources, returned); destination.volume += returned;
       if (space <= returned + .0000001) slots.pop();
     }
     if (row[1] > .0000001) {
-      const previous = incoming.get(key);
-      if (previous) { previous[0] += row[0]; previous[1] += row[1]; } else incoming.set(key, row);
+      const incomingKey = key + '|' + recipeIndex + '|' + sources.map(([id, share]) => id + ':' + share).join(',');
+      const previous = incoming.get(incomingKey);
+      if (previous) { previous.row[0] += row[0]; previous.row[1] += row[1]; }
+      else incoming.set(incomingKey, { row, sources, recipeIndex });
     }
   }
   const newRows = [];
-  for (const row of incoming.values()) {
+  for (const incomingEntry of incoming.values()) {
+    const { row, sources, recipeIndex } = incomingEntry;
     const pieces = Math.max(1, Math.ceil(row[1] / PARTICLE_ML - .000001));
-    for (let n = 0; n < pieces; n++) { const piece = [...row]; piece[0] /= pieces; piece[1] /= pieces; newRows.push(piece); }
+    for (let n = 0; n < pieces; n++) { const piece = [...row]; piece[0] /= pieces; piece[1] /= pieces;
+      newRows.push({ row: piece, sources, recipeIndex }); }
   }
   if (ps.count + newRows.length > ps.capacity) throw new Error('The cauldron needs more room before this vial can return.');
   // Nothing above this point mutates the live pot or the vial.
   for (const material of contents.materials) if (!engine.materials.has(material.id)) engine.registerMaterial(sanitizeMaterial(structuredClone(material)));
   for (let i = 0; i < planned.length; i++) { ps.mass[i] += massAdded[i]; ps.mixtureAmount[i] += planned[i]; }
+  // Account for returned volume now, so beginFrame does not erroneously
+  // rescale OLD provenance as though the freshly returned liquid were old.
+  for (const destination of existingShares.values()) {
+    const root = destination.root;
+    if (!root) continue;
+    if (!(root.sourceAmounts instanceof Map)) root.sourceAmounts = new Map();
+    for (const [id, volume] of destination.shares)
+      root.sourceAmounts.set(id, (root.sourceAmounts.get(id) || 0) + volume);
+    root.amount += destination.volume;
+  }
   const groups = new Map();
   for (let n = 0; n < newRows.length; n++) {
-    const row = newRows[n], i = ps.add({ x: Math.sin(n * 2.39996) * .9, y: .55 + n % 4 * .08, z: 0, vy: -1.3, mass: row[0], temperature: row[2] }, engine.materials.get(row[4]), Phase.LIQUID);
+    const { row, sources, recipeIndex } = newRows[n];
+    const i = ps.add({ x: Math.sin(n * 2.39996) * .9, y: .55 + n % 4 * .08, z: 0, vy: -1.3, mass: row[0], temperature: row[2] }, engine.materials.get(row[4]), Phase.LIQUID);
     for (let k = 0; k < STRIDE - 2; k++) ps[POTION_PARCEL_FIELDS[k]][i] = row[k];
-    const key = `${row[STRIDE - 2]}:${row[STRIDE - 1]}`;
+    const key = `${row[STRIDE - 2]}:${row[STRIDE - 1]}:${recipeIndex}:${sources.map(([id, fraction]) => id + '/' + fraction).join(',')}`;
     let group = groups.get(key);
-    if (!group) { const id = mixtures.nextId++; group = { id, parent: id, amount: 0, min: row[STRIDE - 2], max: row[STRIDE - 1], target: MIX_PROPERTIES.map(() => 0) }; mixtures.groups.set(id, group); groups.set(key, group); }
+    if (!group) {
+      const id = mixtures.nextId++;
+      group = { id, parent: id, amount: 0, min: row[STRIDE - 2], max: row[STRIDE - 1],
+        target: MIX_PROPERTIES.map(() => 0), sourceAmounts: new Map() };
+      mixtures.groups.set(id, group); groups.set(key, group);
+    }
     for (let k = 0; k < MIX_PROPERTIES.length; k++) group.target[k] = (group.target[k] * group.amount + ps[MIX_PROPERTIES[k]][i] * row[1]) / (group.amount + row[1]);
+    addShares(group.sourceAmounts, sources, row[1]);
     group.amount += row[1]; ps.mixtureGroup[i] = group.id;
   }
   return sample.volume;

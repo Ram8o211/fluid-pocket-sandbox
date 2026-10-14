@@ -62,6 +62,19 @@ export class MixtureSolver {
         for (const [id, amount] of group.sourceAmounts) group.sourceAmounts.set(id, amount * fraction);
       } else group.sourceAmounts.clear();
     }
+    // Legacy returned parcels may lack a provenance map. Recover all their
+    // members in one linear pass rather than scanning the pot per group.
+    const missingSources = new Set();
+    for (const group of this.groups.values()) {
+      if (group.id === group.parent && group.amount > 0 && group.sourceAmounts.size === 0)
+        missingSources.add(group.id);
+    }
+    if (missingSources.size) for (let i = 0; i < ps.count; i++) {
+      const group = this.root(ps.mixtureGroup[i]);
+      if (!group || !missingSources.has(group.id)) continue;
+      group.sourceAmounts.set(ps.materialId[i],
+        (group.sourceAmounts.get(ps.materialId[i]) || 0) + ps.mixtureAmount[i]);
+    }
     for (let i = 0; i < ps.count; i++) {
       if (this.root(ps.mixtureGroup[i])) continue;
       let group = this.root(this.materialGroups.get(ps.materialId[i]));

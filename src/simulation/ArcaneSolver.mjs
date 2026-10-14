@@ -5,23 +5,18 @@ export function warmedMiscibility(ps, i, j, base, rules) {
   return base + Math.max(0, (ps.temperature[i] + ps.temperature[j]) * .5 - .33) * (rules?.heatSolubility || 0);
 }
 
-/** Original ingredient contribution rule. Portion ratios are reduced so
- * scaling a recipe (10:20 => 1:2) never alters its critical temperature.
- *
- * Intentionally follows the game's specified example, not the conventional
- * weighted mean: (-1000*1 + 800*2) / 2 = +300.
- * The divisor is the number of distinct components (not their total weight).
+/** The signed critical temperature is the ordinary portion-weighted mean.
+ * Dividing by the total amount keeps it inside the ingredient threshold range
+ * and makes diluting/scaling recipes mathematically consistent.
  */
 export function arcaneRecipe(ingredients) {
   const sources = ingredients.filter(source => Number.isFinite(source.amount) && source.amount > 0 &&
     Number.isFinite(source.threshold));
   if (!sources.length) return null;
-  const smallest = Math.min(...sources.map(source => source.amount));
   const total = sources.reduce((sum, source) => sum + source.amount, 0);
-  // Keep the SIGN of the proportion-weighted result: a mixture can require
-  // cooling (negative), cancel exactly to zero, or require heating (positive).
+  // Preserve sign; never take abs(), clamp to positive, or divide by source count.
   const threshold = sources.reduce((sum, source) =>
-    sum + source.threshold * (source.amount / smallest), 0) / sources.length;
+    sum + source.threshold * source.amount, 0) / total;
   const effects = Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, 0]));
   const single = sources.length === 1;
   for (const source of sources) {
@@ -51,7 +46,7 @@ export function stepArcana(ps, dt, events = null, mixtures = null) {
     const awaitingBlend = recipe?.sourceCount > 1 && !blended;
     if (awaitingBlend) ps.arcaneCharge[i] = 0;
     if (!awaitingBlend && ps.arcaneConverted[i] < .5) {
-      const crossed = threshold >= .33 ? temperature > threshold + .015 : temperature < threshold - .015;
+      const crossed = threshold >= 0 ? temperature > threshold + .015 : temperature < threshold - .015;
       ps.arcaneCharge[i] = crossed ? Math.min(1, ps.arcaneCharge[i] + dt * 2.5) : Math.max(0, ps.arcaneCharge[i] - dt * 4);
       if (ps.arcaneCharge[i] >= .999) {
         let dominant = null, maximum = .003;

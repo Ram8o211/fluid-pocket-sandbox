@@ -101,3 +101,17 @@ test('live rune awakening and charge fractions are mass-weighted, rather than in
   brew.engine.ps.arcaneThreshold[0] = -.4;
   assert.equal(sandboxMixtureProperties(brew)[0].homogeneous, false, 'an unresolved rune threshold is not a homogeneous mixture');
 });
+
+test('inspector proportions use original volume shares, not densities or fused particle IDs', () => {
+  const brew = fakeBrew([
+    { materialId: 1, group: 5, mass: 1, strength:.2, arcaneThreshold:.2 },
+    { materialId: 2, group: 5, mass: 4, strength:.2, arcaneThreshold:.2 }
+  ]);
+  const root = { id:5, sourceAmounts:new Map([[1,10],[2,20]]), arcaneRecipe: { threshold:.2, effects:{ strength:.33, poison:.66 } } };
+  brew.engine.reactions.mixtures.root = () => root;
+  const [mixture] = sandboxMixtureProperties(brew);
+  assert.ok(Math.abs(mixture.sources[0].fraction-2/3)<1e-10);
+  assert.ok(Math.abs(mixture.sources[1].fraction-1/3)<1e-10);
+  assert.equal(mixture.arcaneThreshold,.2);
+  assert.equal(mixture.awakeningDirection,'above');
+});

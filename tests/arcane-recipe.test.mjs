@@ -13,18 +13,18 @@ const material = (id, threshold, effects, extra = {}) => sanitizeMaterial({
   ...effects, ...extra
 });
 
-test('the exact 1:2 example uses the requested component-count divisor and preserves effect proportions', () => {
+test('the exact 1:2 recipe uses a proper weighted average and preserves effect proportions', () => {
   const a = { amount: 10, threshold: -10, effects: { strength: .8 } };
   const b = { amount: 20, threshold: 8, effects: { poison: .6 } };
   const recipe = arcaneRecipe([a, b]);
-  assert.equal(recipe.threshold, 3, '(-1000 + 800*2)/2 = +300 degrees A');
+  assert.equal(recipe.threshold, 2, '(-1000 + 800*2)/(1+2) = +200 degrees A');
   assert.ok(Math.abs(recipe.effects.strength - .33) < 1e-10);
   assert.ok(Math.abs(recipe.effects.poison - .66) < 1e-10);
   assert.equal(recipe.effects.love, 0);
   assert.equal(recipe.effects.fire, 0);
-  assert.equal(arcaneRecipe([{ ...a, amount: 100 }, { ...b, amount: 200 }]).threshold, 3,
+  assert.equal(arcaneRecipe([{ ...a, amount: 100 }, { ...b, amount: 200 }]).threshold, 2,
     'enlarging a batch must not change its critical temperature');
-  assert.equal(arcaneRecipe([{...a,amount:2},{...b,amount:1}]).threshold,-6,
+  assert.equal(arcaneRecipe([{...a,amount:2},{...b,amount:1}]).threshold,-4,
     'negative component-weighted totals preserve their sign');
 });
 
@@ -34,7 +34,7 @@ test('three ingredients distribute magical results according to source shares, n
     { amount: 10, threshold: 1, effects: { poison: .6 } },
     { amount: 5, threshold: 2, effects: { love: .8, fire: .2 } }
   ]);
-  assert.equal(recipe.threshold, 1);
+  assert.equal(recipe.threshold, .75);
   assert.ok(Math.abs(recipe.effects.strength - .2475) < 1e-10);
   assert.ok(Math.abs(recipe.effects.poison - .495) < 1e-10);
   assert.ok(Math.abs(recipe.effects.love - .2475) < 1e-10);
@@ -53,7 +53,7 @@ test('the physical mixing solver retains initial ingredients across fluid contac
   mixtures.contact(ps,0,1,1,.2,.05,{baseMixingRate:8,mixingExponent:1,mixingTemperatureCoefficient:0});
   mixtures.finishFrame(ps,{},.05);
   const group = mixtures.root(ps.mixtureGroup[0]);
-  assert.equal(group.arcaneRecipe.threshold,3);
+  assert.equal(group.arcaneRecipe.threshold,2);
   assert.ok(Math.abs(group.arcaneRecipe.effects.strength-.33) < 1e-8);
   assert.ok(Math.abs(group.arcaneRecipe.effects.poison-.66) < 1e-8);
   assert.equal(mixtures.root(ps.mixtureGroup[1]).id,group.id);
@@ -61,13 +61,13 @@ test('the physical mixing solver retains initial ingredients across fluid contac
   const restored = new MixtureSolver();
   restored.materials = mixtures.materials;
   restored.restore(saved,ps);
-  assert.equal(restored.root(ps.mixtureGroup[0]).arcaneRecipe.threshold,3);
+  assert.equal(restored.root(ps.mixtureGroup[0]).arcaneRecipe.threshold,2);
   assert.equal(restored.root(ps.mixtureGroup[0]).sourceAmounts.size,2);
   const update=restored.root(ps.mixtureGroup[0]);
   ps.mixtureProgress.fill(1);
   ps.temperature.fill(1.15);
   stepArcana(ps,.5,null,restored);
-  assert.equal(ps.arcaneConverted[0],0,'the +300 degree threshold is not reachable in a 115 degree pot');
+  assert.equal(ps.arcaneConverted[0],0,'the +200 degree threshold is not reachable in a 115 degree pot');
 });
 
 test('hot evaporated gas and dry unmelted powder can still transform independently of phase', () => {
@@ -95,7 +95,7 @@ test('the live recipe transforms BOTH enchantments at their shared temperature',
   ps.add({x:.02,y:0,z:0,temperature:.8},b,Phase.GAS);
   ps.mixtureAmount[0]=1;ps.mixtureAmount[1]=2;
   mix.beginFrame(ps);mix.contact(ps,0,1,1,.2,.1,{baseMixingRate:10,mixingExponent:1});mix.finishFrame(ps,{},.1);
-  assert.ok(Math.abs(mix.root(ps.mixtureGroup[0]).arcaneRecipe.threshold-.4)<1e-6);
+  assert.ok(Math.abs(mix.root(ps.mixtureGroup[0]).arcaneRecipe.threshold-(.8/3))<1e-6);
   ps.mixtureProgress.fill(1);
   for(let j=0;j<20;j++)stepArcana(ps,.025,null,mix);
   for(let i=0;i<ps.count;i++){
@@ -123,6 +123,7 @@ test('a previously awakened ingredient resets its rune when a new recipe is form
   stepArcana(ps,.025,null,mix);
   assert.equal(ps.arcaneConverted[0],0,'unblended parcels must not reawaken prematurely');
   ps.mixtureProgress.fill(1);
+  ps.temperature.fill(.5);
   for(let k=0;k<20;k++)stepArcana(ps,.025,null,mix);
   assert.ok(Math.abs(mix.root(ps.mixtureGroup[0]).arcaneRecipe.threshold-.2)<1e-6);
   assert.equal(ps.arcaneConverted[0],1);
@@ -140,7 +141,7 @@ test('mixture threshold preserves negative, zero and positive signed weighted re
   assert.ok(Math.abs(negative.effects.strength - .495) < 1e-10);
   assert.ok(Math.abs(negative.effects.poison - .495) < 1e-10);
   assert.equal(arcaneRecipe([strength]).threshold, -1, 'single ingredient keeps its signed threshold');
-  assert.equal(arcaneRecipe([{ ...strength, amount: 1, threshold: -10 }, { ...venom, amount: 2, threshold: 8 }]).threshold, 3);
+  assert.equal(arcaneRecipe([{ ...strength, amount: 1, threshold: -10 }, { ...venom, amount: 2, threshold: 8 }]).threshold, 2);
 });
 
 test('live mixed parcels and save/restore retain a negative final threshold', () => {
@@ -162,4 +163,26 @@ test('live mixed parcels and save/restore retain a negative final threshold', ()
   restored.materials = mix.materials;
   restored.restore(mix.snapshot(),ps);
   assert.ok(Math.abs(restored.root(ps.mixtureGroup[0]).arcaneRecipe.threshold + .4) < 1e-5);
+});
+
+test('weighted rune thresholds remain bounded and are independent of recipe scale', () => {
+  const a = { amount: 1, threshold: -.8, effects: { strength: .9 } };
+  const b = { amount: 4, threshold: .6, effects: { poison: .9 } };
+  const mixed = arcaneRecipe([a, b]);
+  assert.ok(Math.abs(mixed.threshold - .32) < 1e-10);
+  assert.ok(mixed.threshold >= -.8 && mixed.threshold <= .6);
+  assert.ok(Math.abs(arcaneRecipe([{ ...a, amount: .1 }, { ...b, amount: .4 }]).threshold - .32) < 1e-10);
+  assert.ok(Math.abs(mixed.effects.strength - .198) < 1e-10);
+  assert.ok(Math.abs(mixed.effects.poison - .792) < 1e-10);
+});
+
+test('a positive threshold below room temperature requires HEATING, not cooling', () => {
+  const m = material(1, .2, { strength: .9 });
+  const ps = new ParticleSystem(1);
+  ps.add({ x:0,y:0,z:0,temperature:.1 },m,Phase.LIQUID);
+  for (let j=0;j<20;j++) stepArcana(ps,.025);
+  assert.equal(ps.arcaneConverted[0],0);
+  ps.temperature[0]=.3;
+  for (let j=0;j<20;j++) stepArcana(ps,.025);
+  assert.equal(ps.arcaneConverted[0],1);
 });
