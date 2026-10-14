@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
 import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
-import { mixedMagicGlow } from '../src/game/magicLight.mjs';
+import { mixedMagicGlow, particleMagicAuras, paintParticleMagicLights } from '../src/game/magicLight.mjs';
 import { magicGlowSprite } from '../src/game/art.mjs';
 
 function setup(count = 1, quality = 'balanced', scale = 40) {
@@ -127,4 +127,50 @@ test('multi-property glow blends color and brightness from the full recipe', () 
   ps.strength[0] = 0; ps.poison[0] = .1;
   draw();
   assert.ok(images[1].alpha < images[0].alpha, 'a weakly enchanted material has a weaker halo');
+});
+
+
+test('every enchanted parcel contributes a local glow pixel, not only the 160 broad halo samples', () => {
+  const { ps } = setup(480);
+  ps.strength.fill(.3);
+  ps.poison.fill(.65);
+  ps.x.fill(0);ps.y.fill(0);
+  const auras = particleMagicAuras(ps);
+  const pixels = new Uint8ClampedArray(64*64*4);
+  assert.equal(paintParticleMagicLights(ps, {cx:32,cy:32,w:64,h:64,scale:40}, pixels, auras), 480);
+  const center = (32*64+32)*4;
+  assert.ok(pixels[center+3]>0,'the local light is rendered to real pixels');
+  assert.ok(pixels[center]>0&&pixels[center+1]>0&&pixels[center+2]>0,'multi-effect light carries a blended hue');
+  pixels.fill(0);
+  assert.equal(paintParticleMagicLights(ps, {cx:32,cy:32,w:64,h:64,scale:40}, pixels, auras,0),0);
+  assert.equal(pixels[center+3],0,'effect scaling zero disables per-particle glow');
+});
+
+test('homogeneous mixture parcels use the common live magical hue despite their original materials', () => {
+  const { ps } = setup(3);
+  ps.mixtureGroup = new Uint32Array([1,1,2]);
+  ps.mixtureProgress.fill(.95);
+  ps.strength.set([.34,.35,.1]);
+  ps.poison.set([.65,.64,.8]);
+  const groups = {
+    root(id){return id===1?{id:1,arcaneRecipe:{sourceCount:2}}:{id:2,arcaneRecipe:{sourceCount:1}};}
+  };
+  const glows=particleMagicAuras(ps,groups);
+  assert.ok(glows[0]&&glows[1]&&glows[2]);
+  assert.strictEqual(glows[0],glows[1],'fully blended particles share one group-level magic glow');
+  assert.notEqual(glows[0].color,glows[2].color,'a separate potion must retain its own color');
+  ps.mixtureProgress[1]=0;
+  const unmixed=particleMagicAuras(ps,groups);
+  assert.notStrictEqual(unmixed[0],unmixed[1],'unmixed ingredients must NOT inherit a false homogeneous aura');
+});
+
+test('local magic exists for gas and powder particles even if they are skipped by the broad bloom budget', () => {
+  const {ps}=setup(3);
+  ps.x.set([-1,0,1]);ps.poison.fill(.65);
+  ps.phase = new Int32Array([0,1,2]); // gas, liquid, solid in native phase order
+  ps.powderContent = new Float32Array([0,0,1]);
+  const auras=particleMagicAuras(ps);
+  const pixels=new Uint8ClampedArray(160*80*4);
+  assert.equal(paintParticleMagicLights(ps,{cx:80,cy:40,w:160,h:80,scale:40},pixels,auras),3);
+  for(const x of [40,80,120]) assert.ok(pixels[(40*160+x)*4+3]>0,'each physical phase receives its own glow');
 });
