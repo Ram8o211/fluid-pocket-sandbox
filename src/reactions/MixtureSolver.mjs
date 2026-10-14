@@ -96,6 +96,15 @@ export class MixtureSolver {
       for (let k = 0; k < MIX_PROPERTIES.length; k++) a.target[k] = (a.target[k] * a.amount + b.target[k] * b.amount) / amount;
       for (const [id, quantity] of b.sourceAmounts || []) a.sourceAmounts.set(id, (a.sourceAmounts.get(id) || 0) + quantity);
       a.amount = amount; a.min = Math.min(a.min, b.min); a.max = Math.max(a.max, b.max); b.parent = a.id;
+      // A newly mixed recipe has a NEW critical threshold and new source shares.
+      // Prior awakening of one ingredient must never permanently prevent
+      // the final mixture from transforming to its proportional effects.
+      for (let k = 0; k < ps.count; k++) {
+        if (ps.arcaneConverted[k] < .5) continue;
+        if (this.root(ps.mixtureGroup[k])?.id !== a.id) continue;
+        ps.arcaneConverted[k] = 0;
+        ps.arcaneCharge[k] = 0;
+      }
     }
     const distinct = joined || this.signature[i]!==this.signature[j];
     this.signal[i] = Math.max(this.signal[i], contact * (distinct ? 1 : this.previous[j]));
