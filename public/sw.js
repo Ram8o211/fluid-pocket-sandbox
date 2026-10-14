@@ -1,9 +1,11 @@
-const CACHE = 'alchemist-shop-pixel-rabbit-trials-36';
+const CACHE = 'alchemist-shop-pixel-toon-37';
 const CORE = [
   './',
   './index.html',
   './sandbox.html',
   './public/game.css',
+  './public/toon.css',
+  './public/fonts/guild-pixel.woff',
   './public/icons/alchemist.svg',
   './src/game/main.mjs',
   './src/game/contracts.mjs',
@@ -23,6 +25,7 @@ const CORE = [
   './src/game/TestingRenderer.mjs',
   './src/game/rabbits.mjs',
   './src/game/RabbitRenderer.mjs',
+  './src/game/RabbitMotion.mjs',
   './src/game/RabbitPixelArt.mjs',
   './src/simulation/ArcaneSolver.mjs',
   './src/game/potion.mjs',

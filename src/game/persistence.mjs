@@ -117,6 +117,8 @@ export function validateSave(state) {
     (rabbit.courtingWith === null || safeIdentity(rabbit.courtingWith)) &&
     (rabbit.causeOfDeath === null || typeof rabbit.causeOfDeath === 'string' && rabbit.causeOfDeath.length <= 100) &&
     (rabbit.deathAppearance === null || ['collapsed', 'dissolved', 'charred', 'deformed', 'culled'].includes(rabbit.deathAppearance)) &&
+    (rabbit.remainsRecovered === undefined || typeof rabbit.remainsRecovered === 'boolean' && (!rabbit.remainsRecovered || !rabbit.stats.alive)) &&
+    (rabbit.recoveredAt === undefined || nonnegative(rabbit.recoveredAt)) &&
     rabbit.mutation && Number.isSafeInteger(rabbit.mutation.seed) && rabbit.mutation.seed >= 0 && rabbit.mutation.seed <= 4294967295 &&
     ['creature', 'deformation'].includes(rabbit.mutation.outcome) &&
     rabbit.mutation.traits && ['ears', 'horns', 'limbs', 'eyes', 'spine', 'tail', 'asymmetry'].every(key => nonnegative(rabbit.mutation.traits[key]) && rabbit.mutation.traits[key] <= 1) &&

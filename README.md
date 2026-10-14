@@ -1,5 +1,16 @@
 # The Alchemist’s Shop
 
+## Pixel-toon workshop and recovered reagents (Build 37)
+
+The menu, workbench, garden, guild, notebooks and original physics room share a crisp pixel interface, an original local display font, outlined controls and a brighter illustrated palette. Rabbit anatomy uses a single clean silhouette with flat fur shading; persistent potion changes still grow in place.
+
+Rabbits wander between seeded waypoints in short hops, land, sniff and graze inside the fence. They keep personal space and remain selectable with touch. Dead rabbits stop all movement and sprite animation. An unrecovered body in the isolation cage must be cleared before another rabbit can enter.
+
+Select a dead rabbit and choose **Recover ingredients**. Ordinary adults yield four Rabbit Bone and three Moon Fur measures; charred bodies yield four Cinder Ash measures, dissolved bodies yield two ml of Strange Ichor. Corrosion reduces usable bone and removes fur, while altered or poisoned remains can also yield ichor. Babies yield smaller harvests. Each body can be recovered once; its trial history stays available. Recovered ingredients have known, weak native magic, work with the same crushing, mixing and arcane activation rules, and join an existing brew without resetting it. They cannot be bought or grown in the garden. Stock and recovery state survive saves and reloads.
+
+`node --test tests/rabbit-recovery-motion.test.mjs` covers recovery, exact stock transfers, old saves, brewing, cage occupancy and stationary corpses. Browser acceptance also checks the recovery controls and mobile layouts. The checked-in font can be rebuilt with `python scripts/pixel-font.py` when Python fonttools is installed; the game itself needs no font dependency or download.
+
+
 A mobile fantasy potion shop running entirely in the browser, built on the
 existing 2D particle engine.
 

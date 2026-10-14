@@ -75,11 +75,16 @@ export class TestingRenderer {
       current.activeFireUntil = (report.at ?? Date.now()) + 1600;
     }
     const ctx = this.ctx; ctx.save(); ctx.imageSmoothingEnabled = false; ctx.scale(this.canvas.width / 640, this.canvas.height / 350);
-    const wall = ctx.createLinearGradient(0, 0, 0, 350); wall.addColorStop(0, '#1b2330'); wall.addColorStop(1, '#3c4141'); ctx.fillStyle = wall; ctx.fillRect(0, 0, 640, 350);
+    ctx.fillStyle='#32485a';ctx.fillRect(0,0,640,350);
+    for(let y=36;y<300;y+=44)for(let x=-40+(y%88?40:0);x<640;x+=80){
+      ctx.fillStyle='#3d5362';ctx.fillRect(x+2,y+2,76,40);
+      ctx.fillStyle='#4b6370';ctx.fillRect(x+4,y+4,70,2);
+    }
     ctx.strokeStyle = '#607075'; ctx.globalAlpha = .18; ctx.lineWidth = 1;
     for (let x = 0; x < 640; x += 42) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 350); ctx.stroke(); }
     for (let y = 25; y < 300; y += 35) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(640, y); ctx.stroke(); }
-    ctx.globalAlpha = 1; ctx.fillStyle = '#484b3d'; ctx.fillRect(0, 300, 640, 50);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#788a62'; ctx.fillRect(0, 300, 640, 50);
+    ctx.fillStyle='#b0bd82';ctx.fillRect(0,300,640,3);
     ctx.fillStyle = '#998767'; ctx.fillRect(148, 0, 2, 350);
     ctx.textAlign = 'center'; ctx.fillStyle = '#d9bd8a'; ctx.font = '13px monospace'; ctx.fillText('BEFORE THIS DOSE', 75, 25);
     ctx.fillStyle = '#b5d8bd'; ctx.fillText(report ? before ? 'BEFORE THIS DOSE' : 'OBSERVATION' : 'CURRENT CONDITION', 392, 25);

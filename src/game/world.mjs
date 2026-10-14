@@ -43,15 +43,23 @@ const INGREDIENTS = [
     lore: 'Naturally loose mineral grains collected from the bank. Stir with a little water to knead dough; abundant water and sustained stirring make a fluid infusion.', effects: { transformation: .28, love: .12, acidity: .08 } },
   { id: 12, name: 'Phoenix Sap', form: 'liquid', shape: 'water', icon: '🔥', color: '#e9914b', density: 1.08, viscosity: .4, volatility: .3, miscibility: .64, price: .24, lore: 'Golden sap tapped from a slow-growing phoenix tree. Carries fire and courage; warmth helps it blend.', effects: { fire: .88, strength: .4 } },
   { id: 13, name: 'Moon Dew', form: 'liquid', shape: 'water', icon: '🌙', color: '#81c3ed', density: .91, viscosity: .18, volatility: .2, miscibility: .43, price: .22, lore: 'Collected from moonflowers. Carries affection and frost; its cooling activation contrasts with spring water.', effects: { love: .8, freeze: .46 } },
-  { id: 14, name: 'Dream Nectar', form: 'liquid', shape: 'water', icon: '✨', color: '#c78ded', density: 1.12, viscosity: .38, volatility: .3, miscibility: .45, price: .28, lore: 'A small harvest from dream blossoms. Carries transformation with a trace of withering magic.', effects: { transformation: .9, acidity: .14 } }
+  { id: 14, name: 'Dream Nectar', form: 'liquid', shape: 'water', icon: '✨', color: '#c78ded', density: 1.12, viscosity: .38, volatility: .3, miscibility: .45, price: .28, lore: 'A small harvest from dream blossoms. Carries transformation with a trace of withering magic.', effects: { transformation: .9, acidity: .14 } },
+  { id: 15, name: 'Rabbit Bone', form: 'stone', shape: 'bone', color: '#eadbc0', density: 1.38, viscosity: .56, volatility: .12, miscibility: .42, price: .14, recoverOnly: true,
+    lore: 'Recovered from a fallen rabbit. Grind the bone and stir with water to release strength and a trace of frost.', effects: { strength: .8, freeze: .18 } },
+  { id: 16, name: 'Moon Fur', form: 'powder', shape: 'fur', color: '#eacdd8', density: .82, viscosity: .48, volatility: .2, miscibility: .43, price: .13, recoverOnly: true,
+    lore: 'A small tuft recovered from a fallen rabbit. Stir into water for affection with a little transformation.', effects: { love: .7, transformation: .2 } },
+  { id: 17, name: 'Cinder Ash', form: 'powder', shape: 'powder', color: '#bb836b', density: 1.2, viscosity: .6, volatility: .2, miscibility: .42, price: .18, recoverOnly: true,
+    lore: 'Recovered from a carbonized rabbit. These loose ashes carry fire and a trace of death magic.', effects: { fire: .8, death: .15 } },
+  { id: 18, name: 'Strange Ichor', form: 'liquid', shape: 'water', color: '#9ece95', density: 1.06, viscosity: .36, volatility: .25, miscibility: .44, price: .2, recoverOnly: true,
+    lore: 'Recovered from altered or dissolved remains. A magical liquid carrying transformation, venom and a trace of death.', effects: { transformation: .75, poison: .35, death: .2 } }
 ];
 
 function makeIngredient(worldSeed, spec) {
   const materialSeed = seedNumber(`${worldSeed}:ingredient:${spec.id}`);
   const local = mulberry32(materialSeed), raw = generateMaterial(materialSeed, spec.id);
   const base = hexToRgb(spec.color), original = hexToRgb(raw.color);
-  const name = spec.id === 1 ? spec.name : `${PREFIXES[Math.floor(local() * PREFIXES.length)]} ${spec.name}`;
-  const awakening = { 1: 4, 2: -8, 3: 9, 4: 1.04, 5: -9, 6: 10, 7: -11, 8: 11, 9: -10, 10: 8, 11: -8, 12: -7, 13: -7, 14: 9 };
+  const name = spec.id === 1 || spec.recoverOnly ? spec.name : `${PREFIXES[Math.floor(local() * PREFIXES.length)]} ${spec.name}`;
+  const awakening = { 1: 4, 2: -8, 3: 9, 4: 1.04, 5: -9, 6: 10, 7: -11, 8: 11, 9: -10, 10: 8, 11: -8, 12: -7, 13: -7, 14: 9, 15: -8, 16: 9, 17: 8, 18: -9 };
   const liquid = spec.form === 'liquid', powder = spec.form === 'powder';
   const material = sanitizeMaterial({
     ...raw, ...NEUTRAL_EFFECTS, ...innateEffects(spec), name, arcaneThreshold: awakening[spec.id], magicDecayTemperature: .79,
@@ -72,7 +80,7 @@ function makeIngredient(worldSeed, spec) {
     combustionTemperature: 1.3, particleRadius: .10 + local() * .01,
     incompressible: true, opacity: liquid ? .7 : 1
   });
-  return { id: spec.id, name, material, price: spec.price, starter: spec.id <= 6 || spec.id >= 10,
+  return { id: spec.id, name, material, price: spec.price, starter: !spec.recoverOnly && (spec.id <= 6 || spec.id >= 10), recoverOnly: Boolean(spec.recoverOnly),
     form: spec.form, unit: liquid ? 'ml' : 'measures', solvent: spec.id === 1,
     crushable: !liquid && !powder, extractable: !liquid,
     appearance: { shape: spec.shape, icon: spec.icon }, lore: spec.lore };
@@ -80,13 +88,18 @@ function makeIngredient(worldSeed, spec) {
 
 /** Kept for version-two migrations; appended IDs never replace pinned stock. */
 export function generateStarterPowders(seed) {
-  return INGREDIENTS.filter(i => i.id >= 10).map(spec => makeIngredient(String(seed), spec));
+  return INGREDIENTS.filter(i => i.id >= 10 && !i.recoverOnly).map(spec => makeIngredient(String(seed), spec));
+}
+
+/** Remains introduce these reagents only after a real, finite recovery. */
+export function rabbitIngredients(seed) {
+  return INGREDIENTS.filter(i => i.recoverOnly).map(spec => makeIngredient(String(seed), spec));
 }
 
 /** Water, raw plants and minerals feed the same physical material simulation. */
 export function generateWorld(seed) {
   const worldSeed = String(seed).trim().slice(0, 48) || 'moonlight';
-  const ingredients = INGREDIENTS.map(spec => makeIngredient(worldSeed, spec));
+  const ingredients = INGREDIENTS.filter(spec => !spec.recoverOnly).map(spec => makeIngredient(worldSeed, spec));
   const validation = validateWorld(ingredients);
   if (!validation.valid) throw new Error('Unplayable world: ' + validation.reason);
   return { seed: worldSeed, ingredientVersion: 4, ingredients, validation };
@@ -142,5 +155,5 @@ export function migrateIngredients(world) {
 }
 
 export function availableIngredients(world, equipment) {
-  return world.ingredients.filter(i => i.starter || i.id <= 6 + (equipment?.reagents || 0));
+  return world.ingredients.filter(i => i.starter || i.recoverOnly || i.id <= 6 + (equipment?.reagents || 0));
 }

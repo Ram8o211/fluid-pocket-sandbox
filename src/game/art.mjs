@@ -23,6 +23,21 @@ export function magicGlowSprite(colour) {
 export function ingredientSprite(ingredient) {
   const colour = ingredient.material?.color || '#8dce99', style = Number(ingredient.id) || 0;
   const form = ingredient.form || 'water';
+  if (ingredient.appearance?.shape === 'bone' || ingredient.appearance?.shape === 'fur') {
+    const key = `remains:${ingredient.appearance.shape}:${colour}`; if (cache.has(key)) return cache.get(key);
+    const canvas = surface(24,32), ctx = canvas.getContext('2d');
+    const rect = (x,y,w,h,c) => {ctx.fillStyle=c;ctx.fillRect(x,y,w,h);};
+    if (ingredient.appearance.shape === 'bone') {
+      rect(3,12,7,8,'#3b3447');rect(14,20,7,8,'#3b3447');rect(7,16,10,8,'#3b3447');
+      rect(4,13,5,6,colour);rect(8,17,8,6,colour);rect(15,21,5,6,colour);
+      rect(5,13,3,2,'#fff3da');rect(8,17,4,2,'#fff3da');rect(15,21,3,2,'#fff3da');
+    } else {
+      rect(4,16,17,11,'#493c55');rect(7,11,3,14,'#493c55');rect(13,9,3,16,'#493c55');rect(18,13,3,12,'#493c55');
+      rect(5,17,15,8,colour);rect(8,12,1,11,'#fff0de');rect(14,10,1,14,'#fff0de');rect(19,14,1,9,'#fff0de');
+      rect(7,24,12,2,'#b694b0');rect(7,20,9,2,'#fff0de');
+    }
+    const url=canvas.toDataURL();cache.set(key,url);return url;
+  }
   if (form === 'water' || form === 'liquid') return bottleSprite(colour, style);
   if (form === 'powder') return powderSprite(colour, style);
   const key = `ingredient:${form}:${colour}:${style}`; if (cache.has(key)) return cache.get(key);

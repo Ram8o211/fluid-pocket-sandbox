@@ -1,4 +1,5 @@
 import { EFFECT_DEFINITIONS, EFFECT_PROPERTIES, readEffects } from './effects.mjs';
+import { rabbitIngredients } from './world.mjs';
 
 export const RABBIT_CAPACITY = 12;
 export const RABBIT_DEAD_LIMIT = 24;
@@ -47,7 +48,7 @@ function freshRabbit(serial, now, baby = false) {
     dangerous: false, transformed: false, attackReadyAt: 0, nextAttackAt: 0,
     nextBreedAt: now + 6000, courtingWith: null, courtshipUntil: 0,
     activeFireUntil: 0, causeOfDeath: null, deathAppearance: null, deathAt: 0,
-    readyAt: 0, trials: 0, lastTestAt: 0
+    readyAt: 0, trials: 0, lastTestAt: 0, remainsRecovered: false, recoveredAt: 0
   };
 }
 
@@ -174,7 +175,9 @@ export function moveRabbit(state, id, location, now = Date.now()) {
   if (!rabbit) throw new Error('Choose a rabbit.');
   if (!rabbit.stats.alive) throw new Error('A dead rabbit cannot be moved for another trial.');
   if (rabbit.location === location) return rabbit;
-  if (location === 'cage') for (const other of experiments.rabbits) if (other.location === 'cage') {
+  if (location === 'cage' && experiments.rabbits.some(other => other.location === 'cage' && !other.stats.alive && !other.remainsRecovered))
+    throw new Error('Recover the remains in the cage before moving another rabbit into it.');
+  if (location === 'cage') for (const other of experiments.rabbits) if (other.location === 'cage' && other.stats.alive) {
     interruptCourtship(experiments, other); other.location = 'pen';
     if (other.dangerous) { other.attackReadyAt = now + RABBIT_ATTACK_GRACE_MS; other.nextAttackAt = other.attackReadyAt; }
   }
@@ -193,6 +196,42 @@ export function cullRabbit(state, id, now = Date.now()) {
   appendRabbitEvent(experiments, 'cull', `${rabbit.name} was culled. Its trial observations are preserved.`, now, rabbit.id);
   boundArchive(experiments);
   return rabbit;
+}
+
+/** A body yields one small harvest; injuries determine what can be salvaged. */
+export function rabbitRemains(rabbit) {
+  if (!rabbit || rabbit.stats.alive || rabbit.remainsRecovered) return [];
+  const small = rabbit.age === 'baby', amount = small ? 1 : 4;
+  if (rabbit.deathAppearance === 'charred') return [{ ingredientId: 17, quantity: amount }];
+  if (rabbit.deathAppearance === 'dissolved') return [{ ingredientId: 18, quantity: small ? 1 : 2 }];
+  const eroded = (rabbit.exposure?.acidity || 0) > 1;
+  const drops = [{ ingredientId: 15, quantity: eroded ? 1 : amount }];
+  if (!eroded && (rabbit.exposure?.fire || 0) < 1) drops.push({ ingredientId: 16, quantity: small ? 1 : 3 });
+  if ((rabbit.exposure?.transformation || 0) > .5 || (rabbit.exposure?.poison || 0) > .5)
+    drops.push({ ingredientId: 18, quantity: small ? 1 : 2 });
+  return drops;
+}
+
+export function recoverRabbitIngredients(state, id, now = Date.now()) {
+  validTime(now);
+  const experiments = colonyFor(state, now), rabbit = rabbitById(experiments, id);
+  if (!rabbit) throw new Error('Choose a rabbit.');
+  if (rabbit.stats.alive) throw new Error('Ingredients can only be recovered from a dead rabbit.');
+  if (rabbit.remainsRecovered) throw new Error('These remains have already been recovered.');
+  if (!state.world?.ingredients || !state.inventory) throw new Error('Your ingredient stock is not ready.');
+  const catalogue = rabbitIngredients(state.world.seed), drops = rabbitRemains(rabbit);
+  const recovered = drops.map(drop => ({ ...drop, ingredient: state.world.ingredients.find(i => i.id === drop.ingredientId)
+    || catalogue.find(i => i.id === drop.ingredientId) }));
+  // Resolve and validate the entire harvest before changing stock or the body.
+  for (const drop of recovered) if (!drop.ingredient || !Number.isFinite(state.inventory[drop.ingredientId] ?? 0)
+    || (state.inventory[drop.ingredientId] ?? 0) < 0) throw new Error('Invalid recovered ingredient stock.');
+  for (const drop of recovered) {
+    if (!state.world.ingredients.some(i => i.id === drop.ingredientId)) state.world.ingredients.push(drop.ingredient);
+    state.inventory[drop.ingredientId] = (state.inventory[drop.ingredientId] || 0) + drop.quantity;
+  }
+  rabbit.remainsRecovered = true; rabbit.recoveredAt = now;
+  appendRabbitEvent(experiments, 'recovery', `${rabbit.name}: recovered ${recovered.map(d => `${d.quantity} ${d.ingredient.name}`).join(', ')}.`, now, rabbit.id);
+  return recovered;
 }
 
 function normalizedRabbit(rabbit, now) {
