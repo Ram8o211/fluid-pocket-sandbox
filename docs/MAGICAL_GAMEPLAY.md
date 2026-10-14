@@ -46,7 +46,9 @@ values into the player’s ID.
   All eight visual channels animate together in an isolation cage with a
   permanent before-dose reference. Muscles, courtship, seeded anatomical changes,
   flames and scorched fur, ice, illness, acid erosion and mortality
-  have distinct shapes and motion. Dilute exposures are visually amplified
+  use flat palettes and integer pixel anatomy in the pen, preview and selection
+  cards. The first response starts immediately and completes within 300ms;
+  weak flames last at least 1.8 seconds. Dilute exposures are visually amplified
   monotonically; zero channels remain absent. Replay and pause never consume a
   dose or update rabbit statistics. Each rabbit keeps cumulative exposure and
   lasting injuries. A finite shared pen supports breeding and maturation; babies
@@ -98,7 +100,12 @@ Touch mapping accounts for the canvas's centered letterboxing on small screens.
 Brewing rendering pauses behind rooms; one cached enclosure provides trial
 motion at at most 30fps and stops repainting while paused or hidden. Sprite and
 background caches avoid per-frame asset generation. Playback, dose and rabbit
-controls fit phone screens using compact rows and horizontal scrolling.
+controls fit phone screens using compact rows and horizontal scrolling. Rabbit
+trials put the selected preview first, fold the pen on narrow phones, and keep
+the dose selector and administration button in a fixed footer. Doses, selection,
+isolation and culling update existing nodes so focus and scroll are preserved.
+Structural colony updates retain the scroll position and expanded notebooks.
+Pixel sprites are cached at native resolution and enlarged without smoothing.
 
 `tests/magical-shop.test.mjs` covers manual estimates, negotiated receipts,
 certification identity, truthful and bluff refunds, offline settlement, scarce
@@ -109,4 +116,6 @@ regressions retain the original sandbox’s physics and phase behavior.
 states, reload, atomic rejection, certification invalidation and old vials.
 `tests/creature-visuals.test.mjs` covers dilute/mixed/dose responses and fresh
 trials. Browser acceptance checks visible pixels for every magical channel and
-the complete sealed-vial → test → reload → return → adjust → retest flow.
+the complete sealed-vial → test → reload → return → adjust → retest flow. Rabbit
+acceptance also uses actual touch dosing at 320×568, 393×852 and 852×393 to
+check dose conservation, persistent controls, scroll retention and rapid feedback.

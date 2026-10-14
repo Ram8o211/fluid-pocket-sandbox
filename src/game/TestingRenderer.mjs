@@ -1,8 +1,7 @@
-import { experimentSubjectSprite } from './art.mjs';
 import { drawRabbit } from './RabbitRenderer.mjs';
 
-const bounded = value => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-export const visualResponse = value => value <= .003 ? 0 : Math.pow(bounded(value), .48);
+import { visualResponse } from './RabbitPixelArt.mjs';
+export { visualResponse } from './RabbitPixelArt.mjs';
 
 /** Used by visual regressions; persistent exposure drives every channel. */
 export function trialVisuals(subject, report, before = false) {
@@ -39,12 +38,7 @@ export class TestingRenderer {
     this.subject = null; this.report = null; this.startedAt = null;
     this.lastTime = 0; this.lastPaint = 0; this.paused = false; this.dirty = true;
     this.frozenAt = 0; this.resume = false; this.before = false;
-    this.untreated = null; this.treated = null; this.images = new Map();
-  }
-  sprite(id, state = 'healthy') {
-    const key = `${id}:${state}`;
-    if (!this.images.has(key)) { const image = new Image(); image.src = experimentSubjectSprite('rabbit', state); this.images.set(key, image); }
-    return this.images.get(key);
+    this.untreated = null; this.treated = null;
   }
   replay() { this.startedAt = null; this.paused = false; this.resume = false; this.dirty = true; }
   togglePause() {
@@ -70,7 +64,7 @@ export class TestingRenderer {
     const clock = this.paused ? this.frozenAt : time;
     this.lastTime = clock; this.lastPaint = time; this.dirty = false;
     const elapsed = Math.max(0, clock - this.startedAt);
-    const progress = before ? 0 : !report ? 1 : Math.min(1, Math.max(0, (elapsed - 200) / 1000));
+    const progress = before ? 0 : !report ? 1 : Math.min(1, .35 + elapsed / 280);
     const current = structuredClone(progress < .8 ? this.untreated : this.treated);
     current.exposure ||= {};
     for (const key of Object.keys(this.treated.exposure || {})) current.exposure[key] = (this.untreated.exposure?.[key] || 0) + ((this.treated.exposure[key] || 0) - (this.untreated.exposure?.[key] || 0)) * progress;
@@ -80,7 +74,7 @@ export class TestingRenderer {
     if (report && !before && elapsed < 1600 && this.treated.deathAppearance === 'charred' && report.doseExposure?.fire > report.doseExposure?.freeze) {
       current.activeFireUntil = (report.at ?? Date.now()) + 1600;
     }
-    const ctx = this.ctx; ctx.save(); ctx.scale(this.canvas.width / 640, this.canvas.height / 350);
+    const ctx = this.ctx; ctx.save(); ctx.imageSmoothingEnabled = false; ctx.scale(this.canvas.width / 640, this.canvas.height / 350);
     const wall = ctx.createLinearGradient(0, 0, 0, 350); wall.addColorStop(0, '#1b2330'); wall.addColorStop(1, '#3c4141'); ctx.fillStyle = wall; ctx.fillRect(0, 0, 640, 350);
     ctx.strokeStyle = '#607075'; ctx.globalAlpha = .18; ctx.lineWidth = 1;
     for (let x = 0; x < 640; x += 42) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 350); ctx.stroke(); }

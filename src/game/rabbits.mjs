@@ -245,7 +245,7 @@ export function assessRabbitEffects(sample, rabbit, doseMl = 5, now = Date.now()
     after.health = clamp(before.health - harm);
     after.vitality = clamp(before.vitality - harm * .8 - netFreeze * 8);
     if (after.muscleMass > 75) after.health = Math.min(after.health, clamp((100 - after.muscleMass) * 4));
-    afterRabbit.activeFireUntil = netFire > .005 ? now + Math.min(7000, 850 + netFire * 3000) : afterRabbit.activeFireUntil;
+    afterRabbit.activeFireUntil = netFire > .005 ? now + Math.min(7000, 1800 + netFire * 3000) : afterRabbit.activeFireUntil;
     if (doseExposure.freeze > doseExposure.fire) afterRabbit.activeFireUntil = Math.min(afterRabbit.activeFireUntil, now + 450);
     afterRabbit.transformed = afterRabbit.exposure.transformation >= 3 && afterRabbit.mutation.outcome === 'creature';
     afterRabbit.dangerous = afterRabbit.exposure.love >= RABBIT_THRESHOLDS.love || afterRabbit.transformed;
