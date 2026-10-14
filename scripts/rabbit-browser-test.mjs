@@ -18,7 +18,11 @@ let browser, page;
 const readState = () => page.evaluate(() => JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')));
 const rabbit = (state, id) => state.experiments.rabbits.find(subject => subject.id === id);
 const alive = state => state.experiments.rabbits.filter(subject => subject.stats.alive);
-async function screenshot(name) { await page.screenshot({ path: `test-results/${name}.png`, fullPage: true }); }
+async function screenshot(name) {
+  // runFor pauses the virtual clock; screenshots need live animation frames.
+  await page.clock.resume();
+  await page.screenshot({ path: `test-results/${name}.png`, fullPage: true });
+}
 async function closePanel() { await page.locator('[data-action="close"]').first().click(); }
 async function selectRabbit(id) { await page.locator(`[data-subject="${id}"]`).click(); }
 async function tick(milliseconds) { await page.clock.fastForward(milliseconds); await page.clock.runFor(50); }
