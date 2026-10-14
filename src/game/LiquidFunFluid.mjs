@@ -94,6 +94,14 @@ export class LiquidFunFluid {
     this.world.Step(dt, 6, 3);
     position = this.system.GetPositionBuffer();
     velocity = this.system.GetVelocityBuffer();
+    // Some upstream Emscripten testbed builds expose only half the active
+    // position-buffer view after their first Step. Their native storage still
+    // owns the full float2 array, so extend the typed view, never copy from
+    // undefined values or drop/misidentify ingredient parcels.
+    if (position.length < count * 2)
+      position = new Float32Array(position.buffer, position.byteOffset, count * 2);
+    if (velocity.length < count * 2)
+      velocity = new Float32Array(velocity.buffer, velocity.byteOffset, count * 2);
     for (let k = 0; k < count; k++) {
       const i = indices[k], j = k * 2;
       if (!Number.isFinite(position[j]) || !Number.isFinite(position[j + 1])
