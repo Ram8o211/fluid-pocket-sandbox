@@ -99,7 +99,7 @@ try{
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Strength.*Love.*Death.*Transformation/s);
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Melt.*Boil.*Ignite/s);
   const cauldronAfter=await page.locator('#labCanvas').boundingBox();
-  assert.ok(cauldronAfter.height>60&&cauldronAfter.bottom<=innerHeight+1);
+  assert.ok(cauldronAfter.height>60&&cauldronAfter.bottom<=await page.evaluate(()=>innerHeight+1));
   assert.ok(Math.abs(cauldronBefore.height-cauldronAfter.height)<80,'opening inspector must keep cauldron usable');
   await page.locator('#sandboxInspectIngredient').selectOption('13');
   assert.ok((await page.locator('#selectedName').textContent()).length>0);
