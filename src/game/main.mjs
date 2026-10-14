@@ -139,8 +139,9 @@ function sandboxAwakening(properties) {
   const effect = properties.dominantEffect ? EFFECT_DEFINITIONS[properties.dominantEffect]?.label : null;
   const expected = EFFECT_PROPERTIES.filter(key => (properties.awakeningEffects?.[key] || 0) >= .005)
     .map(key => escape(EFFECT_DEFINITIONS[key].label) + ' ' + Math.round(properties.awakeningEffects[key] * 100) + '%').join(' · ');
-  const threshold = sandboxTemperature(properties.arcaneThreshold);
-  const condition = properties.awakeningDirection === 'below' ? 'Below' : 'Above';
+  const threshold = sandboxTemperature(properties.awakeningTemperature);
+  const rune = (properties.arcaneThreshold >= 0 ? '+' : '') + Math.round(properties.arcaneThreshold * 100) + '°A';
+  const condition = properties.awakeningDirection === 'below' ? 'Cool below' : 'Heat above';
   const status = fraction === 100 ? 'Awakened' : fraction > 0 ? fraction + '% awakened'
     : charge > 0 ? 'Charging ' + charge + '%' : 'Dormant';
   const explanation = !effect
@@ -150,7 +151,7 @@ function sandboxAwakening(properties) {
       : 'Sustain the trigger temperature for about 0.4 s: awakened effects follow the proportions of the ingredients; other effects become zero.';
   return '<section class="sandbox-awakening" aria-label="Arcane supertransformation">' +
     '<div class="sandbox-awakening-title"><strong>✦ Arcane supertransformation</strong><span>' + status + '</span></div>' +
-    '<div class="sandbox-awakening-grid"><div><small>Critical trigger</small><strong>' + condition + ' ' + threshold + '</strong></div>' +
+    '<div class="sandbox-awakening-grid"><div><small>Critical trigger</small><strong>' + condition + ' ' + threshold + ' (rune ' + rune + ')</strong></div>' +
     '<div><small>Awakened effects</small><strong>' + (expected || 'None') + '</strong></div>' +
     '<div><small>Magic decays above</small><strong>' + sandboxTemperature(properties.magicDecayTemperature) + '</strong></div></div>' +
     '<p>' + explanation + '</p></section>';
@@ -355,7 +356,7 @@ async function moveToNext() {
   catch (err) { if (button) button.disabled = false; notify(err.message); }
 }
 function showInventory() {
-  const rows = availableIngredients(state.world,state.equipment).map(i=>`<article class="mini-card stock-card"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(i.name)}</h3><p>${isSandbox()?'∞':Math.floor(state.inventory[i.id]||0)} ${ingredientUnit(i)}</p><p>${escape(i.lore)}</p>${effectRows(i.material,true)}<p class="quiet">Awakening rune: ${i.material.arcaneThreshold < 0?'deep frost':i.material.arcaneThreshold>1.2?'distant flame':Math.round(i.material.arcaneThreshold*100)+'°A'}. Blending changes the rune.</p><button class="primary" data-garden-node="${state.foraging.nodes.find(n=>n.ingredientId===i.id)?.id}">Visit garden bed</button>${!isSandbox()?`<button data-restock="${i.id}">Village parcel · 20 · ${i.solvent?0:Math.ceil(i.price*100+8)} coins</button>`:''}</article>`).join('');
+  const rows = availableIngredients(state.world,state.equipment).map(i=>`<article class="mini-card stock-card"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(i.name)}</h3><p>${isSandbox()?'∞':Math.floor(state.inventory[i.id]||0)} ${ingredientUnit(i)}</p><p>${escape(i.lore)}</p>${effectRows(i.material,true)}<p class="quiet">Awakening rune: ${(i.material.arcaneThreshold < 0?'Cool below ':'Heat above ') + Math.round((.33 + i.material.arcaneThreshold / 40)*100) + '°A (rune ' + Math.round(i.material.arcaneThreshold*100) + '°A)'}. Blending changes the rune.</p><button class="primary" data-garden-node="${state.foraging.nodes.find(n=>n.ingredientId===i.id)?.id}">Visit garden bed</button>${!isSandbox()?`<button data-restock="${i.id}">Village parcel · 20 · ${i.solvent?0:Math.ceil(i.price*100+8)} coins</button>`:''}</article>`).join('');
   sheet('Known ingredients',`<div class="mini-pages">${rows}</div><p class="swipe-cue">Swipe ingredients →</p>${!isSandbox()?'<button data-action="loan">Emergency guild loan</button>':''}`);
 }
 function resourceText(status) {
