@@ -106,14 +106,14 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const recipe = { portions: [{ ingredientId: solvent.id, ml: water }, portion(primary), ...(secondary ? [portion(secondary)] : [])], volume,
     ticks: secondary ? 320 : 280, thermalTicks: 0, heat: 0, cool: 0, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
   let sample = simulateWitness(world, recipe, equipment);
-  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] >= .01);
+  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] >= .001);
   if (sample.volume < volume - .001 || !wanted.includes(desired)) {
     // Some pinned legacy raw materials may not extract reliably. Try a known
     // compatible strength infusion rather than request an unattainable effect.
     const fallback = strongest(possible[0]);
     recipe.portions = [{ ingredientId: solvent.id, ml: volume + 20 }, portion(fallback)];
     recipe.ticks = 280; sample = simulateWitness(world, recipe, equipment);
-    wanted = possible.filter(key => sample[key] >= .01).slice(0, 1);
+    wanted = possible.filter(key => sample[key] >= .001).slice(0, 1);
   }
   if (!wanted.length || sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
   /** @type {import('./contracts.mjs').Requirement[]} */
