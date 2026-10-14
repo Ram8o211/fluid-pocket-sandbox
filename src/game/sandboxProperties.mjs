@@ -10,7 +10,7 @@ function dominantEffect(effects) {
   return EFFECT_PROPERTIES.reduce((best, key) => effects[key] > (best ? effects[best] : .003) ? key : best, null);
 }
 function awakeningDetails(threshold, effects, charged = 0, converted = 0) {
-  const direction = threshold >= 0 ? 'above' : 'below';
+  const direction = threshold >= .33 ? 'above' : 'below';
   const reachable = Number.isFinite(threshold) && (direction === 'above'
     ? threshold + ARCANE_MARGIN < MAX_TEMPERATURE
     : threshold - ARCANE_MARGIN > MIN_TEMPERATURE);
