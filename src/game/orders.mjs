@@ -101,19 +101,22 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const secondaryEffect = completed >= 2 && complements.length ? complements[Math.floor(rng() * complements.length)] : null;
   const secondary = secondaryEffect ? strongest(secondaryEffect) : null;
   const volume = completed === 0 ? 60 : difficulty < 3 ? 80 : 100;
-  const water = secondary ? Math.max(140, volume + 20) : volume + 20;
-  const portion = ingredient => ({ ingredientId: ingredient.id, ml: 10, crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form)) });
+  // Weak innate essences require an appreciable dose to yield testable early
+  // commissions; keep the recipe within the basic 200 ml cauldron and the
+  // player's finite 20-measure starter stock per raw ingredient.
+  const water = volume + 20;
+  const portion = ingredient => ({ ingredientId: ingredient.id, ml: 20, crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form)) });
   const recipe = { portions: [{ ingredientId: solvent.id, ml: water }, portion(primary), ...(secondary ? [portion(secondary)] : [])], volume,
     ticks: secondary ? 320 : 280, thermalTicks: 0, heat: 0, cool: 0, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
   let sample = simulateWitness(world, recipe, equipment);
-  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] >= .001);
+  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] > .01);
   if (sample.volume < volume - .001 || !wanted.includes(desired)) {
     // Some pinned legacy raw materials may not extract reliably. Try a known
     // compatible strength infusion rather than request an unattainable effect.
     const fallback = strongest(possible[0]);
     recipe.portions = [{ ingredientId: solvent.id, ml: volume + 20 }, portion(fallback)];
     recipe.ticks = 280; sample = simulateWitness(world, recipe, equipment);
-    wanted = possible.filter(key => sample[key] >= .001).slice(0, 1);
+    wanted = possible.filter(key => sample[key] > .01).slice(0, 1);
   }
   if (!wanted.length || sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
   /** @type {import('./contracts.mjs').Requirement[]} */

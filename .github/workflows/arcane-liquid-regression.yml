@@ -24,4 +24,4 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: node --test tests/arcane-playability.test.mjs tests/arcane-recipe.test.mjs tests/sandbox-properties.test.mjs tests/magical-shop.test.mjs tests/liquidfun-native.test.mjs
+      - run: node --test tests/arcane-playability.test.mjs tests/arcane-recipe.test.mjs tests/sandbox-properties.test.mjs tests/magical-shop.test.mjs tests/liquidfun-native.test.mjs tests/compact-materials.test.mjs tests/effect-discovery-loop.test.mjs tests/gathering.test.mjs tests/local-thermal-mixing.test.mjs tests/game.test.mjs

@@ -116,7 +116,10 @@ export function validateWorld(ingredients) {
 export function migrateIngredients(world) {
   if (!world?.ingredients) return world;
   const additions = generateWorld(world.seed).ingredients.filter(i => !world.ingredients.some(old => old.id === i.id));
-  const rebalance = (world.ingredientVersion || 0) < 4;
+  // Pre-magic worlds lack ingredientVersion; their pinned physical liquids
+  // must never be replaced with the spell profile of an unrelated new herb.
+  // Only the former magical garden catalogue (v3) needs innate rebalance.
+  const rebalance = world.ingredientVersion === 3;
   return { ...world, ingredientVersion: 4, ingredients: [...world.ingredients.map(ingredient => { 
     const spec = INGREDIENTS.find(i => i.id === ingredient.id);
     const form = ingredient.form || 'liquid', liquid = form === 'liquid', powder = form === 'powder';

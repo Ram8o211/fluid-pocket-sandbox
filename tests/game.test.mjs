@@ -220,10 +220,20 @@ test('complete repeated commissions through physics, assessment, sale and progre
     const brew = new BrewingSession(gameplayWorld.ingredients, state.equipment), recipe = state.order.witness;
     for (const p of recipe.portions) {
       if (state.inventory[p.ingredientId] < p.ml) {
-        if(p.ingredientId===1) restock(state,1,p.ml);
-        else { const patch=state.foraging.nodes.find(n=>n.ingredientId===p.ingredientId); patch.stock=patch.capacity;patch.updatedAt=Date.now();state.foraging.stamina=100;gatherIngredient(state,patch.id,10); }
+        if (p.ingredientId === 1) restock(state, 1, p.ml - state.inventory[p.ingredientId]);
+        else {
+          const patch = state.foraging.nodes.find(n => n.ingredientId === p.ingredientId);
+          // Modern low-magic recipes use more raw material. Harvest enough
+          // to reproduce the validated recipe, not just one 10-unit pick.
+          for (let attempt = 0; state.inventory[p.ingredientId] < p.ml && attempt < 10; attempt++) {
+            patch.stock = patch.capacity; patch.updatedAt = Date.now();
+            state.foraging.stamina = 100;
+            gatherIngredient(state, patch.id, Math.min(20, p.ml - state.inventory[p.ingredientId]), Date.now(), { precision: 1 });
+          }
+        }
       }
-      brew.pour(p.ingredientId, p.ml, state.inventory, { crushed: Boolean(p.crushed) });
+      assert.equal(brew.pour(p.ingredientId, p.ml, state.inventory, { crushed: Boolean(p.crushed) }), p.ml,
+        'campaign test must reproduce every reference recipe portion');
     }
     for (let tick = 0; tick < recipe.ticks; tick++) { brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0); if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP); brew.step(); }
     resetExperimentSubject(state, 'stone');
