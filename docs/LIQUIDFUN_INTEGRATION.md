@@ -11,7 +11,7 @@ This project vendors the **official Google LiquidFun 1.1.0 JavaScript build** fr
 - LiquidFun's internal particle mappings are rebuilt only when the active liquid indices change due to pouring, condensation, freezing, combustion or bottling. Positional/velocity buffers otherwise remain stable through frames.
 - Partial bottling drains a representative fraction from every parcel, leaving the same indices with less volume. The native radius scales by the square root of mean remaining parcel area, so the physical fluid contracts too. Exact-position liquid/grain overlaps recover the incoming contact normal instead of skipping the collision.
 - Private customer witness trials release their native worlds in `finally`; switching shops also disposes the previous session. Disposal frees the C++ world and the upstream wrapper's two per-world scratch buffers.
-- Cauldron wall contacts have zero restitution, and settled water uses stronger native velocity damping rather than surface-tension spring impulses. A poured or spoon-driven stream continues to flow under real gravity; no per-particle motion is artificially injected at rest.
+- Cauldron liquid wall contacts have zero restitution (gas is unchanged), and settled water uses stronger native velocity damping rather than surface-tension spring impulses. A poured or spoon-driven stream continues to flow under real gravity; no per-particle motion is artificially injected at rest.
 - The standalone freeform `sandbox.html` and Node-only tests retain the old 3D solver. This first integration is specifically for the 2D alchemy cauldron.
 
 ## Validation
