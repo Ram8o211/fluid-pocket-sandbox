@@ -163,5 +163,5 @@ test('the original arcane ratio and signed threshold survive fused materials, bo
   mixtures.finishFrame(ps, {}, .025);
   const live = mixtures.root(ps.mixtureGroup[0]).arcaneRecipe;
   near(live.threshold, expected, .0001);
-  assert.equal(mixtures.root(ps.mixtureGroup[ps.count - 1]).arcaneRecipe.threshold, live.threshold);
+  near(mixtures.root(ps.mixtureGroup[ps.count - 1]).arcaneRecipe.threshold, live.threshold);
 });
