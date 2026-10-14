@@ -33,7 +33,7 @@ export function findPotionId(state, sample) {
     return [...new Set([...a.keys(),...b.keys()])].every(key=>Math.abs((a.get(key)||0)-(b.get(key)||0))<=.002);
   }) || null;
 }
-export function compilePotionId(state, sample, estimates, name = '') {
+export function compilePotionId(state, sample, estimates, name = '', notes = '') {
   if (!observedPotion(state, sample)) throw new Error('Observe a real dose from this batch first.');
   if (!EFFECT_PROPERTIES.every(key => Number.isFinite(estimates[key]) && estimates[key] >= 0 && estimates[key] <= 1)) throw new Error('Estimate every magical property between 0 and 100.');
   const fingerprint = potionFingerprint(sample);
@@ -42,7 +42,7 @@ export function compilePotionId(state, sample, estimates, name = '') {
   const old = findPotionId(state, sample);
   const document = { id: old?.id || `potion-${state.potionIds.length + 1}-${sample.batchId.slice(0,8)}`,
     fingerprint, batchId: sample.batchId, name: String(name || 'Unnamed potion').trim().slice(0,40),
-    estimates: { ...estimates }, trials: (state.experiments?.records || []).filter(r => r.sample.batchId === sample.batchId).map(r => r.id).slice(0,20),
+    estimates: { ...estimates }, notes: String(notes).trim().slice(0,1500), trials: (state.experiments?.records || []).filter(r => r.sample.batchId === sample.batchId).map(r => r.id).slice(0,20),
     sample: potionRecord(sample), at: Date.now() };
   if (old) state.potionIds.splice(state.potionIds.indexOf(old), 1);
   state.negotiation = null;

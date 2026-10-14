@@ -16,11 +16,19 @@ regrowth while you are away. Tending costs water. Village parcels are expensive
 and have shipment cooldowns. Sandbox mode provides infinite ingredients and
 saves separately.
 
-Creature trials consume real 2, 5 or 10 ml doses. A large animated familiar lifts
-weights, approaches its companion, transforms, or reacts visibly to elemental
-and harmful magic. Compare the before-dose reference, replay or pause the scene,
-and **write your own potion ID** with eight estimated enchantment values. Neither
-trials nor the recipe book reveal an automatic assay. Feed starts a fresh trial.
+Rabbit trials consume real 2, 5 or 10 ml doses. Start with four adults in a fenced
+colony; select an individual, move it into the isolation cage, administer a dose,
+or return it to the pen. Effects accumulate permanently: muscle growth, acid
+erosion, scorched fur, frost, illness and seeded anatomical mutations have distinct
+visible stages. Severe exposure can kill a rabbit. Love speeds breeding, while
+an overdose or a transformed creature can endanger the pen; the cull tool acts
+immediately. Babies grow into adults and tolerate much less potion. Buy distinct
+adults to replace lost stock, up to twelve living rabbits.
+
+Compare the before-dose reference, replay or pause the scene, and **write your
+own potion ID** with eight estimated enchantment values. Trials and the recipe
+book preserve observations without revealing an automatic assay. Buying a new
+rabbit preserves every existing animal’s injuries and the trial history.
 
 Use **Pour back** in the vial or trial room to return the unconsumed potion to
 the cauldron. Its magic, temperature, expenses and ingredient proportions travel

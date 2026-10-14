@@ -1,25 +1,21 @@
-import { assessEffects } from './effects.mjs';
 import { potionRecord, scalePotionContents } from './potionTransfer.mjs';
+import { createRabbitColony, migrateRabbitColony, rabbitById, advanceRabbits, buyRabbit,
+  assessRabbitEffects, appendRabbitEvent } from './rabbits.mjs';
 
 export const EXPERIMENT_SUBJECTS = Object.freeze([
-  { id: 'rabbit', name: 'Moon Rabbit', kind: 'animal', icon: 'rabbit', description: 'Observe vitality, affection and changing strength.' },
-  { id: 'beetle', name: 'Copper Beetle', kind: 'animal', icon: 'beetle', description: 'A hardy subject for heat, frost and transformation.' },
-  { id: 'seedling', name: 'Sproutling', kind: 'plant', icon: 'plant', description: 'Watch growth, wilting and elemental changes.' },
-  { id: 'stone', name: 'Stone Familiar', kind: 'mineral', icon: 'stone', description: 'Reveal corrosion and magical changes in an inert subject.' }
+  { id: 'rabbit', name: 'Moon Rabbit', kind: 'animal', icon: 'rabbit', description: 'Observe a finite colony with persistent potion effects.' }
 ]);
 export const EXPERIMENT_RECORD_LIMIT = 80;
 
-const initialStats = subject => ({ health: 100, vitality: 100, growth: subject.kind === 'plant' ? 20 : 0,
-  strength: subject.id === 'beetle' ? 35 : 20, love: 0, transformation: 0, burning: 0, freezing: 0, alive: true });
-const freshSubject = subject => ({ ...subject, stats: initialStats(subject), trials: 0, lastTestAt: 0 });
-
-export function createExperimentState() {
-  return { subjects: Object.fromEntries(EXPERIMENT_SUBJECTS.map(subject => [subject.id, freshSubject(subject)])), records: [], serial: 0 };
+export function createExperimentState(now = Date.now()) {
+  const colony = createRabbitColony(now);
+  return { ...colony, subjects: { rabbit: colony.rabbits[0] }, records: [], serial: 0 };
 }
 
 export function currentExperimentReport(state, subjectId) {
-  const subject = state.experiments?.subjects[subjectId];
-  return subject?.trials ? state.experiments.records.find(report => report.subjectId === subjectId && report.at === subject.lastTestAt) || null : null;
+  const subject = rabbitById(state.experiments, subjectId);
+  return subject?.trials ? state.experiments.records.find(report =>
+    (report.subjectId === subject.id || subject.id === 'rabbit-1' && report.subjectId === 'rabbit') && report.at === subject.lastTestAt) || null : null;
 }
 
 /** A dose and its remainder are independent snapshots. Intensive properties
@@ -47,35 +43,40 @@ export function splitPotionSample(sample, requestedMl = 5) {
  * is never edited and reports keep independent snapshots of the observations. */
 export function runExperiment(state, sample, subjectId, volume = 5, now = Date.now(), preparation = null) {
   if (!Number.isFinite(now) || now < 0) throw new Error('Invalid experiment time.');
-  if (volume > 50) throw new Error('Experiment doses must be 50 ml or smaller.');
-  const experiments = state.experiments || createExperimentState();
-  const subject = experiments.subjects[subjectId];
-  if (!subject) throw new Error('Choose an experiment subject.');
-  if (subject.readyAt > now) throw new Error('Let this familiar recover before another trial.');
-  if (!subject.stats.alive) throw new Error('Reset this subject before another experiment.');
+  if (!Number.isFinite(volume) || volume <= 0 || volume > 50) throw new Error('Experiment doses must be between 0 and 50 ml.');
+  state.experiments ||= createExperimentState(now);
+  if (!Array.isArray(state.experiments.rabbits)) state.experiments = migrateRabbitColony(state.experiments, now);
+  const previousEvents = new Set(state.experiments.events.map(event => event.id));
+  advanceRabbits(state, now);
+  const experiments = state.experiments;
+  const subject = rabbitById(experiments, subjectId);
+  if (!subject) throw new Error('Choose an available rabbit.');
+  if (!subject.stats.alive) throw new Error('This rabbit has died. Choose another living rabbit.');
+  if (subject.readyAt > now) throw new Error('Let this rabbit recover before another trial.');
   const { dose } = splitPotionSample(potionRecord(sample), volume);
-  const assessment = assessEffects(dose, subject, dose.volume);
+  const assessment = assessRabbitEffects(dose, subject, dose.volume, now);
   const serial = experiments.serial + 1;
-  const report = { ...assessment, id: `trial-${serial}`, serial, subjectName: subject.name, at: now,
+  Object.assign(subject, structuredClone(assessment.afterRabbit));
+  subject.readyAt = now + (state.equipment?.analyzer ? 3000 : 6000);
+  subject.trials++; subject.lastTestAt = now;
+  appendRabbitEvent(experiments, subject.stats.alive ? 'trial' : 'death',
+    `${subject.name}: ${assessment.observations.join(' ')}`, now, subject.id);
+  const report = { ...assessment,
+    afterRabbit: structuredClone(subject),
+    events: structuredClone(experiments.events.filter(event => !previousEvents.has(event.id))),
+    id: `trial-${serial}`, serial, subjectName: subject.name, at: now,
     sample: potionRecord(dose), sampleId: sample.id || null, volume: dose.volume, subjectId: subject.id, kind: subject.kind,
     preparation: potionRecord(preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history || {} }) };
-  subject.readyAt = now + (state.equipment?.analyzer ? 3000 : 6000);
-  subject.stats = { ...assessment.after }; subject.trials++; subject.lastTestAt = now;
   experiments.serial = serial; experiments.records.unshift(structuredClone(report));
   experiments.records.length = Math.min(experiments.records.length, EXPERIMENT_RECORD_LIMIT);
   state.experiments = experiments;
   return report;
 }
 
-export function resetExperimentSubject(state, subjectId) {
-  const definition = EXPERIMENT_SUBJECTS.find(subject => subject.id === subjectId);
-  if (!definition) throw new Error('Choose an experiment subject.');
-  state.experiments ||= createExperimentState();
-  const price = state.equipment?.densimeter ? 1 : 3;
-  if (state.mode === 'shop') {
-    const paid = Math.min(state.coins, price); state.coins -= paid;
-    state.debt = (state.debt || 0) + price - paid;
-  }
-  state.experiments.subjects[subjectId] = freshSubject(definition);
-  return state.experiments.subjects[subjectId];
+/** Kept for older callers: replacement buys a distinct rabbit and never heals
+ * or revives the selected animal. New UI uses buyRabbit directly. */
+export function resetExperimentSubject(state, subjectId, now = Date.now()) {
+  state.experiments ||= createExperimentState(now);
+  if (!rabbitById(state.experiments, subjectId)) throw new Error('Choose an available rabbit.');
+  return buyRabbit(state, now);
 }

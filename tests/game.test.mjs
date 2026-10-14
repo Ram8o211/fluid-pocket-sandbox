@@ -236,8 +236,8 @@ test('complete repeated commissions through physics, assessment, sale and progre
         'campaign test must reproduce every reference recipe portion');
     }
     for (let tick = 0; tick < recipe.ticks; tick++) { brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0); if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP); brew.step(); }
-    resetExperimentSubject(state, 'stone');
-    const trial = brew.takeSample(5); runExperiment(state, trial, 'stone', trial.volume);
+    const rabbit = state.experiments.rabbits.find(subject => subject.stats.alive && subject.trials === 0) || resetExperimentSubject(state, 'rabbit');
+    const trial = brew.takeSample(5); runExperiment(state, trial, rabbit.id, trial.volume);
     state.pendingBottle = brew.bottle(recipe.volume);
     compilePotionId(state,state.pendingBottle,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,state.pendingBottle[k]])));
     startNegotiation(state);acceptCustomerOffer(state);const sale = completeSale(state);

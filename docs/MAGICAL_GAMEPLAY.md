@@ -39,17 +39,21 @@ values into the player’s ID.
   older worlds migrate innate effects without overwriting in-progress brews.
   Excess heat attenuates
   live fields; irreversible awakening and heat damage are saved per particle.
-- **Knowledge:** trials consume real potion and update bounded creature state.
+- **Knowledge:** trials consume real potion and update one uniquely identified rabbit.
   A six-second recovery (three with the sanctuary) limits repeated exposure.
-  All eight visual channels animate together in a large enclosure with a
-  permanent before-dose reference. Weight lifting, companion approach, changing
-  wings, fire breath, an ice shell, sickness, wilting flowers and a rising spirit
+  All eight visual channels animate together in an isolation cage with a
+  permanent before-dose reference. Muscles, courtship, seeded anatomical changes,
+  flames and scorched fur, ice, illness, acid erosion and mortality
   have distinct shapes and motion. Dilute exposures are visually amplified
   monotonically; zero channels remain absent. Replay and pause never consume a
-  dose or update creature statistics. Fresh trials clear stale stage responses
-  while retaining notebook records. The ID form
+  dose or update rabbit statistics. Each rabbit keeps cumulative exposure and
+  lasting injuries. A finite shared pen supports breeding and maturation; babies
+  tolerate much less potion. Overdosed love and dangerous transformations can
+  attack pen companions. An immediate cull tool and isolation cage let the player
+  manage that danger. Buying another rabbit never revives or heals an animal.
+  The ID form
   always starts from the player’s prior estimates or zero. Estimates are
-  explicitly supplied and bounded. Feed shortfalls become guild debt so a refund cannot block research. Fingerprints include batch UUID, enchantment
+  explicitly supplied and bounded. Fingerprints include batch UUID, enchantment
   concentrations and relative preparation portions. IDs tolerate only sub-visible
   settling (.15 percentage points of magic and .2 points of source proportions);
   seals use the exact sealed fingerprint. A smaller dose retains
@@ -91,7 +95,7 @@ views; fluid contacts use scalar weights instead of per-pair temporary arrays.
 Touch mapping accounts for the canvas's centered letterboxing on small screens.
 Brewing rendering pauses behind rooms; one cached enclosure provides trial
 motion at at most 30fps and stops repainting while paused or hidden. Sprite and
-background caches avoid per-frame asset generation. Playback, dose and familiar
+background caches avoid per-frame asset generation. Playback, dose and rabbit
 controls fit phone screens using compact rows and horizontal scrolling.
 
 `tests/magical-shop.test.mjs` covers manual estimates, negotiated receipts,

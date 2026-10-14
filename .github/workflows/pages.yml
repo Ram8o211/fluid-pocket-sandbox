@@ -31,6 +31,8 @@ jobs:
       - run: npx playwright install --with-deps chromium --only-shell
       - name: Verify playable build before publishing
         run: npm run test:browser
+      - name: Verify rabbit colony before publishing
+        run: npm run test:rabbits:browser
       - name: Verify native LiquidFun physics before publishing
         run: npm run test:liquidfun
       - uses: actions/configure-pages@v5

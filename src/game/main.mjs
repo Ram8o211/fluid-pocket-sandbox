@@ -1,4 +1,6 @@
 import { TestingRenderer } from './TestingRenderer.mjs';
+import { RabbitColonyRenderer } from './RabbitRenderer.mjs';
+import { rabbitById, advanceRabbits, buyRabbit, moveRabbit, cullRabbit } from './rabbits.mjs';
 import { findPotionId, compilePotionId } from './potionId.mjs';
 import { startNegotiation, counterOffer, acceptCustomerOffer, certificationCost, certifyPotion, certificateFor, advanceComplaints, resolveComplaint } from './commerce.mjs';
 import { generateWorld, availableIngredients, seedNumber } from './world.mjs';
@@ -11,7 +13,7 @@ import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
 import { icon, bottleSprite, ingredientSprite, naturalLandscapeSprite, experimentSubjectSprite, portraitSprite, workshopBackground } from './art.mjs';
 import { resourceStatus, gatherIngredient, tendGarden, gardenStamina } from './gathering.mjs';
-import { runExperiment, resetExperimentSubject, splitPotionSample, currentExperimentReport } from './experiments.mjs';
+import { runExperiment, splitPotionSample, currentExperimentReport } from './experiments.mjs';
 import { returnVialToCauldron, potionRecord } from './potionTransfer.mjs';
 import { EFFECT_DEFINITIONS, EFFECT_PROPERTIES, describeEffects } from './effects.mjs';
 import { observedPotion, discoveryKnowledge } from './knowledge.mjs';
@@ -30,6 +32,7 @@ let toastTimer = 0, holdTimer = 0, holdInterval = 0, lastAutosave = 0, saveFaile
 let latestInspection = null, selectedRecipe = null;
 let testingRenderer = null, selectedSubject = 'rabbit', testDose = 5, showUntreated = false, harvest = null, lastClaims = 0;
 let sandboxLoaded = null, roomTimer = 0, currentRoom = null, experimentReport = null;
+let colonyRenderer = null, cullMode = false, lastRabbitTick = 0;
 let sandboxInspectorOpen = false, sandboxInspectorTab = 'ingredient', lastSandboxInspection = 0;
 const isSandbox = () => state?.mode === 'sandbox';
 const rawIngredient = i => Boolean(i.form && !['liquid', 'powder'].includes(i.form));
@@ -64,12 +67,12 @@ function guard(action) {
   return (...args) => { try { return action(...args); } catch (err) { notify(err.message || 'That action could not be completed.'); } };
 }
 function sheet(title, content, footer = '') {
-  clearInterval(roomTimer); roomTimer = 0; currentRoom = null; testingRenderer = null; harvest = null;
+  clearInterval(roomTimer); roomTimer = 0; currentRoom = null; testingRenderer = null; colonyRenderer = null; harvest = null;
   assist = false; pointer = null; stopPour();
   $('sheetContent').innerHTML = `<header class="sheet-header"><h2 id="sheetTitle">${escape(title)}</h2><button class="icon-button" data-action="close" aria-label="Close panel">${icon('close')}</button></header><div class="sheet-body"><output id="panelNotice" class="panel-notice" role="status" hidden></output>${content}</div>${footer ? `<div class="sheet-footer">${footer}</div>` : ''}`;
   if (!$('sheet').open) $('sheet').showModal();
 }
-function closeSheet() { clearInterval(roomTimer); roomTimer = 0; currentRoom = null; testingRenderer = null; harvest = null; if ($('sheet').open) $('sheet').close(); }
+function closeSheet() { clearInterval(roomTimer); roomTimer = 0; currentRoom = null; testingRenderer = null; colonyRenderer = null; harvest = null; if ($('sheet').open) $('sheet').close(); }
 
 async function openWorld(seed, saved = null, mode = 'shop') {
   $('newWorldBtn').disabled = true; $('continueBtn').disabled = true;
@@ -81,7 +84,8 @@ async function openWorld(seed, saved = null, mode = 'shop') {
     session = new BrewingSession(world.ingredients, candidate.equipment);
     if (saved?.brew) session.restore(saved.brew);
     brew?.dispose();
-    state = candidate; advanceComplaints(state); brew = session; selected = availableIngredients(world, state.equipment)[0].id; experimentReport = null;
+    state = candidate; advanceComplaints(state); advanceRabbits(state); brew = session; selected = availableIngredients(world, state.equipment)[0].id; experimentReport = null;
+    selectedSubject = state.experiments.rabbits.find(r => r.stats.alive)?.id || state.experiments.rabbits[0].id; cullMode = false;
     renderer = new LaboratoryRenderer($('labCanvas'), brew); renderer.setQuality(state.settings.graphics);
     audio.enabled = state.settings.sound;
     $('shop').insertBefore($('toast'), $('shop').querySelector('.shop-navigation'));
@@ -309,7 +313,7 @@ function showPotionID() {
   latestInspection = sample;
   const document = findPotionId(state,sample), tested = observedPotion(state,sample);
   if (!tested) { sheet('Potion ID',`<div class="vial-preview"><img src="${bottleSprite(sample.color)}" alt="Potion"><p>This batch needs a creature trial.</p></div><button class="primary" data-action="experiments">Creature trials</button>`); return; }
-  sheet('Write a potion ID',`<p>Your observations, your estimates. Compare doses and untreated creatures; the guild does not fill in the answers.</p><input id="potionName" class="name-input" aria-label="Potion name" maxlength="40" placeholder="Potion name" value="${escape(document?.name || '')}"><div class="estimate-carousel mini-pages">${EFFECT_PROPERTIES.map(key=>`<article class="mini-card estimate-card"><h3 style="color:${EFFECT_DEFINITIONS[key].color}">${EFFECT_DEFINITIONS[key].label}</h3><div class="estimate-glyph" style="color:${EFFECT_DEFINITIONS[key].color}">✧</div><label>My estimate <output data-estimate-value="${key}">${Math.round((document?.estimates[key]||0)*100)}%</output><input type="range" data-estimate="${key}" aria-label="Estimate ${EFFECT_DEFINITIONS[key].label}" min="0" max="100" step="1" value="${Math.round((document?.estimates[key]||0)*100)}"></label></article>`).join('')}</div><p class="swipe-cue">Swipe through all eight enchantments →</p><button class="primary" data-action="compile-id">Compile potion ID</button><button class="secondary" data-action="experiments">Observe another trial</button>`);
+  sheet('Write a potion ID',`<p>Your observations, your estimates. Compare doses and untreated creatures; the guild does not fill in the answers.</p><input id="potionName" class="name-input" aria-label="Potion name" maxlength="40" placeholder="Potion name" value="${escape(document?.name || '')}"><details class="rabbit-notebook"><summary>Evidence from this batch</summary>${rabbitTrialNotes(state.experiments.records.filter(r=>r.sample.batchId===sample.batchId).slice(0,12))}</details><label class="potion-notes-label">My observations<textarea id="potionNotes" class="name-input potion-notes" maxlength="1500" placeholder="Visible changes, dose progression, survival, and uncertainty">${escape(document?.notes || '')}</textarea></label><div class="estimate-carousel mini-pages">${EFFECT_PROPERTIES.map(key=>`<article class="mini-card estimate-card"><h3 style="color:${EFFECT_DEFINITIONS[key].color}">${EFFECT_DEFINITIONS[key].label}</h3><div class="estimate-glyph" style="color:${EFFECT_DEFINITIONS[key].color}">✧</div><label>My estimate <output data-estimate-value="${key}">${Math.round((document?.estimates[key]||0)*100)}%</output><input type="range" data-estimate="${key}" aria-label="Estimate ${EFFECT_DEFINITIONS[key].label}" min="0" max="100" step="1" value="${Math.round((document?.estimates[key]||0)*100)}"></label></article>`).join('')}</div><p class="swipe-cue">Swipe through all eight enchantments →</p><button class="primary" data-action="compile-id">Compile potion ID</button><button class="secondary" data-action="experiments">Observe another trial</button>`);
 }
 
 function bottle() {
@@ -391,27 +395,82 @@ function finishHarvest() {
   const result=gatherIngredient(state,nodeId,10,Date.now(),{precision});
   renderRack();persist();audio.play();showNature(nodeId);notify(`Harvested ${result.quantity}${result.wasted?` · ${result.wasted} lost`:''}.`);
 }
+function rabbitCondition(rabbit) {
+  if (!rabbit.stats.alive) return rabbit.deathAppearance === 'dissolved' ? 'Dissolved' : rabbit.deathAppearance === 'charred' ? 'Carbonized' : `Dead · ${rabbit.causeOfDeath || 'exposure'}`;
+  if (rabbit.dangerous) return 'Dangerous · isolate or cull';
+  if (rabbit.stats.health < 35) return 'Critical condition';
+  if (rabbit.stats.health < 75) return 'Injured';
+  return rabbit.trials ? 'Modified' : 'Untreated';
+}
+function selectedRabbit() { return rabbitById(state.experiments,selectedSubject) || state.experiments.rabbits[0]; }
+function visibleTrial(rabbit) {
+  const report = currentExperimentReport(state,rabbit.id);
+  if (!report || rabbit.deathAt && rabbit.deathAt > report.at) return null;
+  const recorded = report.afterRabbit;
+  if (recorded && (recorded.age !== rabbit.age || recorded.stats.alive !== rabbit.stats.alive ||
+    Math.abs(recorded.stats.health - rabbit.stats.health) > .000001 ||
+    Math.abs(recorded.stats.growth - rabbit.stats.growth) > .000001)) return null;
+  return report;
+}
+function rabbitTrialNotes(reports) {
+  return reports.map(r=>`<article class="rabbit-trial-note"><strong>${escape(r.subjectName)} · ${r.volume.toFixed(1)} ml · ${r.beforeRabbit?.age || 'adult'} · ${r.beforeRabbit?.location || 'pen'}</strong><p>${r.beforeRabbit?.trials ? `Previously exposed: ${r.beforeRabbit.trials} earlier doses.` : r.beforeRabbit?.age==='baby'?'Fresh baby · fragile baseline.':'Fresh adult baseline.'}</p><ul>${r.observations.map(o=>`<li>${escape(o)}</li>`).join('')}</ul></article>`).join('');
+}
 function showExperiments() {
-  const subject=state.experiments.subjects[selectedSubject],report=currentExperimentReport(state,selectedSubject);
-  const available=state.pendingBottle?.volume || brew.liquidVolume;
-  sheet('Creature trials',`<div class="subject-selector">${Object.values(state.experiments.subjects).map(c=>`<button data-subject="${c.id}" class="${c.id===selectedSubject?'active':''}"><img src="${experimentSubjectSprite(c.id,'healthy')}" alt=""><span>${escape(c.name)}</span></button>`).join('')}</div>
-    <div class="trial-stage-labels"><span>Before</span><span id="trialViewLabel">${!report||showUntreated?'Before dose':'After dose'}</span></div>
-    <canvas id="creatureCanvas" width="384" height="248" aria-label="Visual creature response, with a before-dose reference on the left"></canvas>
-    <div class="trial-playback"><button data-action="untreated" aria-pressed="${showUntreated}"${!report?' disabled':''}>${showUntreated?'After dose':'Before dose'}</button><button data-action="replay-trial"${!report?' disabled':''}>Replay</button><button data-action="pause-trial" aria-pressed="false"${!report?' disabled':''}>Pause</button></div>
-    <div id="experimentReport" class="trial-controls"><label>Dose <select id="trialDose">${[2,5,10].map(v=>`<option value="${v}"${testDose===v?' selected':''}>${v} ml</option>`).join('')}</select></label><button data-test="${subject.id}"${available<1||!subject.stats.alive||subject.readyAt>Date.now()?' disabled':''}>Give dose</button><button data-reset-subject="${subject.id}">Fresh trial · ${isSandbox()?0:state.equipment.densimeter?1:3} coins</button></div>
-    <p class="quiet trial-quantity">${available.toFixed(1)} ml available · ${report?`${report.volume.toFixed(1)} ml last dose`:'Untreated'}<span id="trialRest">${subject.readyAt>Date.now()?' · resting':''}</span></p>
-    <div class="trial-actions"><button class="primary" data-action="potion-id"${!observedPotion(state,state.pendingBottle||brew.inspectLiquid())?' disabled':''}>Write potion ID</button><button class="secondary" data-action="${state.pendingBottle?'return-vial':'close'}">${state.pendingBottle?`Pour back · ${available.toFixed(1)} ml`:'Back to brewing'}</button></div>${state.pendingBottle?'<button class="trial-vial-link" data-action="review-vial">Back to vial</button>':''}`);
-  currentRoom='experiments';testingRenderer=new TestingRenderer($('creatureCanvas'));
+  advanceRabbits(state);
+  const subject=selectedRabbit(); selectedSubject=subject.id;
+  const report=visibleTrial(subject),available=state.pendingBottle?.volume || brew.liquidVolume;
+  const living=state.experiments.rabbits.filter(r=>r.stats.alive).length,price=isSandbox()?0:state.equipment.densimeter?6:8;
+  const reports=state.experiments.records.filter(r=>r.subjectId===subject.id||subject.id==='rabbit-1'&&r.subjectId==='rabbit').slice(0,8);
+  sheet('Rabbit trials',`<div class="colony-toolbar"><span id="colonyCount">${living} / ${state.experiments.capacity} rabbits</span><button data-action="buy-rabbit"${living>=state.experiments.capacity||!isSandbox()&&state.coins<price?' disabled':''}>Buy adult · ${price} coins</button><button data-action="cull-tool" class="${cullMode?'cull-active':''}" aria-pressed="${cullMode}">Cull tool ${cullMode?'ON':'OFF'}</button></div>
+    <p class="colony-help">Select a rabbit in the pen or below. Dose it here, or move it into the isolation cage. The cull tool kills a rabbit with one tap.</p>
+    <canvas id="rabbitPenCanvas" width="640" height="350" aria-label="Shared rabbit pen and isolation cage. Use the rabbit buttons below to select or cull a rabbit."></canvas>
+    <div id="colonyAlerts" class="colony-alerts" role="status"></div>
+    <div id="rabbitSelector" class="subject-selector rabbit-selector">${state.experiments.rabbits.map(c=>`<button data-subject="${c.id}" class="${c.id===selectedSubject?'active':''} ${!c.stats.alive?'rabbit-dead':''}" aria-pressed="${c.id===selectedSubject}" aria-label="${cullMode?'Cull':'Select'} ${escape(c.name)}, ${c.age}, ${c.location}, ${escape(rabbitCondition(c))}"><span class="rabbit-card-glyph"><img src="${experimentSubjectSprite('rabbit','healthy')}" alt=""></span><strong>${escape(c.name)}</strong><span>${c.age} · ${c.sex==='female'?'♀':'♂'} · ${c.location}</span><small>${escape(rabbitCondition(c))}</small></button>`).join('')}</div>
+    <div class="rabbit-detail-heading"><h3>${escape(subject.name)}</h3><span id="rabbitCondition">${escape(rabbitCondition(subject))}</span></div>
+    <p id="rabbitContext" class="quiet">${subject.age==='baby'?'Baby · fragile; potion trials are unreliable until adulthood.':'Adult'} · ${subject.location==='cage'?'isolated cage':'shared pen'} · ${subject.trials} doses received</p>
+    <div class="rabbit-actions"><button data-action="move-rabbit"${!subject.stats.alive?' disabled':''}>${subject.location==='cage'?'Return to pen':'Isolate in cage'}</button><button class="danger-button" data-action="cull-rabbit"${!subject.stats.alive?' disabled':''}>Cull ${escape(subject.name)}</button></div>
+    <div class="trial-stage-labels"><span>Before this dose</span><span id="trialViewLabel">${!report?'Current condition':showUntreated?'Before dose':'After dose'}</span></div>
+    <canvas id="creatureCanvas" width="640" height="350" aria-label="Detailed rabbit anatomy, comparing the condition before and after this dose"></canvas>
+    <div class="trial-playback"><button data-action="untreated" aria-pressed="${showUntreated}"${!report?' disabled':''}>${showUntreated?'After dose':'Before dose'}</button><button data-action="replay-trial"${!report?' disabled':''}>Replay dose</button><button data-action="pause-trial" aria-pressed="false">Pause view</button></div>
+    <div id="experimentReport" class="trial-controls"><label>Dose <select id="trialDose">${[2,5,10,20].map(v=>`<option value="${v}"${testDose===v?' selected':''}>${v} ml</option>`).join('')}</select></label><button class="primary" data-test="${subject.id}"${available<1||!subject.stats.alive||subject.readyAt>Date.now()?' disabled':''}>Give dose · ${subject.location==='cage'?'cage':'pen'}</button><span id="trialRest" class="quiet"></span></div>
+    <p class="quiet trial-quantity">${available.toFixed(1)} ml available · ${report?`${report.volume.toFixed(1)} ml last dose`:'No current dose replay'}</p>
+    <div class="trial-actions"><button class="primary" data-action="potion-id"${!observedPotion(state,state.pendingBottle||brew.inspectLiquid())?' disabled':''}>Write potion ID</button><button class="secondary" data-action="${state.pendingBottle?'return-vial':'close'}">${state.pendingBottle?`Pour back · ${available.toFixed(1)} ml`:'Back to brewing'}</button></div>${state.pendingBottle?'<button class="trial-vial-link" data-action="review-vial">Back to vial</button>':''}
+    <details class="rabbit-notebook"${report?' open':''}><summary>Trial observations · ${reports.length} recent doses</summary>${rabbitTrialNotes(reports)||'<p>No observations yet. Compare a fresh adult with a previously exposed rabbit.</p>'}</details>
+    <details><summary>Colony journal</summary><ol id="colonyJournal" class="colony-journal"></ol></details>`);
+  currentRoom='experiments';testingRenderer=new TestingRenderer($('creatureCanvas'));colonyRenderer=new RabbitColonyRenderer($('rabbitPenCanvas'));
+  $('rabbitPenCanvas').onclick=guard(event=>{const id=colonyRenderer?.hitTest(event.clientX,event.clientY);if(!id)return;if(cullMode){const rabbit=rabbitById(state.experiments,id);if(!rabbit.stats.alive)return;cullRabbit(state,id);persist();}selectedSubject=id;showUntreated=false;showExperiments();});
   testingRenderer.render(subject,report,performance.now(),showUntreated);
-  roomTimer=setInterval(()=>{if(currentRoom==='experiments'){const c=state.experiments.subjects[selectedSubject],b=$('sheetContent').querySelector('[data-test]'),resting=c.readyAt>Date.now();if(b)b.disabled=!(state.pendingBottle?.volume||brew.liquidVolume)||!c.stats.alive||resting;if($('trialRest'))$('trialRest').textContent=resting?' · resting':'';}},1000);
+  updateRabbitRoom();
+}
+function updateRabbitRoom() {
+  if(currentRoom!=='experiments')return;
+  const rabbit=selectedRabbit(),alive=state.experiments.rabbits.filter(r=>r.stats.alive),available=state.pendingBottle?.volume||brew.liquidVolume;
+  const resting=rabbit.readyAt>Date.now(),b=$('sheetContent').querySelector('[data-test]');if(b)b.disabled=available<1||!rabbit.stats.alive||resting;
+  $('trialRest').textContent=resting?'Resting briefly':'';
+  $('rabbitCondition').textContent=rabbitCondition(rabbit);
+  $('rabbitContext').textContent=`${rabbit.age==='baby'?'Baby · fragile; wait for adulthood':'Adult'} · ${rabbit.location==='cage'?'isolated cage':'shared pen'} · ${rabbit.trials} doses received`;
+  const report=visibleTrial(rabbit);
+  $('trialViewLabel').textContent=!report?'Current condition':showUntreated?'Before dose':'After dose';
+  const comparison=$('sheetContent').querySelector('[data-action="untreated"]');
+  comparison.disabled=!report;comparison.textContent=report&&showUntreated?'After dose':'Before dose';
+  $('sheetContent').querySelector('[data-action="replay-trial"]').disabled=!report;
+  $('colonyCount').textContent=`${alive.length} / ${state.experiments.capacity} rabbits`;
+  const danger=alive.filter(r=>r.dangerous&&r.location==='pen');
+  $('colonyAlerts').textContent=danger.length?`⚠ ${danger.map(r=>r.name).join(', ')} may attack penmates. Isolate or use the cull tool immediately.`:cullMode?'Cull tool active · tap a rabbit to kill it.':'Babies grow into adults over two minutes. Changes and injuries persist.';
+  $('colonyAlerts').classList.toggle('danger-alert',danger.length>0);
+  const buy=$('sheetContent').querySelector('[data-action="buy-rabbit"]'),price=isSandbox()?0:state.equipment.densimeter?6:8;buy.disabled=alive.length>=state.experiments.capacity||!isSandbox()&&state.coins<price;
+  for(const action of ['move-rabbit','cull-rabbit'])$('sheetContent').querySelector(`[data-action="${action}"]`).disabled=!rabbit.stats.alive;
+  for(const r of state.experiments.rabbits){const card=$('sheetContent').querySelector(`[data-subject="${r.id}"]`);if(card){card.querySelector('small').textContent=rabbitCondition(r);card.querySelector('span:nth-of-type(2)').textContent=`${r.age} · ${r.sex==='female'?'♀':'♂'} · ${r.location}`;card.classList.toggle('rabbit-dead',!r.stats.alive);}}
+  $('colonyJournal').innerHTML=(state.experiments.events||[]).slice(0,12).map(e=>`<li>${escape(e.message||e.text||e.description||e.type)}</li>`).join('')||'<li>The colony is quiet.</li>';
 }
 function testPotion(subjectId) {
-  const subject=state.experiments.subjects[subjectId];
-  if(!subject?.stats.alive||subject.readyAt>Date.now())throw new Error('Prepare a fresh trial or let this familiar rest.');
+  advanceRabbits(state);
+  const subject=rabbitById(state.experiments,subjectId);
+  if(!subject?.stats.alive||subject.readyAt>Date.now())throw new Error('Choose a living rabbit and let it rest between doses.');
   const preparation=potionRecord(state.pendingBottle||brew.inspectLiquid());
   if(state.pendingBottle){const split=splitPotionSample(state.pendingBottle,testDose);experimentReport=runExperiment(state,split.dose,subjectId,split.dose.volume,Date.now(),preparation);state.pendingBottle=split.remaining;if(!split.remaining)state.stage='brewing';}
   else {if(brew.liquidVolume<1)throw new Error('Prepare a liquid potion first.');const sample=brew.takeSample(testDose);experimentReport=runExperiment(state,sample,subjectId,sample.volume,Date.now(),preparation);}
-  state.negotiation=null;latestInspection=preparation;selectedSubject=subjectId;showUntreated=false;
+  state.negotiation=null;latestInspection=preparation;selectedSubject=subject.id;showUntreated=false;
   if(state.tutorial<5)state.tutorial=5;
   audio.play('measure');renderAll();persist();showExperiments();
 }
@@ -526,12 +585,11 @@ function bindUI() {
     const button = event.target.closest('button'); if (!button) return;
     if (button.dataset.gardenNode) { showNature(button.dataset.gardenNode); return; }
     if (button.dataset.tend) { tendGarden(state,button.dataset.tend); persist(); renderRack(); showNature(button.dataset.tend); return; }
-    if (button.dataset.subject) { selectedSubject=button.dataset.subject;showUntreated=false;showExperiments();return; }
+    if (button.dataset.subject) { if(cullMode&&rabbitById(state.experiments,button.dataset.subject)?.stats.alive){cullRabbit(state,button.dataset.subject);persist();} selectedSubject=button.dataset.subject;showUntreated=false;showExperiments();return; }
     if (button.dataset.refund || button.dataset.contest) { const claim=resolveComplaint(state,button.dataset.refund||button.dataset.contest,Boolean(button.dataset.contest));renderAll();persist();showReturns();notify(claim.status==='dismissed'?'False claim dismissed by the expert seal.':'Refund settled.');return; }
     if (button.dataset.gather) { startHarvest(button.dataset.gather); return; }
 
     if (button.dataset.test) { testPotion(button.dataset.test); return; }
-    if (button.dataset.resetSubject) { resetExperimentSubject(state, button.dataset.resetSubject); experimentReport = null; showUntreated=false; renderAll(); persist(); showExperiments(); return; }
     if (button.dataset.restock) { const result = restock(state, Number(button.dataset.restock), 20); renderAll(); persist(); showInventory(); notify(`Refilled ${result.quantity} ml for ${result.cost} coins.`); return; }
     if (button.dataset.trade) { const result = tradeStock(state, Number(button.dataset.trade)); renderAll(); persist(); showInventory(); notify(`Traded ${result.quantity} ml for ${result.payment} coins.`); return; }
     if (button.dataset.upgrade) { const upgrade = buyUpgrade(state, Number(button.dataset.upgrade)); brew.equipment = state.equipment; audio.play('sale'); renderAll(); persist(); showGuild(); notify(`${upgrade.name} is ready.`); return; }
@@ -547,15 +605,19 @@ function bindUI() {
       case 'confirm-clean': brew.clean(); closeSheet(); renderAll(); persist(); notify('Cauldron drained and cleaned.'); break;
       case 'sell': sell(); break;
       case 'potion-id': showPotionID();break;
-      case 'compile-id': { const estimates=Object.fromEntries([...$('sheetContent').querySelectorAll('[data-estimate]')].map(input=>[input.dataset.estimate,Number(input.value)/100])); compilePotionId(state,latestInspection,estimates,$('potionName').value);persist();if(state.pendingBottle)showVial();else {closeSheet();notify('Potion ID compiled. Bottle when ready.');}break; }
+      case 'compile-id': { const estimates=Object.fromEntries([...$('sheetContent').querySelectorAll('[data-estimate]')].map(input=>[input.dataset.estimate,Number(input.value)/100])); compilePotionId(state,latestInspection,estimates,$('potionName').value,$('potionNotes').value);persist();if(state.pendingBottle)showVial();else {closeSheet();notify('Potion ID compiled. Bottle when ready.');}break; }
       case 'counter-offer': counterOffer(state,Number($('sellerPrice').value));showNegotiation();break;
       case 'accept-offer': finishAgreement();break;
       case 'certify': certifyPotion(state);renderAll();persist();showVial();break;
       case 'returns': showReturns();break;
       case 'harvest': finishHarvest();break;
+      case 'buy-rabbit': {const rabbit=buyRabbit(state);selectedSubject=rabbit.id;showUntreated=false;renderAll();persist();showExperiments();notify(`${rabbit.name} has joined the pen.`);break;}
+      case 'move-rabbit': {const rabbit=selectedRabbit();moveRabbit(state,rabbit.id,rabbit.location==='cage'?'pen':'cage');persist();showExperiments();break;}
+      case 'cull-rabbit': cullRabbit(state,selectedRabbit().id);showUntreated=false;persist();showExperiments();break;
+      case 'cull-tool': cullMode=!cullMode;showExperiments();break;
       case 'untreated': showUntreated=!showUntreated;button.textContent=showUntreated?'After dose':'Before dose';button.setAttribute('aria-pressed',String(showUntreated));$('trialViewLabel').textContent=showUntreated?'Before dose':'After dose';break;
       case 'replay-trial': testingRenderer?.replay();showUntreated=false;$('trialViewLabel').textContent='After dose';$('sheetContent').querySelector('[data-action="untreated"]').textContent='Before dose';$('sheetContent').querySelector('[data-action="untreated"]').setAttribute('aria-pressed','false');$('sheetContent').querySelector('[data-action="pause-trial"]').textContent='Pause';$('sheetContent').querySelector('[data-action="pause-trial"]').setAttribute('aria-pressed','false');break;
-      case 'pause-trial': {const paused=testingRenderer?.togglePause();button.textContent=paused?'Resume':'Pause';button.setAttribute('aria-pressed',String(paused));break;}
+      case 'pause-trial': {const paused=testingRenderer?.togglePause();button.textContent=paused?'Resume view':'Pause view';button.setAttribute('aria-pressed',String(paused));break;}
       case 'return-vial': {const volume=returnVialToCauldron(state,brew);latestInspection=null;closeSheet();renderAll();persist();audio.play('pour');notify(`${volume.toFixed(1)} ml returned. Adjust, then test the new batch.`);break;}
       case 'discard-vial': sheet('Discard this vial?', '<p>The sealed potion and its ingredients will be lost. Your customer will wait while you brew another.</p><div class="confirm-actions"><button data-action="close">Keep the vial</button><button class="danger-button" data-action="confirm-discard">Discard and brew again</button></div>'); break;
       case 'confirm-discard': discardVial(state); if (state.tutorial === 6) state.tutorial = 5; closeSheet(); renderAll(); persist(); notify('Vial discarded. Your customer is still waiting.'); break;
@@ -615,7 +677,8 @@ function loop(now) {
     if (now - lastAutosave > 8000) persist();
   } else accumulator = 0;
   if(currentRoom==='harvest'&&harvest){const phase=((now-harvest.start)/1500)%2;harvest.position=phase<1?phase:2-phase;$('harvestMarker').style.left=`${harvest.position*100}%`;}
-  if(currentRoom==='experiments'&&testingRenderer&&!document.hidden){const subject=state.experiments.subjects[selectedSubject],report=currentExperimentReport(state,selectedSubject);testingRenderer.render(subject,report,now,showUntreated);}
+  if(state&&inShop&&!document.hidden&&now-lastRabbitTick>1000){lastRabbitTick=now;const count=state.experiments.rabbits.length,events=advanceRabbits(state);if(events?.length){persist();if(currentRoom==='experiments'&&count!==state.experiments.rabbits.length)showExperiments();}updateRabbitRoom();if(now-lastAutosave>8000)persist();}
+  if(currentRoom==='experiments'&&testingRenderer&&!document.hidden){const subject=selectedRabbit(),report=visibleTrial(subject);testingRenderer.render(subject,report,now,showUntreated);colonyRenderer?.render(state.experiments,subject.id,now,cullMode,testingRenderer.paused);}
   if(state&&inShop&&!isSandbox()&&now-lastClaims>1000){lastClaims=now;const before=JSON.stringify((state.complaints||[]).map(c=>c.status));const arrived=advanceComplaints(state);if(arrived.length||before!==JSON.stringify((state.complaints||[]).map(c=>c.status))){renderAll();persist();if(!$('sheet').open&&arrived.length)showReturns();else notify('A customer return has reached the counter.');}}
   if (inShop && renderer && !$('sheet').open && now - lastRender >= (renderer.quality === 'eco' ? 32 : 16)) { renderer.render(); lastRender = now; }
   if (inShop && now - lastHUD > 200) { updateHUD(); if (active) advanceTutorial(); lastHUD = now; }

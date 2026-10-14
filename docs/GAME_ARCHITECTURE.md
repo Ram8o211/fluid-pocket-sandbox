@@ -12,7 +12,8 @@ shop entry point, and no backend or production framework dependency is needed.
 | World | `src/game/world.mjs` | Seeded raw plants/minerals, plain water, validated starter diversity and rare unlocks |
 | Foraging | `src/game/gathering.mjs` | Resource patches, finite gathering, timestamp-based replenishment and guild access |
 | Effects | `src/game/effects.mjs` | Shared magical/chemical field metadata and deterministic subject responses |
-| Experiments | `src/game/experiments.mjs` | Conserved doses, subject state, bounded immutable reports and reset |
+| Experiments | `src/game/experiments.mjs` | Conserved doses, individual rabbit trials and bounded immutable reports |
+| Rabbit colony | `src/game/rabbits.mjs` | Persistent exposure, seeded mutation, breeding, growth, enclosure movement and mortality |
 | Brew adapter | `src/game/brewing.mjs` | Cauldron walls, metered stock transfer, spoon impulses, thermal energy, sampling, exact liquid drain and full snapshots |
 | Vessel geometry | `src/game/cauldron.mjs` | Shared collision planes and rendered cutaway, radius clearance, fine particle quantity and pool limits |
 | Potion | `src/game/potion.mjs` | Mass-weighted MaterialSampler reuse and physical/derived measurement |
@@ -169,13 +170,21 @@ update an outdoor simulation. Full depletion temporarily blocks gathering, and
 partial stock returns gradually. Spring water is unlimited. Guild licences gate
 rare patches along with their ingredients.
 
-Experiments use rabbit, beetle, seedling and limestone subjects. A test transfers
-a representative 5 ml dose from the cauldron or a sealed vial before applying
-the common measured fields to subject stats. The remaining vial keeps its ID
+Experiments use a finite colony of uniquely identified rabbits. A test transfers
+a representative dose from the cauldron or a sealed vial before applying
+the measured fields to that individual’s persistent exposure. The remaining vial keeps its ID
 and scales volume, mass, ingredient expenses and composition, so testing cannot
 duplicate stock or sales. Reports include independent sample snapshots and
-before/after stats; the history retains at most 80 reports. Reset restores a
-subject while preserving observations.
+before/after stats and complete rabbit snapshots; the history retains at most
+80 reports. Concentration multiplied by dose determines accumulated exposure,
+so strong doses and repeated weaker doses reach the same anatomical stages.
+Purchased rabbits are new individuals; death and injury cannot be reset.
+Up to twelve living rabbits occupy the pen and a single isolation cage. Love
+accelerates breeding; babies mature over time and are more vulnerable to dosing.
+Excess love and dangerous mutations attack pen companions after a visible grace
+period. Culling acts immediately before advancing attacks. Colony events and
+dead animal archives are bounded. Legacy saves retain their rabbit’s injuries
+and archived trials from retired species.
 
 The ingredient sandbox provides all guild ingredients and equipment. Infinite
 pours bypass stock consumption while vessel capacity and physical simulation

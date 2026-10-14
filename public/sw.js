@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-arcane-33';
+const CACHE = 'alchemist-shop-rabbit-colony-34';
 const CORE = [
   './',
   './index.html',
@@ -21,6 +21,8 @@ const CORE = [
   './src/game/potionId.mjs',
   './src/game/commerce.mjs',
   './src/game/TestingRenderer.mjs',
+  './src/game/rabbits.mjs',
+  './src/game/RabbitRenderer.mjs',
   './src/simulation/ArcaneSolver.mjs',
   './src/game/potion.mjs',
   './src/game/brewing.mjs',

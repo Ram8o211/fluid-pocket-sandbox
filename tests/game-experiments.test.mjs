@@ -9,6 +9,7 @@ import { generateOrder, simulateWitness } from '../src/game/orders.mjs';
 import { assessPotion } from '../src/game/evaluation.mjs';
 import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
 import { SAVE_VERSION } from '../src/game/contracts.mjs';
+import { rabbitById, buyRabbit, cullRabbit } from '../src/game/rabbits.mjs';
 
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < .00001, `${actual} != ${expected}`);
 const potion = effects => ({ id: 'vial-immutable', volume: 60, mass: 75, density: 1.25, temperature: .33,
@@ -31,39 +32,48 @@ test('a vial dose conserves every stored quantity and leaves potion properties a
   assert.throws(() => splitPotionSample(sample, -5));
 });
 
-test('experiment subjects respond to actual dose effects, retain independent observations and can reset', () => {
-  const state = { experiments: createExperimentState() }, sample = potion({ strength: .9, love: .4 });
+test('individual rabbits retain actual dose effects and replacements never erase injuries', () => {
+  const state = { mode: 'sandbox', experiments: createExperimentState(0) }, sample = potion({ strength: .9, love: .4 });
   const report = runExperiment(state, sample, 'rabbit', 5, 100);
   assert.ok(report.after.strength > report.before.strength); assert.ok(report.after.love > report.before.love);
   assert.equal(state.experiments.subjects.rabbit.trials, 1); assert.equal(state.experiments.records[0].volume, 5);
-  report.after.strength = 0; sample.strength = 0;
+  report.after.strength = 0; report.afterRabbit.stats.strength = 0; report.beforeRabbit.exposure.strength = 999; sample.strength = 0;
   assert.ok(state.experiments.subjects.rabbit.stats.strength > 20);
   assert.equal(state.experiments.records[0].sample.strength, .9);
-  resetExperimentSubject(state, 'rabbit'); assert.equal(state.experiments.subjects.rabbit.stats.strength, 20);
+  assert.ok(state.experiments.records[0].afterRabbit.stats.strength > 20);
+  assert.equal(state.experiments.records[0].beforeRabbit.exposure.strength, 0);
+  assert.throws(() => runExperiment(state, sample, report.subjectId, 5, 100), /recover/);
+  const replacement = resetExperimentSubject(state, 'rabbit', 100);
+  assert.notEqual(replacement.id, report.subjectId); assert.equal(replacement.stats.strength, 20);
+  assert.ok(state.experiments.subjects.rabbit.stats.strength > 20); assert.equal(state.experiments.rabbits.length, 5);
   assert.equal(state.experiments.records.length, 1);
   const count = state.experiments.records.length;
   assert.throws(() => runExperiment(state, sample, 'unknown', 5, 100));
   assert.equal(state.experiments.records.length, count);
 });
 
-test('animals, plants and minerals reveal different chemical and magical responses', () => {
-  const state = { experiments: createExperimentState() };
-  const poisoned = runExperiment(state, potion({ poison: 1 }), 'rabbit', 20, 100);
-  const corroded = runExperiment(state, potion({ acidity: 1 }), 'stone', 20, 100);
-  const growing = runExperiment(state, potion({ transformation: 1 }), 'seedling', 20, 100);
+test('different rabbits reveal persistent chemical and magical responses', () => {
+  const state = { experiments: createExperimentState(0) };
+  const poisoned = runExperiment(state, potion({ poison: 1 }), 'rabbit-1', 20, 100);
+  const corroded = runExperiment(state, potion({ acidity: 1 }), 'rabbit-2', 20, 100);
+  const growing = runExperiment(state, potion({ transformation: 1 }), 'rabbit-3', 20, 100);
   assert.ok(poisoned.after.health < poisoned.before.health);
   assert.ok(corroded.after.health < corroded.before.health);
   assert.ok(growing.after.growth > growing.before.growth || growing.after.transformation > growing.before.transformation);
   assert.ok([poisoned, corroded, growing].every(report => report.observations.length > 0));
+  assert.throws(() => runExperiment(state, potion(), 'stone', 5, 100));
+  assert.equal(state.experiments.rabbits.length, 4);
 });
 
-test('experiment history is bounded and dead subjects need a reset', () => {
-  const state = { mode: 'sandbox', experiments: createExperimentState() };
-  for (let index = 0; index < 90; index++) runExperiment(state, potion(), 'stone', 1, index * 7000);
+test('experiment history is bounded and death requires choosing a distinct rabbit', () => {
+  const state = { mode: 'sandbox', experiments: createExperimentState(0) };
+  for (let index = 0; index < 90; index++) runExperiment(state, potion(), 'rabbit-1', 1, index * 7000);
   assert.equal(state.experiments.records.length, 80); assert.equal(state.experiments.records[0].serial, 90);
   state.experiments.subjects.rabbit.stats.alive = false;
   assert.throws(() => runExperiment(state, potion(), 'rabbit', 5, 100));
-  resetExperimentSubject(state, 'rabbit'); assert.equal(runExperiment(state, potion(), 'rabbit', 5, 100).serial, 91);
+  const replacement = resetExperimentSubject(state, 'rabbit', 630000);
+  assert.equal(state.experiments.subjects.rabbit.stats.alive, false);
+  assert.equal(runExperiment(state, potion(), replacement.id, 5, 630000).serial, 91);
 });
 
 test('sandbox unlocks ingredients and measurements while isolating progression and save slots', () => {
@@ -94,17 +104,52 @@ test('legacy migration preserves consumed stock and physical brews while introdu
   assert.equal(migrated.version, SAVE_VERSION); assert.deepEqual(migrated.inventory, original.inventory);
   assert.deepEqual(migrated.brew, original.brew); assert.deepEqual(migrated.order, original.order);
   close(migrated.pendingBottle.volume, 60); assert.equal(migrated.mode, 'shop');
-  assert.ok(migrated.foraging.nodes.length > 1); assert.ok(migrated.experiments.subjects.seedling);
+  assert.ok(migrated.foraging.nodes.length > 1); assert.equal(migrated.experiments.rabbits.length, 4);
+  assert.equal(migrated.experiments.subjects.seedling, undefined);
   assert.ok(EFFECT_PROPERTIES.every(key => migrated.pendingBottle[key] === 0));
 });
 
 test('save validation rejects corrupted resources, subjects and observed samples', () => {
   const world = generateWorld('validation-domain'), state = newShop(world), brew = new BrewingSession(world.ingredients);
-  runExperiment(state, potion({ freeze: .8 }), 'beetle', 5, 100);
+  runExperiment(state, potion({ freeze: .8 }), 'rabbit-2', 5, 100);
   const original = JSON.parse(encodeSave(state, brew));
-  const patches = [raw => { raw.foraging.nodes[1].stock = -1; }, raw => { raw.experiments.subjects.rabbit.stats.health = NaN; },
+  const patches = [raw => { raw.foraging.nodes[1].stock = -1; }, raw => { raw.experiments.rabbits[0].stats.health = NaN; },
+    raw => { raw.experiments.rabbits[0] = null; }, raw => { raw.experiments.rabbits[0].stats = null; },
+    raw => { raw.experiments.rabbits[0].exposure = []; },
+    raw => { raw.experiments.rabbits[0].exposure.strength = -1; }, raw => { raw.experiments.rabbits[0].location = 'forest'; },
+    raw => { raw.experiments.rabbits[0].mutation.traits.ears = 2; }, raw => { raw.experiments.rabbits[0].age = 'ancient'; },
+    raw => { raw.experiments.records[0].beforeRabbit.stats.health = -1; },
     raw => { raw.experiments.records[0].sample.strength = 2; }, raw => { raw.mode = 'sandbox'; }];
   for (const patch of patches) { const corrupt = structuredClone(original); patch(corrupt); assert.throws(() => decodeSave(JSON.stringify(corrupt))); }
+});
+
+test('legacy subject migration preserves rabbit injury and archived trials from retired species', () => {
+  const world = generateWorld('rabbit-migration'), state = newShop(world), brew = new BrewingSession(world.ingredients);
+  runExperiment(state, potion({ strength: .1 }), 'rabbit', 5, 100);
+  const raw = JSON.parse(encodeSave(state, brew)), savedRabbit = structuredClone(raw.experiments.rabbits[0]);
+  savedRabbit.id = 'rabbit'; savedRabbit.stats.health = 39; savedRabbit.stats.alive = false;
+  const report = raw.experiments.records[0]; report.subjectId = 'beetle'; report.subjectName = 'Copper Beetle';
+  delete report.beforeRabbit; delete report.afterRabbit; delete report.events; delete report.doseExposure;
+  raw.experiments = { subjects: { rabbit: savedRabbit, beetle: { ...savedRabbit, id: 'beetle' } }, records: [report], serial: 1 };
+  const restored = decodeSave(JSON.stringify(raw));
+  assert.equal(rabbitById(restored.experiments, 'rabbit-1').stats.health, 39);
+  assert.equal(rabbitById(restored.experiments, 'rabbit-1').stats.alive, false);
+  assert.equal(restored.experiments.records[0].subjectId, 'beetle');
+  assert.equal(restored.experiments.subjects.beetle, undefined);
+});
+
+test('full rabbit snapshots and trials survive saving after a dead rabbit leaves the bounded archive', () => {
+  const world = generateWorld('rabbit-archive'), state = newShop(world, { sandbox: true, now: 0 }), brew = new BrewingSession(world.ingredients);
+  const report = runExperiment(state, potion({ strength: 1 }), 'rabbit-1', 15, 100);
+  assert.equal(report.after.alive, false); assert.equal(report.doseExposure.strength, 3); assert.equal(report.effects.strength, 1);
+  for (let index = 0; index < 26; index++) {
+    const rabbit = buyRabbit(state, 101 + index * 2); cullRabbit(state, rabbit.id, 102 + index * 2);
+  }
+  assert.equal(rabbitById(state.experiments, report.subjectId), null);
+  const restored = decodeSave(encodeSave(state, brew)), archived = restored.experiments.records[0];
+  assert.equal(archived.subjectId, 'rabbit-1'); assert.equal(archived.afterRabbit.stats.alive, false);
+  assert.equal(archived.afterRabbit.exposure.strength, 3); assert.equal(archived.beforeRabbit.exposure.strength, 0);
+  assert.equal(restored.experiments.rabbits.filter(rabbit => rabbit.stats.alive).length, 3);
 });
 
 test('raw-ingredient customer witnesses include water and crushing and reproduce fully attainable targets', () => {

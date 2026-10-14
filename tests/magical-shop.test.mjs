@@ -111,7 +111,10 @@ test('opposed unreachable awakening runes mix to a reachable threshold independe
   const restored=new BrewingSession(world.ingredients);restored.restore(brew.snapshot());assert.equal(restored.engine.ps.arcaneConverted[0],1);assert.equal(potionFingerprint(sample(shop())).length>0,true);
 });
 
- test('mandatory refunds cannot lock an apprentice out of further research',()=>{
+ test('a remaining healthy rabbit permits research after a refund without reviving the dead rabbit',()=>{
   const state=shop();state.coins=0;state.debt=12;state.experiments.subjects.rabbit.stats.alive=false;
-  resetExperimentSubject(state,'rabbit');assert.ok(state.experiments.subjects.rabbit.stats.alive);assert.equal(state.coins,0);assert.equal(state.debt,15);
+  assert.throws(()=>resetExperimentSubject(state,'rabbit'));
+  assert.equal(state.experiments.subjects.rabbit.stats.alive,false);assert.equal(state.coins,0);assert.equal(state.debt,12);
+  const report=runExperiment(state,{...sample(state),volume:5,mass:5},'rabbit-2',5,100000);
+  assert.equal(report.subjectId,'rabbit-2');assert.equal(state.debt,12);
 });

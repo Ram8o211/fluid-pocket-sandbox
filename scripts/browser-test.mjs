@@ -23,6 +23,7 @@ async function compileCurrent(name,sandbox=false){
   const state=await (sandbox?readSandbox():readSave()),report=state.experiments.records[0];
   await page.locator('[data-action="potion-id"]').click();
   await page.locator('#potionName').fill(name);
+  await page.locator('#potionNotes').fill('Adult rabbit; compare the body before this dose with the lasting change afterward.');
   for(const key of ['strength','love','death','transformation','fire','freeze','acidity','poison']){
     const input=page.locator(`[data-estimate="${key}"]`);
     await input.scrollIntoViewIfNeeded();
@@ -30,6 +31,7 @@ async function compileCurrent(name,sandbox=false){
     await input.press('Home'); for(let n=0;n<value;n++)await input.press('ArrowRight');
   }
   await screenshot('potion-id');await page.locator('[data-action="compile-id"]').click();
+  assert.equal((await (sandbox?readSandbox():readSave())).potionIds[0].notes,'Adult rabbit; compare the body before this dose with the lasting change afterward.');
 }
 async function brewAndSell(state,subject){
   await pourRecipe(state.order.witness);await room('#experimentsBtn');
@@ -79,11 +81,11 @@ try{
   await page.setViewportSize({width:393,height:852});await screenshot('mobile-workshop');
   await room('#customerDetailsBtn');assert.match(await page.locator('#sheetContent').textContent(),/Desired enchantment/);assert.doesNotMatch(await page.locator('#sheetContent').textContent(),/Density|Texture|Acidity/);await closePanel();
   await room('#inventoryBtn');assert.match(await page.locator('#sheetContent').textContent(),/Strength/);assert.doesNotMatch(await page.locator('#sheetContent').textContent(),/Density|Viscosity|Chemical/);await screenshot('known-ingredients');await closePanel();
-  await brewAndSell(initial,'rabbit');
+  await brewAndSell(initial,'rabbit-1');
   const beforeSecond=await readSave();if(beforeSecond.brew.count){await room('#cleanBtn');await page.locator('[data-action="confirm-clean"]').click();}
   // Replenish only water via the garden's visible well.
   await room('#natureBtn');await page.locator('[data-gather="spring"]').click();await page.locator('[data-gather="spring"]').click();await closePanel();
-  const second=await readSave();await brewAndSell(second,'beetle');
+  const second=await readSave();await brewAndSell(second,'rabbit-2');
   await room('#natureBtn');await page.locator('[data-garden-node="grove-2"]').click();
   const stockBefore=(await readSave()).inventory[2];await page.locator('[data-gather="grove-2"]').click();assert.equal(await page.locator('#harvestMarker').count(),1);await screenshot('timed-harvest');
   // Hit the moving marker in the green band without mutating its state.
@@ -152,7 +154,7 @@ try{
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Melt.*Boil.*Ignite/s);
   await page.locator('#sandboxPropertiesBtn').click();
   await page.locator('#bottleBtn').click();const sealed=await readSandbox();assert.equal(sealed.brew.count,0);assert.ok(sealed.pendingBottle.contents);
-  await page.locator('[data-action="experiments"]').first().click();await page.locator('[data-subject="rabbit"]').click();await page.locator('[data-test="rabbit"]').click();await page.waitForTimeout(1400);
+  await page.locator('[data-action="experiments"]').first().click();await page.locator('[data-subject="rabbit-1"]').click();await page.locator('[data-test="rabbit-1"]').click();await page.waitForTimeout(1400);
   const tested=await readSandbox();assert.ok(Math.abs(tested.pendingBottle.volume-15)<.001);assert.equal(tested.experiments.records.length,1);
   assert.equal(await page.locator('[data-action="return-vial"]').count(),1);
   await page.locator('[data-action="pause-trial"]').click();await page.waitForTimeout(70);
@@ -178,23 +180,26 @@ try{
   const returnedMass=returned.brew.particles.mass.reduce((a,b)=>a+b,0);assert.ok(Math.abs(returnedMass+tested.experiments.records[0].sample.mass-sealed.pendingBottle.mass)<.001);
   await room('#measureBtn');assert.match(await page.locator('#sheetContent').textContent(),/needs a creature trial/);await closePanel();
   await page.locator('[data-ingredient="1"]').click();await dose(5);await page.locator('#pourBtn').click();await page.waitForTimeout(400);
-  await room('#experimentsBtn');await page.locator('[data-reset-subject="rabbit"]').click();assert.equal(await page.locator('[data-action="replay-trial"]').isDisabled(),true,'a fresh familiar must not display its old response');
-  await page.locator('[data-test="rabbit"]').click();await page.waitForTimeout(1300);await screenshot('adjusted-potion-trial');await compileCurrent('Adjusted moonlight',true);
+  await room('#experimentsBtn');
+  const rabbitsBefore=(await readSandbox()).experiments.rabbits.map(rabbit=>rabbit.id);
+  await page.locator('[data-action="buy-rabbit"]').click();
+  const freshRabbit=(await readSandbox()).experiments.rabbits.find(rabbit=>!rabbitsBefore.includes(rabbit.id));
+  assert.ok(freshRabbit,'buying supplies a distinct rabbit');
+  await page.locator(`[data-subject="${freshRabbit.id}"]`).click();assert.equal(await page.locator('[data-action="replay-trial"]').isDisabled(),true,'an untested rabbit must not display another rabbit’s response');
+  await page.locator(`[data-test="${freshRabbit.id}"]`).click();await page.waitForTimeout(1300);await screenshot('adjusted-potion-trial');await compileCurrent('Adjusted moonlight',true);
   const sandbox=await readSandbox();assert.equal(sandbox.completed,0);assert.equal(sandbox.coins,0);assert.equal(sandbox.experiments.records.length,2);assert.equal(sandbox.potionIds.length,2);assert.equal((await readSave()).completed,2);
   // Render isolated, real dose assessments offscreen. Pixel differences verify
   // that every channel has a visible response without modifying game state.
   const visuals=await page.evaluate(async()=>{
-    const {TestingRenderer}=await import('./src/game/TestingRenderer.mjs'),{assessEffects,EFFECT_PROPERTIES}=await import('./src/game/effects.mjs'),{createExperimentState}=await import('./src/game/experiments.mjs');
-    const canvas=document.createElement('canvas');canvas.width=384;canvas.height=248;const renderer=new TestingRenderer(canvas),results=[];
-    const images=['healthy','transformed','poisoned','frozen','dead'].map(state=>renderer.sprite('rabbit',state));
-    await Promise.all(images.map(image=>image.complete?Promise.resolve():new Promise(resolve=>image.onload=resolve)));
+    const {TestingRenderer}=await import('./src/game/TestingRenderer.mjs'),{EFFECT_PROPERTIES}=await import('./src/game/effects.mjs'),{assessRabbitEffects}=await import('./src/game/rabbits.mjs'),{createExperimentState}=await import('./src/game/experiments.mjs');
+    const canvas=document.createElement('canvas');canvas.width=640;canvas.height=350;const renderer=new TestingRenderer(canvas),results=[];
     for(const key of [...EFFECT_PROPERTIES,'mixed']){
-      const subject=createExperimentState().subjects.rabbit,sample={stability:100,color:'#90c6c8',...Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,key==='mixed'?.025:k===key?.2:0]))};
-      const report={...assessEffects(sample,subject,5),id:key,sample};subject.stats=report.after;
+      const subject=createExperimentState().rabbits[0],sample={stability:100,color:'#90c6c8',...Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,key==='mixed'?.025:k===key?.2:0]))};
+      const report={...assessRabbitEffects(sample,subject,5,Date.now()),id:key,sample};Object.assign(subject,report.afterRabbit);
       renderer.render(subject,report,1000);renderer.render(subject,report,2500,true);
-      const baseline=canvas.getContext('2d').getImageData(0,0,384,248).data;
-      renderer.render(subject,report,2500,false);const pixels=canvas.getContext('2d').getImageData(0,0,384,248).data;let changed=0;
-      for(let y=0;y<248;y++)for(let x=85;x<384;x++){const i=(y*384+x)*4;if(Math.abs(pixels[i]-baseline[i])+Math.abs(pixels[i+1]-baseline[i+1])+Math.abs(pixels[i+2]-baseline[i+2])>50)changed++;}
+      const baseline=canvas.getContext('2d').getImageData(0,0,640,350).data;
+      renderer.render(subject,report,2500,false);const pixels=canvas.getContext('2d').getImageData(0,0,640,350).data;let changed=0;
+      for(let y=0;y<350;y++)for(let x=85;x<640;x++){const i=(y*640+x)*4;if(Math.abs(pixels[i]-baseline[i])+Math.abs(pixels[i+1]-baseline[i+1])+Math.abs(pixels[i+2]-baseline[i+2])>50)changed++;}
       results.push({key,changed,png:canvas.toDataURL()});
     }
     const durations=[];for(let n=0;n<120;n++){const start=performance.now();renderer.render(renderer.subject,renderer.report,3000+n*34);durations.push(performance.now()-start);}
@@ -204,6 +209,6 @@ try{
   console.log(`Creature visuals: ${visuals.results.map(v=>`${v.key} ${v.changed}px`).join(', ')}; render median ${visuals.median.toFixed(2)}ms, p95 ${visuals.p95.toFixed(2)}ms.`);
   await page.goto(new URL('sandbox.html?mode=2D',base).href);await page.waitForFunction(()=>document.querySelector('#materialSelect')?.options.length>0);assert.equal(await page.locator('#scene2d').isVisible(),true);
   assert.deepEqual(errors,[]);assert.deepEqual(failedResponses,[]);
-  console.log(`Browser acceptance OK (${live?'LIVE Pages':'project path'}): two negotiated magical commissions, eight visible creature responses, replay/pause, tested vial return/reload/adjustment/retest, manual IDs, bounded garden, mobile 320×568 through desktop, separate sandbox, no automatic assays or page errors.`);
+  console.log(`Browser acceptance OK (${live?'LIVE Pages':'project path'}): two negotiated magical commissions, eight visible rabbit responses, persistent acquisition, replay/pause, tested vial return/reload/adjustment/retest, manual IDs, bounded garden, mobile 320×568 through desktop, separate sandbox, no automatic assays or page errors.`);
 }catch(error){if(page){await screenshot('browser-failure').catch(()=>{});await writeFile('test-results/browser-failure-save.json',JSON.stringify(await readSave())).catch(()=>{});}throw error;}
 finally{if(browser)await browser.close();if(server)server.kill('SIGTERM');}

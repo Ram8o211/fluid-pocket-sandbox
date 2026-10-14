@@ -1,0 +1,35 @@
+name: Rabbit Trial Acceptance
+on:
+  pull_request:
+    paths:
+      - 'src/game/**'
+      - 'scripts/rabbit-browser-test.mjs'
+      - 'public/game.css'
+      - '.github/workflows/rabbit-trials.yml'
+  push:
+    branches: [codex/rabbit-potion-trials]
+permissions:
+  contents: read
+jobs:
+  colony-and-effects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node --test tests/rabbit-colony.test.mjs tests/creature-visuals.test.mjs tests/game-experiments.test.mjs
+      - run: npm run build
+      - run: npm run e2e
+      - run: npx playwright install --with-deps chromium --only-shell
+      - run: npm run test:rabbits:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rabbit-trials-${{ github.run_id }}
+          path: test-results
+          if-no-files-found: ignore
