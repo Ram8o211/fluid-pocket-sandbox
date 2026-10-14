@@ -20,6 +20,7 @@ import { observedPotion, discoveryKnowledge } from './knowledge.mjs';
 import { ShopAudio } from './audio.mjs';
 import { AdaptiveQuality } from '../performance/AdaptiveQuality.mjs';
 import { sandboxIngredientProperties, sandboxMixtureProperties } from './sandboxProperties.mjs';
+import { arcaneTriggerTemperature, ARCANE_MARGIN } from '../simulation/ArcaneSolver.mjs';
 
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -156,25 +157,27 @@ function renderAll() {
 function sandboxTemperature(value) {
   return Number.isFinite(value) ? (value * 100).toFixed(1) + '°A' : '—';
 }
+function sandboxActivationLabel(threshold) {
+  const trigger = arcaneTriggerTemperature(threshold) + (threshold < 0 ? -ARCANE_MARGIN : ARCANE_MARGIN);
+  return (threshold < 0 ? 'Cool below ' : 'Heat above ') + sandboxTemperature(trigger);
+}
 function sandboxAwakening(properties) {
   const fraction = Math.round(Math.max(0, Math.min(1, properties.awakenedFraction || 0)) * 100);
   const charge = Math.round(Math.max(0, Math.min(1, properties.awakeningCharge || 0)) * 100);
   const effect = properties.dominantEffect ? EFFECT_DEFINITIONS[properties.dominantEffect]?.label : null;
   const expected = EFFECT_PROPERTIES.filter(key => (properties.awakeningEffects?.[key] || 0) >= .005)
     .map(key => escape(EFFECT_DEFINITIONS[key].label) + ' ' + Math.round(properties.awakeningEffects[key] * 100) + '%').join(' · ');
-  const threshold = sandboxTemperature(properties.awakeningTemperature);
-  const rune = (properties.arcaneThreshold >= 0 ? '+' : '') + Math.round(properties.arcaneThreshold * 100) + '°A';
-  const condition = properties.awakeningDirection === 'below' ? 'Cool below' : 'Heat above';
+  const activation = sandboxActivationLabel(properties.arcaneThreshold);
   const status = fraction === 100 ? 'Awakened' : fraction > 0 ? fraction + '% awakened'
     : charge > 0 ? 'Charging ' + charge + '%' : 'Dormant';
   const explanation = !effect
-    ? 'No active enchantment to amplify. Adding magical ingredients can create a new rune.'
+    ? 'No active enchantment to amplify. Add magical ingredients to create an activation threshold.'
     : !properties.awakeningReachable && fraction === 0
-      ? 'This rune cannot awaken alone at usable temperatures. Mix opposing runes to shift its critical temperature.'
-      : 'Sustain the trigger temperature for about 0.4 s: awakened effects follow the proportions of the ingredients; other effects become zero.';
+      ? 'This potion cannot awaken at usable temperatures. Mix ingredients with different activation temperatures to shift the trigger.'
+      : 'Maintain the required temperature for about 0.4 s: awakened effects follow the proportions of the ingredients; other effects become zero.';
   return '<section class="sandbox-awakening" aria-label="Arcane supertransformation">' +
     '<div class="sandbox-awakening-title"><strong>✦ Arcane supertransformation</strong><span>' + status + '</span></div>' +
-    '<div class="sandbox-awakening-grid"><div><small>Critical trigger</small><strong>' + condition + ' ' + threshold + ' (rune ' + rune + ')</strong></div>' +
+    '<div class="sandbox-awakening-grid"><div><small>Activation temperature</small><strong>' + activation + '</strong></div>' +
     '<div><small>Awakened effects</small><strong>' + (expected || 'None') + '</strong></div></div>' +
     '<p>' + explanation + '</p></section>';
 }
@@ -378,7 +381,7 @@ async function moveToNext() {
   catch (err) { if (button) button.disabled = false; notify(err.message); }
 }
 function showInventory() {
-  const rows = availableIngredients(state.world,state.equipment).map(i=>`<article class="mini-card stock-card"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(i.name)}</h3><p>${isSandbox()?'∞':Math.floor(state.inventory[i.id]||0)} ${ingredientUnit(i)}</p><p>${escape(i.lore)}</p>${effectRows(i.material,true)}<p class="quiet">Awakening rune: ${(i.material.arcaneThreshold < 0?'Cool below ':'Heat above ') + Math.round((.33 + i.material.arcaneThreshold / 40)*100) + '°A (rune ' + Math.round(i.material.arcaneThreshold*100) + '°A)'}. Blending changes the rune.</p><button class="primary" data-garden-node="${state.foraging.nodes.find(n=>n.ingredientId===i.id)?.id}">Visit garden bed</button>${!isSandbox()?`<button data-restock="${i.id}">Village parcel · 20 · ${i.solvent?0:Math.ceil(i.price*100+8)} coins</button>`:''}</article>`).join('');
+  const rows = availableIngredients(state.world,state.equipment).map(i=>`<article class="mini-card stock-card"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(i.name)}</h3><p>${isSandbox()?'∞':Math.floor(state.inventory[i.id]||0)} ${ingredientUnit(i)}</p><p>${escape(i.lore)}</p>${effectRows(i.material,true)}<p class="quiet">Activation temperature: ${sandboxActivationLabel(i.material.arcaneThreshold)}. Mixing ingredients changes this temperature.</p><button class="primary" data-garden-node="${state.foraging.nodes.find(n=>n.ingredientId===i.id)?.id}">Visit garden bed</button>${!isSandbox()?`<button data-restock="${i.id}">Village parcel · 20 · ${i.solvent?0:Math.ceil(i.price*100+8)} coins</button>`:''}</article>`).join('');
   sheet('Known ingredients',`<div class="mini-pages">${rows}</div><p class="swipe-cue">Swipe ingredients →</p>${!isSandbox()?'<button data-action="loan">Emergency guild loan</button>':''}`);
 }
 function resourceText(status) {
@@ -557,7 +560,7 @@ function prepareRecipe(index) {
   closeSheet(); renderRack(); updateHUD(); persist(); notify('Portions poured. Stir and apply the recorded heat or frost.');
 }
 function showSettings() {
-  sheet('Settings',`<label class="setting-row">Sound<input id="soundSetting" type="checkbox"${state.settings.sound?' checked':''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics==='balanced'?' selected':''}>Balanced</option><option value="eco"${state.settings.graphics==='eco'?' selected':''}>Battery saver</option></select></label><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Tutorial</button><button data-action="menu">Main menu</button></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><details><summary>Brewing guide</summary><p>Grind dry ingredients and stir with water. Gentle warmth helps separate essences blend; too much heat destroys magic. Opposed awakening runes can average into a reachable temperature and turn one enchantment overwhelming. Watch all creature responses, compare doses, and write a potion ID. Negotiate a price; refund real faults. An expensive expert seal protects the specific batch against false claims. Garden beds regrow while you are away, with limited harvests and stamina.</p></details>`);
+  sheet('Settings',`<label class="setting-row">Sound<input id="soundSetting" type="checkbox"${state.settings.sound?' checked':''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics==='balanced'?' selected':''}>Balanced</option><option value="eco"${state.settings.graphics==='eco'?' selected':''}>Battery saver</option></select></label><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Tutorial</button><button data-action="menu">Main menu</button></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><details><summary>Brewing guide</summary><p>Grind dry ingredients and stir with water. Gentle warmth helps separate essences blend. Mixing ingredients that activate through heating or cooling can shift the combined activation temperature and unlock powerful effects. Watch all creature responses, compare doses, and write a potion ID. Negotiate a price; refund real faults. An expensive expert seal protects the specific batch against false claims. Garden beds regrow while you are away, with limited harvests and stamina.</p></details>`);
 }
 
 function exportSave() {
