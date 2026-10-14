@@ -46,7 +46,8 @@ export function arcaneRecipe(ingredients) {
   return { threshold, effects, sourceCount: sources.length };
 }
 
-/** Awaken based on each parcel's temperature even as gas or unmelted powder.
+/** Temperature only triggers awakening; it never weakens existing magic.
+ * Awaken based on each parcel's temperature even as gas or unmelted powder.
  * The mixture's recipe is fixed by the ORIGINAL ingredient contributions,
  * not by which of its intermediate live effects happens to be strongest.
  */
@@ -78,11 +79,6 @@ export function stepArcana(ps, dt, events = null, mixtures = null) {
           events?.pushEvent(ps.x[i], ps.y[i], ps.z[i], 1, 0);
         }
       }
-    }
-    const excess = temperature - ps.magicDecayTemperature[i];
-    if (excess > 0) {
-      const survival = Math.exp(-excess * dt * .7);
-      for (const key of EFFECT_PROPERTIES) ps[key][i] *= survival;
     }
   }
 }
