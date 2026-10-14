@@ -1,5 +1,6 @@
 import { EFFECT_PROPERTIES } from './effects.mjs';
 import { observedPotion } from './knowledge.mjs';
+import { potionRecord } from './potionTransfer.mjs';
 
 /** Concentrations and source proportions identify an exact batch; draining a
  * dose changes quantity, not identity. A new brew always gets a new batchId. */
@@ -42,7 +43,7 @@ export function compilePotionId(state, sample, estimates, name = '') {
   const document = { id: old?.id || `potion-${state.potionIds.length + 1}-${sample.batchId.slice(0,8)}`,
     fingerprint, batchId: sample.batchId, name: String(name || 'Unnamed potion').trim().slice(0,40),
     estimates: { ...estimates }, trials: (state.experiments?.records || []).filter(r => r.sample.batchId === sample.batchId).map(r => r.id).slice(0,20),
-    sample: structuredClone(sample), at: Date.now() };
+    sample: potionRecord(sample), at: Date.now() };
   if (old) state.potionIds.splice(state.potionIds.indexOf(old), 1);
   state.negotiation = null;
   state.potionIds.unshift(document); state.potionIds.length = Math.min(80, state.potionIds.length);

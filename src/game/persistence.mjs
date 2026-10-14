@@ -7,6 +7,7 @@ import { createForaging } from './gathering.mjs';
 import { createExperimentState, EXPERIMENT_SUBJECTS, EXPERIMENT_RECORD_LIMIT } from './experiments.mjs';
 import { generateOrder } from './orders.mjs';
 import { observedPotion } from './knowledge.mjs';
+import { validatePotionContents } from './potionTransfer.mjs';
 
 export const SAVE_KEY = 'alchemists-shop-save';
 export const SANDBOX_SAVE_KEY = 'alchemists-shop-sandbox-save';
@@ -81,6 +82,7 @@ export function validateSave(state) {
     if (r.comparison !== undefined && !['target', 'maximum'].includes(r.comparison) || r.minimum !== undefined && (!nonnegative(r.minimum) || r.minimum > Number(r.target))) throw new Error('Invalid effect requirement.');
   }
   if (state.pendingBottle && !validSample(state.pendingBottle)) throw new Error('Invalid saved vial.');
+  if (state.pendingBottle) validatePotionContents(state.pendingBottle);
   for (const discovery of state.discoveries) if (!validSample(discovery.sample) || typeof discovery.tested !== 'boolean' || !Array.isArray(discovery.observations) || discovery.observations.some(line => typeof line !== 'string')) throw new Error('Invalid saved discovery.');
   if (!['brewing', 'inspection', 'sale'].includes(state.stage)) throw new Error('Invalid shop state.');
   if (!['shop', 'sandbox'].includes(state.mode)) throw new Error('Invalid game mode.');

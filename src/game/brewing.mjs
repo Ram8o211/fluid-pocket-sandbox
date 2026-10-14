@@ -9,6 +9,7 @@ import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSup
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
+import { capturePotionContents, restorePotionContents } from './potionTransfer.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
 const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
@@ -221,6 +222,7 @@ export class BrewingSession {
     const materialFraction = withdrawnMass / Math.max(.00001, ps.totalMass());
     const cost = { ingredients: this.cost.ingredients * materialFraction, energy: this.cost.energy * materialFraction };
     const sample = measurePotion(this.engine, selections, this.history, cost);
+    const contents = experiment ? null : capturePotionContents(ps, selections, this.engine.reactions.mixtures, this.engine.materials);
     const bottledPortions = this.portions.map(p => ({ ...p, ml: p.ml * materialFraction }));
     for (let n = selections.length - 1; n >= 0; n--) { const { index, mass } = selections[n]; ps.mixtureAmount[index] *= 1 - fraction; ps.mass[index] -= mass; if (ps.mass[index] < .00001) ps.removeAt(index); }
     this.cost.ingredients -= cost.ingredients; this.cost.energy -= cost.energy;
@@ -229,7 +231,24 @@ export class BrewingSession {
     this.bottles++;
     const id = `vial-${this.bottles}-${Math.round(this.history.elapsed * 1000)}`;
     if (ps.count === 0) { this.engine.reset(); this.thermal.reset(); this.history = HISTORY(); this.cost = { ingredients: 0, energy: 0 }; }
-    return { ...sample, id, batchId: this.batchId, portions: bottledPortions };
+    return { ...sample, id, batchId: this.batchId, portions: bottledPortions, ...(contents ? { contents } : {}) };
+  }
+  returnPotion(sample) {
+    const beforeMass = this.engine.ps.totalMass();
+    const volume = restorePotionContents(this.engine, sample, this.capacity, this.ingredients);
+    const activation = ((this.history.activation || 0) * beforeMass + (sample.history?.activation || 0) * sample.mass) / (beforeMass + sample.mass);
+    if (!beforeMass) this.history = { ...HISTORY(), ...sample.history };
+    else for (const key of Object.keys(HISTORY())) this.history[key] = Math.max(this.history[key] || 0, sample.history?.[key] || 0);
+    this.history.activation = activation;
+    this.cost.ingredients += sample.cost.ingredients || 0; this.cost.energy += sample.cost.energy || 0;
+    this.portions.push(...(sample.portions || []).map(portion => ({ ...portion })));
+    this.heat = this.cool = 0;
+    // Reopening a sealed potion creates a new preparation. Its old ID and seal
+    // remain in the notebook, but cannot certify adjustments or a new sale.
+    this.batchId = crypto.randomUUID();
+    this.lastPour = { x: 0, color: sample.color, form: 'liquid', until: this.engine.time + .6 };
+    this.confineCauldron();
+    return volume;
   }
   clean() {
     const wasted = { ...this.cost, volume: this.occupiedVolume };

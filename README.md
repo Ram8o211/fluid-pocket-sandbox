@@ -16,10 +16,17 @@ regrowth while you are away. Tending costs water. Village parcels are expensive
 and have shipment cooldowns. Sandbox mode provides infinite ingredients and
 saves separately.
 
-Creature trials consume real 2, 5 or 10 ml doses. Watch the animated familiar,
-compare with its untreated appearance, and **write your own potion ID** with
-eight estimated enchantment values. Neither trials nor the recipe book reveal
-an automatic assay. Feed restores a familiar for another comparison.
+Creature trials consume real 2, 5 or 10 ml doses. A large animated familiar lifts
+weights, approaches its companion, transforms, or reacts visibly to elemental
+and harmful magic. Compare the before-dose reference, replay or pause the scene,
+and **write your own potion ID** with eight estimated enchantment values. Neither
+trials nor the recipe book reveal an automatic assay. Feed starts a fresh trial.
+
+Use **Pour back** in the vial or trial room to return the unconsumed potion to
+the cauldron. Its magic, temperature, expenses and ingredient proportions travel
+with it, including irreversible awakening and heat damage. Adjust the brew and
+test it again: reopening invalidates the previous ID, seal and price offer.
+Consumed doses stay consumed. A full pot rejects the transfer without losing it.
 
 Bottle and bargain with the customer through offers and counteroffers. Payment
 follows the agreement, while effectiveness is discovered after delivery.

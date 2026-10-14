@@ -37,7 +37,7 @@ export function measurePotion(engine, selections, history, cost = { ingredients:
   const potency = 100 * clamp(arcana / mass * (.8 + .2 * activation) * (.55 + .45 * stability / 100), 0, 1);
   const effects = readEffects(sampled.material);
   return {
-    volume, mass, color: sampled.material.color, density: mass / volume,
+    volume, mass, material: { ...sampled.material }, color: sampled.material.color, density: mass / volume,
     viscosity: viscosity / mass, temperature: sampled.temperature,
     volatility: sampled.material.volatility, stability, potency, ...effects, effects, liquidFraction: liquidMass / mass,
     homogeneity, composition, history: { ...history }, cost: { ...cost },

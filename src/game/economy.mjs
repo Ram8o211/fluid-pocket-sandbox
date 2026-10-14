@@ -8,6 +8,7 @@ import { clamp } from '../simulation/math.mjs';
 import { createForaging } from './gathering.mjs';
 import { createExperimentState } from './experiments.mjs';
 import { observedPotion } from './knowledge.mjs';
+import { potionRecord } from './potionTransfer.mjs';
 
 export const SANDBOX_STOCK = 240;
 
@@ -99,7 +100,7 @@ export function completeSale(state) {
   state.debt = Math.max(0, (state.debt || 0) - repayment);
   state.reputation = clamp(state.reputation + sale.reputationDelta, 0, 100);
   state.completed++; state.soldOrderIds.push(state.order.id); state.soldOrderIds = state.soldOrderIds.slice(-100);
-  state.lastSale = { ...sale, customer: state.order.customer, sample: state.pendingBottle, repayment };
+  state.lastSale = { ...sale, customer: state.order.customer, sample: potionRecord(state.pendingBottle), repayment };
   if (modern) recordDelivery(state,sale,state.pendingBottle,state.order);
   state.pendingBottle = null; state.stage = 'sale';
   return state.lastSale;
@@ -115,7 +116,7 @@ export function nextCustomer(state) {
 export function recordDiscovery(state, sample, name = '') {
   if (!sample || sample.volume < 1) throw new Error('Measure or bottle a potion first.');
   const observation = observedPotion(state, sample);
-  const discovery = { id: crypto.randomUUID(), name: String(name || `Experiment ${state.discoveries.length + 1}`).trim().slice(0, 40), sample: structuredClone(sample), orderId: state.order?.id,
+  const discovery = { id: crypto.randomUUID(), name: String(name || `Experiment ${state.discoveries.length + 1}`).trim().slice(0, 40), sample: potionRecord(sample), orderId: state.order?.id,
     tested: Boolean(observation), observations: [], potionId: structuredClone(findPotionId(state,sample)), trialId: observation?.id || null,
     preparation: structuredClone(observation?.preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history }) };
   state.discoveries.unshift(discovery); state.discoveries = state.discoveries.slice(0, 80);

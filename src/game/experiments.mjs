@@ -1,4 +1,5 @@
 import { assessEffects } from './effects.mjs';
+import { potionRecord, scalePotionContents } from './potionTransfer.mjs';
 
 export const EXPERIMENT_SUBJECTS = Object.freeze([
   { id: 'rabbit', name: 'Moon Rabbit', kind: 'animal', icon: 'rabbit', description: 'Observe vitality, affection and changing strength.' },
@@ -16,6 +17,11 @@ export function createExperimentState() {
   return { subjects: Object.fromEntries(EXPERIMENT_SUBJECTS.map(subject => [subject.id, freshSubject(subject)])), records: [], serial: 0 };
 }
 
+export function currentExperimentReport(state, subjectId) {
+  const subject = state.experiments?.subjects[subjectId];
+  return subject?.trials ? state.experiments.records.find(report => report.subjectId === subjectId && report.at === subject.lastTestAt) || null : null;
+}
+
 /** A dose and its remainder are independent snapshots. Intensive properties
  * stay unchanged; all stored quantities and expenses follow the same fraction.
  * The remainder retains the sealed vial's ID, so tasting cannot duplicate it. */
@@ -30,6 +36,7 @@ export function splitPotionSample(sample, requestedMl = 5) {
     if (copy.composition) for (const key of Object.keys(copy.composition)) copy.composition[key] *= ratio;
     if (copy.phaseMass) copy.phaseMass = copy.phaseMass.map(mass => mass * ratio);
     if (copy.portions) copy.portions = copy.portions.map(portion => ({ ...portion, ml: portion.ml * ratio }));
+    if (copy.contents) copy.contents = scalePotionContents(copy.contents, ratio);
     return copy;
   };
   return { dose: scaled(fraction), remaining: fraction >= 1 - 1e-10 ? null : scaled(1 - fraction) };
@@ -46,12 +53,12 @@ export function runExperiment(state, sample, subjectId, volume = 5, now = Date.n
   if (!subject) throw new Error('Choose an experiment subject.');
   if (subject.readyAt > now) throw new Error('Let this familiar recover before another trial.');
   if (!subject.stats.alive) throw new Error('Reset this subject before another experiment.');
-  const { dose } = splitPotionSample(sample, volume);
+  const { dose } = splitPotionSample(potionRecord(sample), volume);
   const assessment = assessEffects(dose, subject, dose.volume);
   const serial = experiments.serial + 1;
   const report = { ...assessment, id: `trial-${serial}`, serial, subjectName: subject.name, at: now,
-    sample: dose, sampleId: sample.id || null, volume: dose.volume, subjectId: subject.id, kind: subject.kind,
-    preparation: structuredClone(preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history || {} }) };
+    sample: potionRecord(dose), sampleId: sample.id || null, volume: dose.volume, subjectId: subject.id, kind: subject.kind,
+    preparation: potionRecord(preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history || {} }) };
   subject.readyAt = now + (state.equipment?.analyzer ? 3000 : 6000);
   subject.stats = { ...assessment.after }; subject.trials++; subject.lastTestAt = now;
   experiments.serial = serial; experiments.records.unshift(structuredClone(report));
