@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { trialVisuals, visualResponse } from '../src/game/TestingRenderer.mjs';
 import { createExperimentState, runExperiment, resetExperimentSubject, currentExperimentReport } from '../src/game/experiments.mjs';
 import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
+import { drawRabbit } from '../src/game/RabbitRenderer.mjs';
+import { rabbitVisualResponse } from '../src/game/RabbitPixelArt.mjs';
+import { createRabbitColony, assessRabbitEffects, RABBIT_THRESHOLDS } from '../src/game/rabbits.mjs';
 
 const sample = effects => ({ volume: 20, mass: 20, stability: 100, temperature: .33, cost: { ingredients: 1, energy: 0 },
   ...Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, effects[key] || 0])) });
@@ -47,4 +50,39 @@ test('new rabbits begin untreated while each original rabbit keeps its reactions
   assert.equal(state.experiments.records.length, 1);
   const baseline = trialVisuals(replacement, null);
   assert.ok(EFFECT_PROPERTIES.every(key => baseline[key] === 0));
+});
+
+test('dilute rabbit anatomy is visible while inert magic stays absent and dose stages remain ordered', () => {
+  for (const threshold of Object.values(RABBIT_THRESHOLDS)) {
+    assert.equal(rabbitVisualResponse(0, threshold), 0);
+    assert.equal(rabbitVisualResponse(.002, threshold), 0);
+    assert.ok(rabbitVisualResponse(.025, threshold) > .15, 'a weak first dose is legible');
+    const stages = [.025, .2, .8, 1.7].map(load => rabbitVisualResponse(load, threshold));
+    assert.ok(stages.every((value, i) => i === 0 || value >= stages[i - 1]));
+  }
+});
+
+test('procedural rabbits and every effect use integer pixels and a flat palette', () => {
+  for (const effect of [null, ...EFFECT_PROPERTIES]) {
+    const rabbit = createRabbitColony(1000).rabbits[0];
+    if (effect) Object.assign(rabbit, assessRabbitEffects(sample({ [effect]: .2 }), rabbit, 5, 1000).afterRabbit);
+    const pixels = [], scales = [];
+    // No path or gradient methods exist on this context: drawing must be pixels.
+    const ctx = { save() {}, restore() {}, translate() {}, scale(x, y) { scales.push([x, y]); },
+      fillStyle: '', imageSmoothingEnabled: true,
+      fillRect(x, y, w, h) { pixels.push([x, y, w, h, this.fillStyle]); } };
+    drawRabbit(ctx, rabbit, 200, 280, 202, 200, { now: 1200 });
+    assert.ok(pixels.length > 100);
+    assert.ok(pixels.every(pixel => pixel.slice(0, 4).every(Number.isInteger)));
+    assert.ok(pixels.every(pixel => /^#[0-9a-f]{6}$/i.test(pixel[4])), 'flat colors rather than smooth gradients');
+    assert.ok(scales.every(scale => scale.every(Number.isInteger)), 'whole pixels at each rabbit size');
+  }
+});
+
+test('a weak fire dose remains visible through the immediate replay without amplifying simulation exposure', () => {
+  const rabbit = createRabbitColony(1000).rabbits[0];
+  const report = assessRabbitEffects(sample({ fire: .025 }), rabbit, 5, 1000);
+  assert.equal(report.afterRabbit.exposure.fire, .025);
+  assert.ok(report.afterRabbit.activeFireUntil >= 2800);
+  assert.ok(report.after.alive);
 });

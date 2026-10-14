@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-rabbit-colony-35';
+const CACHE = 'alchemist-shop-pixel-rabbit-trials-36';
 const CORE = [
   './',
   './index.html',
@@ -23,6 +23,7 @@ const CORE = [
   './src/game/TestingRenderer.mjs',
   './src/game/rabbits.mjs',
   './src/game/RabbitRenderer.mjs',
+  './src/game/RabbitPixelArt.mjs',
   './src/simulation/ArcaneSolver.mjs',
   './src/game/potion.mjs',
   './src/game/brewing.mjs',

@@ -203,6 +203,65 @@ try {
     }
     await screenshot(`rabbit-colony-${viewport.width}`);
   }
+  // Real touch dosing starts from a new potion in each phone orientation. The
+  // footer is reachable even while the player is reading lower down the room.
+  for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }, { width: 852, height: 393 }]) {
+    const phone = await browser.newContext({ viewport, hasTouch: true, isMobile: true, deviceScaleFactor: 1 });
+    const mobile = await phone.newPage();
+    mobile.on('pageerror', error => errors.push(error.message));
+    await mobile.goto(base); await mobile.waitForSelector('body[data-game-ready="true"]');
+    await mobile.locator('#worldSeed').fill('mobile-rabbit-trials');
+    await mobile.locator('#sandboxBtn').tap();
+    await mobile.waitForSelector('body[data-game-state="brewing"]');
+    await mobile.clock.install();
+    await mobile.locator('[data-ingredient="12"]').tap();
+    await mobile.locator('[data-dose="10"]').tap();
+    await mobile.locator('#pourBtn').tap();
+    await mobile.clock.runFor(600); await mobile.clock.resume();
+    await mobile.locator('#bottleBtn').tap();
+    await mobile.locator('[data-action="experiments"]').first().tap();
+    assert.equal(await mobile.locator('#colonyOverview').evaluate(element => element.open), viewport.width >= 760, 'the pen folds away on narrow phones');
+    assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'touch room has no horizontal page overflow');
+    const mobileId = await mobile.locator('[data-test]').getAttribute('data-test');
+    const doseButton = mobile.locator(`[data-test="${mobileId}"]`);
+    for (const selector of ['#trialDose', '[data-test]']) {
+      const bounds = await mobile.locator(selector).boundingBox();
+      assert.ok(bounds.width >= 44 && bounds.height >= 44 && bounds.y >= 0 && bounds.y + bounds.height <= viewport.height,
+        `${selector} is a visible thumb target at ${viewport.width}×${viewport.height}`);
+    }
+    await mobile.locator('#trialDose').selectOption('2');
+    await mobile.locator('#colonyOverview summary').tap();
+    await mobile.locator('.rabbit-room .sheet-body').evaluate(element => { element.scrollTop = 150; });
+    const before = await mobile.evaluate(() => {
+      const body = document.querySelector('.rabbit-room .sheet-body');
+      window.trialScrollBody = body; window.trialDoseButton = document.querySelector('[data-test]');
+      return { scroll: body.scrollTop, page: scrollY, records: JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')).experiments.records.length };
+    });
+    assert.ok(before.scroll > 30, 'test begins below the panel start');
+    await doseButton.tap(); await mobile.clock.runFor(320); await mobile.clock.resume();
+    const after = await mobile.evaluate(() => ({
+      scroll: document.querySelector('.rabbit-room .sheet-body').scrollTop, page: scrollY,
+      sameBody: window.trialScrollBody === document.querySelector('.rabbit-room .sheet-body'),
+      sameButton: window.trialDoseButton === document.querySelector('[data-test]'),
+      state: JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save'))
+    }));
+    assert.ok(after.sameBody && after.sameButton, 'a dose retains the live panel and dose control');
+    assert.ok(Math.abs(after.scroll - before.scroll) <= 1, 'touch dosing preserves panel scroll');
+    assert.equal(after.page, before.page, 'touch dosing does not jump the page');
+    assert.equal(after.state.experiments.records.length, before.records + 1, 'a tap applies exactly one dose');
+    assert.ok(Math.abs(after.state.pendingBottle.volume - 8) < .001, 'a real small vial loses the dose');
+    await mobile.locator('[data-action="pause-trial"]').click();
+    const response = await mobile.locator('#creatureCanvas').evaluate(canvas => canvas.toDataURL());
+    await mobile.locator('[data-action="untreated"]').click();
+    await mobile.clock.runFor(50); await mobile.clock.resume();
+    assert.notEqual(await mobile.locator('#creatureCanvas').evaluate(canvas => canvas.toDataURL()), response, 'the first weak dose is already visible after 320ms');
+    await mobile.locator('[data-action="untreated"]').click();
+    await mobile.locator('.rabbit-room .sheet-body').evaluate(element => { element.scrollTop = 0; });
+    const session = await phone.newCDPSession(mobile);
+    const capture = await session.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    await writeFile(`test-results/rabbit-touch-${viewport.width}x${viewport.height}.png`, Buffer.from(capture.data, 'base64'));
+    await session.detach(); await phone.close();
+  }
   const visuals = await page.evaluate(async () => {
     const { createRabbitColony, assessRabbitEffects } = await import('./src/game/rabbits.mjs');
     const { EFFECT_PROPERTIES } = await import('./src/game/effects.mjs');
