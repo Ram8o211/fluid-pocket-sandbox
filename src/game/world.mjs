@@ -42,7 +42,7 @@ const INGREDIENTS = [
   { id: 11, name: 'Mica Dust', form: 'powder', shape: 'powder', icon: '✦', color: '#c5b5d8', density: 1.22, viscosity: .61, volatility: .15, miscibility: .405, price: .075,
     lore: 'Naturally loose mineral grains collected from the bank. Stir with a little water to knead dough; abundant water and sustained stirring make a fluid infusion.', effects: { transformation: .28, love: .12, acidity: .08 } },
   { id: 12, name: 'Phoenix Sap', form: 'liquid', shape: 'water', icon: '🔥', color: '#e9914b', density: 1.08, viscosity: .4, volatility: .3, miscibility: .64, price: .24, lore: 'Golden sap tapped from a slow-growing phoenix tree. Carries fire and courage; warmth helps it blend.', effects: { fire: .88, strength: .4 } },
-  { id: 13, name: 'Moon Dew', form: 'liquid', shape: 'water', icon: '🌙', color: '#81c3ed', density: .91, viscosity: .18, volatility: .2, miscibility: .43, price: .22, lore: 'Collected from moonflowers. Carries affection and frost; its awakening rune opposes spring water.', effects: { love: .8, freeze: .46 } },
+  { id: 13, name: 'Moon Dew', form: 'liquid', shape: 'water', icon: '🌙', color: '#81c3ed', density: .91, viscosity: .18, volatility: .2, miscibility: .43, price: .22, lore: 'Collected from moonflowers. Carries affection and frost; its cooling activation contrasts with spring water.', effects: { love: .8, freeze: .46 } },
   { id: 14, name: 'Dream Nectar', form: 'liquid', shape: 'water', icon: '✨', color: '#c78ded', density: 1.12, viscosity: .38, volatility: .3, miscibility: .45, price: .28, lore: 'A small harvest from dream blossoms. Carries transformation with a trace of withering magic.', effects: { transformation: .9, acidity: .14 } }
 ];
 

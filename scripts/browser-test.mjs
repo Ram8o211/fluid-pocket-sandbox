@@ -152,7 +152,7 @@ try{
   assert.ok(layout.inspectorTop>=layout.labBottom-1,'inspector must follow, not overlay, the cauldron');
   assert.ok(layout.inspectorHeight>=290&&layout.bodyHeight>=190,'inspector must have enough reading space on mobile');
   assert.equal(layout.workbenchOverflow,'auto','expanded workshop must scroll rather than clip the inspector');
-  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Arcane supertransformation.*Critical trigger.*Awakened effects/s);
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Arcane supertransformation.*Activation temperature.*Awakened effects/s);
   assert.doesNotMatch(await page.locator('#sandboxInspectorBody').textContent(),/Magic decays above/i,
     'magical potency must no longer have a heat-decay limit');
   // The entire ledger must remain readable on short and normal mobile screens.
@@ -176,10 +176,12 @@ try{
   await page.locator('#sandboxInspectIngredient').selectOption('13');
   assert.ok((await page.locator('#selectedName').textContent()).length>0);
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),
-    /Cool below 15\.5°A \(rune -700°A\)/,
-    'negative rune shows a physically reachable cold trigger while preserving its signed value');
-  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Sustain the trigger temperature/i,
-    'reachable runes prompt the player to maintain the real awakening temperature');
+    /Cool below 14\.0°A/,
+    'negative ingredient threshold appears only as the effective cooling temperature');
+  assert.doesNotMatch(await page.locator('#sandboxInspectorBody').textContent(),/rune/i,
+    'inspector shows only the activation temperature, not the internal rune threshold');
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Maintain the required temperature/i,
+    'reachable recipes explain how long to hold the activation temperature');
   await page.locator('#sandboxMixtureTab').click();
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/cauldron is empty/i);
   await page.locator('#sandboxPropertiesBtn').click();
