@@ -101,7 +101,11 @@ export class LiquidFunFluid {
         throw new Error('LiquidFun non-finite parcel ' + JSON.stringify({
           index:i, step:this.frames, count, x:position[j], y:position[j+1],
           vx:velocity[j], vy:velocity[j+1], sourceX:ps.x[i], sourceY:ps.y[i],
-          phase:ps.phase[i], inputVX:ps.vx[i], inputVY:ps.vy[i]
+          phase:ps.phase[i], inputVX:ps.vx[i], inputVY:ps.vy[i],
+          nativeCount:this.system.GetParticleCount(), positionLength:position.length,
+          velocityLength:velocity.length,
+          finite:{x:Number.isFinite(position[j]),y:Number.isFinite(position[j+1]),
+            vx:Number.isFinite(velocity[j]),vy:Number.isFinite(velocity[j+1])}
         }));
       ps.x[i] = position[j]; ps.y[i] = position[j + 1];
       ps.vx[i] = velocity[j]; ps.vy[i] = velocity[j + 1];
