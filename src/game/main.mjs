@@ -11,7 +11,8 @@ import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
 import { icon, bottleSprite, ingredientSprite, naturalLandscapeSprite, experimentSubjectSprite, portraitSprite, workshopBackground } from './art.mjs';
 import { resourceStatus, gatherIngredient, tendGarden, gardenStamina } from './gathering.mjs';
-import { runExperiment, resetExperimentSubject, splitPotionSample } from './experiments.mjs';
+import { runExperiment, resetExperimentSubject, splitPotionSample, currentExperimentReport } from './experiments.mjs';
+import { returnVialToCauldron, potionRecord } from './potionTransfer.mjs';
 import { EFFECT_DEFINITIONS, EFFECT_PROPERTIES, describeEffects } from './effects.mjs';
 import { observedPotion, discoveryKnowledge } from './knowledge.mjs';
 import { ShopAudio } from './audio.mjs';
@@ -239,7 +240,7 @@ function showVial() {
   const vial = state.pendingBottle; if (!vial) return;
   latestInspection = vial;
   const document = findPotionId(state,vial), seal = certificateFor(state,vial), cost = certificationCost(state);
-  sheet('Sealed potion',`<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><h3>${escape(document?.name || 'Unidentified potion')}</h3><p>${vial.volume.toFixed(1)} / ${state.order.volume} ml</p>${document?`<small>${escape(document.id)}</small>`:''}</div></div>${effectRows(vial,document)}${document?'<p class="quiet">Your written estimates. The customer will discover the real effects after using it.</p>':''}<div class="vial-actions"><button class="primary" data-action="${isSandbox()?'experiments':'sell'}"${!isSandbox()&&!document?' disabled':''}>${isSandbox()?'Creature trials':'Negotiate price'}</button><button class="secondary" data-action="potion-id">${document?'Edit potion ID':'Write potion ID'}</button><button class="secondary" data-action="experiments">Test a spare dose</button>${!isSandbox()?`<button data-action="certify"${seal||state.coins<cost||!document?' disabled':''}>${seal?'Expert seal attached':`Expert seal · ${cost} coins`}</button><p class="quiet">A seal applies only to this batch. It defeats false claims; genuine faults still require a refund.</p>`:''}<button data-action="save-inspection">Remember formula</button><button class="danger-button" data-action="discard-vial">Discard vial</button></div>`);
+  sheet('Sealed potion',`<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><h3>${escape(document?.name || 'Unidentified potion')}</h3><p>${vial.volume.toFixed(1)} / ${state.order.volume} ml</p>${document?`<small>${escape(document.id)}</small>`:''}</div></div>${effectRows(vial,document)}${document?'<p class="quiet">Your written estimates. The customer will discover the real effects after using it.</p>':''}<div class="vial-actions"><button class="primary" data-action="${isSandbox()?'experiments':'sell'}"${!isSandbox()&&!document?' disabled':''}>${isSandbox()?'Creature trials':'Negotiate price'}</button><button class="secondary" data-action="return-vial">Pour back · ${vial.volume.toFixed(1)} ml</button><button class="secondary" data-action="experiments">Test a spare dose</button><button class="secondary" data-action="potion-id">${document?'Edit potion ID':'Write potion ID'}</button>${!isSandbox()?`<button data-action="certify"${seal||state.coins<cost||!document?' disabled':''}>${seal?'Expert seal attached':`Expert seal · ${cost} coins`}</button><p class="quiet">A seal applies only to this batch. It defeats false claims; genuine faults still require a refund.</p>`:''}<button data-action="save-inspection">Remember formula</button><button class="danger-button" data-action="discard-vial">Discard vial</button></div>`);
 }
 function showNegotiation() {
   const deal = startNegotiation(state); persist();
@@ -307,16 +308,23 @@ function finishHarvest() {
   renderRack();persist();audio.play();showNature(nodeId);notify(`Harvested ${result.quantity}${result.wasted?` · ${result.wasted} lost`:''}.`);
 }
 function showExperiments() {
-  const subject=state.experiments.subjects[selectedSubject],report=state.experiments.records.find(r=>r.subjectId===selectedSubject);
+  const subject=state.experiments.subjects[selectedSubject],report=currentExperimentReport(state,selectedSubject);
   const available=state.pendingBottle?.volume || brew.liquidVolume;
-  sheet('Creature trials',`<div class="subject-selector">${Object.values(state.experiments.subjects).map(c=>`<button data-subject="${c.id}" class="${c.id===selectedSubject?'active':''}"><img src="${experimentSubjectSprite(c.id,'healthy')}" alt=""><span>${escape(c.name)}</span></button>`).join('')}</div><canvas id="creatureCanvas" width="320" height="176" aria-label="Creature enclosure, visual potion response"></canvas><div id="experimentReport" class="trial-controls"><button data-action="untreated" aria-pressed="${showUntreated}">${showUntreated?'Observe response':'Untreated view'}</button><label>Dose <select id="trialDose">${[2,5,10].map(v=>`<option value="${v}"${testDose===v?' selected':''}>${v} ml</option>`).join('')}</select></label><button data-test="${subject.id}"${available<1||!subject.stats.alive||subject.readyAt>Date.now()?' disabled':''}>Give dose</button><button data-reset-subject="${subject.id}">Fresh trial · ${isSandbox()?0:state.equipment.densimeter?1:3} coins</button></div><p class="quiet">${available.toFixed(1)} ml available · ${subject.trials} trials · ${report?`${report.volume.toFixed(1)} ml last dose`:'Untreated'}${subject.readyAt>Date.now()?' · resting':''}</p><div class="action-list"><button class="primary" data-action="potion-id"${!observedPotion(state,state.pendingBottle||brew.inspectLiquid())?' disabled':''}>Write potion ID</button><button class="secondary" data-action="${state.pendingBottle?'review-vial':'close'}">${state.pendingBottle?'Back to vial':'Back to brewing'}</button></div>`);
+  sheet('Creature trials',`<div class="subject-selector">${Object.values(state.experiments.subjects).map(c=>`<button data-subject="${c.id}" class="${c.id===selectedSubject?'active':''}"><img src="${experimentSubjectSprite(c.id,'healthy')}" alt=""><span>${escape(c.name)}</span></button>`).join('')}</div>
+    <div class="trial-stage-labels"><span>Before</span><span id="trialViewLabel">${!report||showUntreated?'Before dose':'After dose'}</span></div>
+    <canvas id="creatureCanvas" width="384" height="248" aria-label="Visual creature response, with a before-dose reference on the left"></canvas>
+    <div class="trial-playback"><button data-action="untreated" aria-pressed="${showUntreated}"${!report?' disabled':''}>${showUntreated?'After dose':'Before dose'}</button><button data-action="replay-trial"${!report?' disabled':''}>Replay</button><button data-action="pause-trial" aria-pressed="false"${!report?' disabled':''}>Pause</button></div>
+    <div id="experimentReport" class="trial-controls"><label>Dose <select id="trialDose">${[2,5,10].map(v=>`<option value="${v}"${testDose===v?' selected':''}>${v} ml</option>`).join('')}</select></label><button data-test="${subject.id}"${available<1||!subject.stats.alive||subject.readyAt>Date.now()?' disabled':''}>Give dose</button><button data-reset-subject="${subject.id}">Fresh trial · ${isSandbox()?0:state.equipment.densimeter?1:3} coins</button></div>
+    <p class="quiet trial-quantity">${available.toFixed(1)} ml available · ${report?`${report.volume.toFixed(1)} ml last dose`:'Untreated'}<span id="trialRest">${subject.readyAt>Date.now()?' · resting':''}</span></p>
+    <div class="trial-actions"><button class="primary" data-action="potion-id"${!observedPotion(state,state.pendingBottle||brew.inspectLiquid())?' disabled':''}>Write potion ID</button><button class="secondary" data-action="${state.pendingBottle?'return-vial':'close'}">${state.pendingBottle?`Pour back · ${available.toFixed(1)} ml`:'Back to brewing'}</button></div>${state.pendingBottle?'<button class="trial-vial-link" data-action="review-vial">Back to vial</button>':''}`);
   currentRoom='experiments';testingRenderer=new TestingRenderer($('creatureCanvas'));
-  roomTimer=setInterval(()=>{if(currentRoom==='experiments'){const c=state.experiments.subjects[selectedSubject],b=$('sheetContent').querySelector('[data-test]');if(b)b.disabled=!(state.pendingBottle?.volume||brew.liquidVolume)||!c.stats.alive||c.readyAt>Date.now();}},1000);
+  testingRenderer.render(subject,report,performance.now(),showUntreated);
+  roomTimer=setInterval(()=>{if(currentRoom==='experiments'){const c=state.experiments.subjects[selectedSubject],b=$('sheetContent').querySelector('[data-test]'),resting=c.readyAt>Date.now();if(b)b.disabled=!(state.pendingBottle?.volume||brew.liquidVolume)||!c.stats.alive||resting;if($('trialRest'))$('trialRest').textContent=resting?' · resting':'';}},1000);
 }
 function testPotion(subjectId) {
   const subject=state.experiments.subjects[subjectId];
   if(!subject?.stats.alive||subject.readyAt>Date.now())throw new Error('Prepare a fresh trial or let this familiar rest.');
-  const preparation=structuredClone(state.pendingBottle||brew.inspectLiquid());
+  const preparation=potionRecord(state.pendingBottle||brew.inspectLiquid());
   if(state.pendingBottle){const split=splitPotionSample(state.pendingBottle,testDose);experimentReport=runExperiment(state,split.dose,subjectId,split.dose.volume,Date.now(),preparation);state.pendingBottle=split.remaining;if(!split.remaining)state.stage='brewing';}
   else {if(brew.liquidVolume<1)throw new Error('Prepare a liquid potion first.');const sample=brew.takeSample(testDose);experimentReport=runExperiment(state,sample,subjectId,sample.volume,Date.now(),preparation);}
   state.negotiation=null;latestInspection=preparation;selectedSubject=subjectId;showUntreated=false;
@@ -435,7 +443,7 @@ function bindUI() {
     if (button.dataset.gather) { startHarvest(button.dataset.gather); return; }
 
     if (button.dataset.test) { testPotion(button.dataset.test); return; }
-    if (button.dataset.resetSubject) { resetExperimentSubject(state, button.dataset.resetSubject); experimentReport = null; renderAll(); persist(); showExperiments(); return; }
+    if (button.dataset.resetSubject) { resetExperimentSubject(state, button.dataset.resetSubject); experimentReport = null; showUntreated=false; renderAll(); persist(); showExperiments(); return; }
     if (button.dataset.restock) { const result = restock(state, Number(button.dataset.restock), 20); renderAll(); persist(); showInventory(); notify(`Refilled ${result.quantity} ml for ${result.cost} coins.`); return; }
     if (button.dataset.trade) { const result = tradeStock(state, Number(button.dataset.trade)); renderAll(); persist(); showInventory(); notify(`Traded ${result.quantity} ml for ${result.payment} coins.`); return; }
     if (button.dataset.upgrade) { const upgrade = buyUpgrade(state, Number(button.dataset.upgrade)); brew.equipment = state.equipment; audio.play('sale'); renderAll(); persist(); showGuild(); notify(`${upgrade.name} is ready.`); return; }
@@ -457,7 +465,10 @@ function bindUI() {
       case 'certify': certifyPotion(state);renderAll();persist();showVial();break;
       case 'returns': showReturns();break;
       case 'harvest': finishHarvest();break;
-      case 'untreated': showUntreated=!showUntreated;button.textContent=showUntreated?'Observe response':'Untreated view';button.setAttribute('aria-pressed',String(showUntreated));break;
+      case 'untreated': showUntreated=!showUntreated;button.textContent=showUntreated?'After dose':'Before dose';button.setAttribute('aria-pressed',String(showUntreated));$('trialViewLabel').textContent=showUntreated?'Before dose':'After dose';break;
+      case 'replay-trial': testingRenderer?.replay();showUntreated=false;$('trialViewLabel').textContent='After dose';$('sheetContent').querySelector('[data-action="untreated"]').textContent='Before dose';$('sheetContent').querySelector('[data-action="untreated"]').setAttribute('aria-pressed','false');$('sheetContent').querySelector('[data-action="pause-trial"]').textContent='Pause';$('sheetContent').querySelector('[data-action="pause-trial"]').setAttribute('aria-pressed','false');break;
+      case 'pause-trial': {const paused=testingRenderer?.togglePause();button.textContent=paused?'Resume':'Pause';button.setAttribute('aria-pressed',String(paused));break;}
+      case 'return-vial': {const volume=returnVialToCauldron(state,brew);latestInspection=null;closeSheet();renderAll();persist();audio.play('pour');notify(`${volume.toFixed(1)} ml returned. Adjust, then test the new batch.`);break;}
       case 'discard-vial': sheet('Discard this vial?', '<p>The sealed potion and its ingredients will be lost. Your customer will wait while you brew another.</p><div class="confirm-actions"><button data-action="close">Keep the vial</button><button class="danger-button" data-action="confirm-discard">Discard and brew again</button></div>'); break;
       case 'confirm-discard': discardVial(state); if (state.tutorial === 6) state.tutorial = 5; closeSheet(); renderAll(); persist(); notify('Vial discarded. Your customer is still waiting.'); break;
       case 'supplies': showInventory(); break;
@@ -516,7 +527,7 @@ function loop(now) {
     if (now - lastAutosave > 8000) persist();
   } else accumulator = 0;
   if(currentRoom==='harvest'&&harvest){const phase=((now-harvest.start)/1500)%2;harvest.position=phase<1?phase:2-phase;$('harvestMarker').style.left=`${harvest.position*100}%`;}
-  if(currentRoom==='experiments'&&testingRenderer){const subject=state.experiments.subjects[selectedSubject],report=state.experiments.records.find(r=>r.subjectId===selectedSubject);testingRenderer.render(subject,report,now,showUntreated);}
+  if(currentRoom==='experiments'&&testingRenderer&&!document.hidden){const subject=state.experiments.subjects[selectedSubject],report=currentExperimentReport(state,selectedSubject);testingRenderer.render(subject,report,now,showUntreated);}
   if(state&&inShop&&!isSandbox()&&now-lastClaims>1000){lastClaims=now;const before=JSON.stringify((state.complaints||[]).map(c=>c.status));const arrived=advanceComplaints(state);if(arrived.length||before!==JSON.stringify((state.complaints||[]).map(c=>c.status))){renderAll();persist();if(!$('sheet').open&&arrived.length)showReturns();else notify('A customer return has reached the counter.');}}
   if (inShop && renderer && !$('sheet').open && now - lastRender >= (renderer.quality === 'eco' ? 32 : 16)) { renderer.render(); lastRender = now; }
   if (inShop && now - lastHUD > 200) { updateHUD(); if (active) advanceTutorial(); lastHUD = now; }

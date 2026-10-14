@@ -10,6 +10,7 @@ const live=process.env.SITE_URL,base=live?new URL(live).href:'http://127.0.0.1:4
 const server=live?null:spawn(process.execPath,['scripts/dev-server.mjs'],{stdio:'ignore',env:{...process.env,PORT:'4176',BASE_PATH:'/fluid-pocket-sandbox'}});
 const errors=[],failedResponses=[];let browser,page;
 const readSave=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-save')));
+const readSandbox=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')));
 async function closePanel(){await page.locator('[data-action="close"]').first().click();}
 async function screenshot(name){await page.screenshot({path:`test-results/${name}.png`});}
 async function room(id){await page.locator(id).click();}
@@ -18,8 +19,8 @@ async function pourRecipe(recipe){
   for(const portion of recipe.portions){await page.locator(`[data-ingredient="${portion.ingredientId}"]`).click();let remaining=portion.ml;while(remaining){const amount=[40,20,10,5].find(v=>v<=remaining);assert.ok(amount);await dose(amount);await page.locator(portion.crushed?'#grindBtn':'#pourBtn').click();remaining-=amount;}}
   if(recipe.stir){const box=await page.locator('#stirBtn').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(recipe.ticks*25+200);await page.mouse.up();}
 }
-async function compileCurrent(name){
-  const state=await readSave(),report=state.experiments.records[0];
+async function compileCurrent(name,sandbox=false){
+  const state=await (sandbox?readSandbox():readSave()),report=state.experiments.records[0];
   await page.locator('[data-action="potion-id"]').click();
   await page.locator('#potionName').fill(name);
   for(const key of ['strength','love','death','transformation','fire','freeze','acidity','poison']){
@@ -34,6 +35,7 @@ async function brewAndSell(state,subject){
   await pourRecipe(state.order.witness);await room('#experimentsBtn');
   await page.locator(`[data-subject="${subject}"]`).click();
   await page.locator(`[data-test="${subject}"]`).click();
+  await page.waitForTimeout(1300);
   assert.equal(await page.locator('.effect-reading').count(),0,'creature trials must not reveal automatic effect values');
   assert.doesNotMatch(await page.locator('#sheetContent').textContent(),/Discovered effects|stronger and more|Fire aura|Health.*→/);
   await screenshot('creature-response');
@@ -88,10 +90,60 @@ try{
   await room('#complaintsBtn');assert.match(await page.locator('#sheetContent').textContent(),/Receipts/);await closePanel();
   await page.reload();await page.locator('#continueBtn').click();await page.waitForSelector('body[data-game-state="brewing"]');const resumed=await readSave();assert.equal(resumed.completed,2);assert.deepEqual(resumed.potionIds,harvested.potionIds);assert.deepEqual(resumed.deliveries,harvested.deliveries);
   await room('#menuBtn');await page.locator('#sandboxBtn').click();await page.waitForSelector('body[data-game-state="brewing"]');assert.equal(await page.locator('#sandboxNotice').isVisible(),true);
-  await page.locator('[data-ingredient="13"]').click();await dose(20);await page.locator('#pourBtn').click();await page.waitForTimeout(500);await room('#experimentsBtn');await page.locator('[data-test="rabbit"]').click();await screenshot('magical-liquid-trial');await closePanel();
-  const sandbox=await page.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')));assert.equal(sandbox.completed,0);assert.equal(sandbox.coins,0);assert.equal(sandbox.experiments.records.length,1);assert.equal((await readSave()).completed,2);
+  await page.locator('[data-ingredient="13"]').click();await dose(20);await page.locator('#pourBtn').click();await page.waitForTimeout(500);
+  await page.locator('#bottleBtn').click();const sealed=await readSandbox();assert.equal(sealed.brew.count,0);assert.ok(sealed.pendingBottle.contents);
+  await page.locator('[data-action="experiments"]').first().click();await page.locator('[data-subject="rabbit"]').click();await page.locator('[data-test="rabbit"]').click();await page.waitForTimeout(1400);
+  const tested=await readSandbox();assert.ok(Math.abs(tested.pendingBottle.volume-15)<.001);assert.equal(tested.experiments.records.length,1);
+  assert.equal(await page.locator('[data-action="return-vial"]').count(),1);
+  await page.locator('[data-action="pause-trial"]').click();await page.waitForTimeout(70);
+  const frozen=await page.locator('#creatureCanvas').evaluate(e=>e.toDataURL());await page.waitForTimeout(240);
+  assert.equal(await page.locator('#creatureCanvas').evaluate(e=>e.toDataURL()),frozen,'pause must freeze the actual animation');
+  await screenshot('magical-liquid-trial');
+  await page.locator('[data-action="replay-trial"]').click();await page.waitForTimeout(1400);
+  assert.equal((await readSandbox()).pendingBottle.volume,tested.pendingBottle.volume);assert.equal((await readSandbox()).experiments.records.length,1,'replay never applies another dose');
+  await compileCurrent('Moonlight attempt',true);
+  await page.reload();await page.locator('#sandboxBtn').click();await page.waitForSelector('body[data-game-state="inspection"]');await page.waitForSelector('[data-action="return-vial"]');
+  assert.ok((await readSandbox()).pendingBottle.contents,'reload keeps transferable contents');
+  await page.locator('[data-action="experiments"]').first().click();
+  for(const viewport of [{width:320,height:568},{width:393,height:852}]){
+    await page.setViewportSize(viewport);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    for(const selector of ['#creatureCanvas','[data-action="pause-trial"]','[data-action="potion-id"]','[data-action="return-vial"]']){
+      await page.locator(selector).scrollIntoViewIfNeeded();assert.ok(await page.locator(selector).evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;}),`${selector} fits ${viewport.width}×${viewport.height}`);
+    }
+    await screenshot(`creature-trials-${viewport.width}`);
+  }
+  await page.locator('[data-action="return-vial"]').click();await page.waitForSelector('body[data-game-state="brewing"]');
+  const returned=await readSandbox();assert.equal(returned.pendingBottle,null);assert.equal(returned.negotiation,null);assert.notEqual(returned.brew.batchId,sealed.pendingBottle.batchId);
+  const returnedMass=returned.brew.particles.mass.reduce((a,b)=>a+b,0);assert.ok(Math.abs(returnedMass+tested.experiments.records[0].sample.mass-sealed.pendingBottle.mass)<.001);
+  await room('#measureBtn');assert.match(await page.locator('#sheetContent').textContent(),/needs a creature trial/);await closePanel();
+  await page.locator('[data-ingredient="1"]').click();await dose(5);await page.locator('#pourBtn').click();await page.waitForTimeout(400);
+  await room('#experimentsBtn');await page.locator('[data-reset-subject="rabbit"]').click();assert.equal(await page.locator('[data-action="replay-trial"]').isDisabled(),true,'a fresh familiar must not display its old response');
+  await page.locator('[data-test="rabbit"]').click();await page.waitForTimeout(1300);await screenshot('adjusted-potion-trial');await compileCurrent('Adjusted moonlight',true);
+  const sandbox=await readSandbox();assert.equal(sandbox.completed,0);assert.equal(sandbox.coins,0);assert.equal(sandbox.experiments.records.length,2);assert.equal(sandbox.potionIds.length,2);assert.equal((await readSave()).completed,2);
+  // Render isolated, real dose assessments offscreen. Pixel differences verify
+  // that every channel has a visible response without modifying game state.
+  const visuals=await page.evaluate(async()=>{
+    const {TestingRenderer}=await import('./src/game/TestingRenderer.mjs'),{assessEffects,EFFECT_PROPERTIES}=await import('./src/game/effects.mjs'),{createExperimentState}=await import('./src/game/experiments.mjs');
+    const canvas=document.createElement('canvas');canvas.width=384;canvas.height=248;const renderer=new TestingRenderer(canvas),results=[];
+    const images=['healthy','transformed','poisoned','frozen','dead'].map(state=>renderer.sprite('rabbit',state));
+    await Promise.all(images.map(image=>image.complete?Promise.resolve():new Promise(resolve=>image.onload=resolve)));
+    for(const key of [...EFFECT_PROPERTIES,'mixed']){
+      const subject=createExperimentState().subjects.rabbit,sample={stability:100,color:'#90c6c8',...Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,key==='mixed'?.025:k===key?.2:0]))};
+      const report={...assessEffects(sample,subject,5),id:key,sample};subject.stats=report.after;
+      renderer.render(subject,report,1000);renderer.render(subject,report,2500,true);
+      const baseline=canvas.getContext('2d').getImageData(0,0,384,248).data;
+      renderer.render(subject,report,2500,false);const pixels=canvas.getContext('2d').getImageData(0,0,384,248).data;let changed=0;
+      for(let y=0;y<248;y++)for(let x=85;x<384;x++){const i=(y*384+x)*4;if(Math.abs(pixels[i]-baseline[i])+Math.abs(pixels[i+1]-baseline[i+1])+Math.abs(pixels[i+2]-baseline[i+2])>50)changed++;}
+      results.push({key,changed,png:canvas.toDataURL()});
+    }
+    const durations=[];for(let n=0;n<120;n++){const start=performance.now();renderer.render(renderer.subject,renderer.report,3000+n*34);durations.push(performance.now()-start);}
+    durations.sort((a,b)=>a-b);return{results,median:durations[60],p95:durations[114]};
+  });
+  for(const visual of visuals.results){assert.ok(visual.changed>500,`${visual.key} must change a substantial visible area (${visual.changed} pixels)`);await writeFile(`test-results/visual-${visual.key}.png`,Buffer.from(visual.png.split(',')[1],'base64'));}
+  console.log(`Creature visuals: ${visuals.results.map(v=>`${v.key} ${v.changed}px`).join(', ')}; render median ${visuals.median.toFixed(2)}ms, p95 ${visuals.p95.toFixed(2)}ms.`);
   await page.goto(new URL('sandbox.html?mode=2D',base).href);await page.waitForFunction(()=>document.querySelector('#materialSelect')?.options.length>0);assert.equal(await page.locator('#scene2d').isVisible(),true);
   assert.deepEqual(errors,[]);assert.deepEqual(failedResponses,[]);
-  console.log(`Browser acceptance OK (${live?'LIVE Pages':'project path'}): two negotiated magical commissions, visual creature trials, manual IDs, bounded garden harvests, mobile 320×568 through desktop, save/reload, magical liquids, separate sandbox, no automatic assays, no page errors.`);
+  console.log(`Browser acceptance OK (${live?'LIVE Pages':'project path'}): two negotiated magical commissions, eight visible creature responses, replay/pause, tested vial return/reload/adjustment/retest, manual IDs, bounded garden, mobile 320×568 through desktop, separate sandbox, no automatic assays or page errors.`);
 }catch(error){if(page){await screenshot('browser-failure').catch(()=>{});await writeFile('test-results/browser-failure-save.json',JSON.stringify(await readSave())).catch(()=>{});}throw error;}
 finally{if(browser)await browser.close();if(server)server.kill('SIGTERM');}
