@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-proportional-glow-29';
+const CACHE = 'alchemist-shop-signed-arcana-glow-30';
 const CORE = [
   './',
   './index.html',
