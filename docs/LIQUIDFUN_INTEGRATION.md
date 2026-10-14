@@ -1,6 +1,6 @@
 # Google LiquidFun integration
 
-This project vendors the **official Google LiquidFun 1.1.0 JavaScript build** from [google/liquidfun](https://github.com/google/liquidfun/tree/master/liquidfun/Box2D/lfjs), with the upstream redistribution notice in `public/vendor/LIQUIDFUN-LICENSE.txt`. The 630 KB engine is self-hosted and cached, so the shop remains usable offline on GitHub Pages. Its code is not a lookalike physics implementation.
+This project vendors the **official Google LiquidFun 1.1.0 JavaScript build** from [google/liquidfun](https://github.com/google/liquidfun/blob/gh-pages/testbed/liquidfun.js), with the upstream redistribution notice in `public/vendor/LIQUIDFUN-LICENSE.txt`. The 630 KB engine is self-hosted and cached, so the shop remains usable offline on GitHub Pages. Its code is not a lookalike physics implementation.
 
 ## Design
 
