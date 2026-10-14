@@ -81,6 +81,7 @@ html,body{height:100%;overflow-x:hidden}body:has(.shop-shell:not([hidden])){over
 
 /* Sandbox ledger occupies the ingredient rack's space, never the cauldron. */
 .sandbox-notice{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.sandbox-notice[hidden]{display:none!important}
 .sandbox-notice>span{min-width:0}
 .sandbox-notice button{min-height:29px;flex-shrink:0;padding:4px 9px;font-size:10px;line-height:1.2;background:#3b324c;border:1px solid #a18bb8;box-shadow:none;color:#edd9ff}
 .ingredient-rack[hidden],.sandbox-inspector[hidden]{display:none!important}
@@ -104,5 +105,5 @@ html,body{height:100%;overflow-x:hidden}body:has(.shop-shell:not([hidden])){over
 .sandbox-mixture-card:has(.sandbox-mix-warning) .sandbox-mixture-heading span{color:#f0b993}
 .sandbox-mixture-sources{font-size:9px;color:#c5b7ce;margin:4px 0;overflow-wrap:anywhere}
 .sandbox-mix-warning{color:#e2b8a4!important}
-@media(max-height:720px){.sandbox-inspector{height:88px;min-height:88px}.sandbox-inspector-tabs{flex-basis:27px}.sandbox-inspector-tabs button{min-height:23px;height:23px;font-size:9px}.sandbox-inspector-body{padding:3px 5px}.sandbox-effect{font-size:8px;padding:2px 3px}.sandbox-effect strong{font-size:8px}.sandbox-notice button{min-height:25px;font-size:9px;padding:3px 6px}}
-@media(min-width:800px){.sandbox-inspector{height:128px;min-height:128px}}
+@media(max-height:720px){.sandbox-inspector{height:62px;min-height:62px}.sandbox-inspector-tabs{flex-basis:27px}.sandbox-inspector-tabs button{min-height:23px;height:23px;font-size:9px}.sandbox-inspector-body{padding:3px 5px}.sandbox-effect{font-size:8px;padding:2px 3px}.sandbox-effect strong{font-size:8px}.sandbox-notice button{min-height:25px;font-size:9px;padding:3px 6px}}
+@media(min-width:800px) and (min-height:721px){.sandbox-inspector{height:128px;min-height:128px}}
