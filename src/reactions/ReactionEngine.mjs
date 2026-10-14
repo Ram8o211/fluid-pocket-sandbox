@@ -3,6 +3,7 @@ import { isCoherentSolid, isPowder } from '../simulation/PowderSolver.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
+import { warmedMiscibility } from '../simulation/ArcaneSolver.mjs';
 import { MIX_PROPERTIES } from './MixtureSolver.mjs';
 
 const PAIR_PROPERTIES = Object.freeze(MIX_PROPERTIES.filter(key => key !== 'solidSubdivision' && key !== 'phaseHysteresis'));
@@ -53,8 +54,9 @@ export class ReactionEngine {
         ps.reactionPotential[i]+=(mean-ps.reactionPotential[i])*consume;ps.reactionPotential[j]+=(mean-ps.reactionPotential[j])*consume;visual=Math.max(visual,excess*contact);reacted=true;
       }
       const dm=Math.abs(ps.miscibility[i]-ps.miscibility[j]);
-      if(dm<rules.miscibilityThreshold && (mixtureCompatibility===undefined || mixtureCompatibility>0)){
-        const compat=mixtureCompatibility??clamp(1-dm/Math.max(.001,rules.miscibilityThreshold),0,1),rate=rules.baseMixingRate*Math.pow(compat,rules.mixingExponent)*contact*thermalMixingMultiplier(ps,i,j,rules.mixingTemperatureCoefficient??0);
+      const threshold=warmedMiscibility(ps,i,j,rules.miscibilityThreshold,rules);
+      if(dm<threshold && (mixtureCompatibility===undefined || mixtureCompatibility>0)){
+        const compat=mixtureCompatibility??clamp(1-dm/Math.max(.001,threshold),0,1),rate=rules.baseMixingRate*Math.pow(compat,rules.mixingExponent)*contact*thermalMixingMultiplier(ps,i,j,rules.mixingTemperatureCoefficient??0);
         if(rate>0){const propD=this.particleDistance(ps,i,j),mixVisual=saturate(compat*propD*contact*rules.reactionStrength),t=clamp(rate*dt,0,.22);this.mixPair(ps,i,j,t,rules,onFuse);visual=Math.max(visual,mixVisual);reacted=true;}
       }
       const td=Math.abs(ps.temperature[i]-ps.temperature[j]);

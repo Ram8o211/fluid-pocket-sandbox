@@ -1,3 +1,4 @@
+import { stepArcana } from '../simulation/ArcaneSolver.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { SimulationEngine } from '../simulation/SimulationEngine.mjs';
 import { Phase } from '../simulation/Phase.mjs';
@@ -10,7 +11,7 @@ import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
+const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -50,6 +51,7 @@ export class BrewingSession {
     this.engine.boundaryCollider = () => this.confineCauldron();
     this.engine.env.granularWallSupport = cauldronGranularWallSupport;
     this.engine.rules.mixingTemperatureCoefficient = 3.5;
+    this.engine.rules.heatSolubility = .95;
     // Contact ranges track the finer particle spacing. The sandbox defaults are
     // untouched; local neighbours keep full cauldrons within the mobile budget.
     this.engine.rules.interactionRadiusScale = .5;
@@ -173,6 +175,7 @@ export class BrewingSession {
       this.history.lidCoolingEnergy += thermal.lidCooling;
       this.cost.energy += Math.abs(thermal.supplied) * .025;
       this.engine.step(dt);
+      stepArcana(ps, dt, this.engine.reactions);
       for (let i = 0; i < previousCount; i++) if (this.previousPhases[i] === Phase.GAS && ps.phase[i] === Phase.LIQUID) this.history.condensed += ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
       let mass = 0, activation = 0;
       for (let i = 0; i < ps.count; i++) { mass += ps.mass[i]; activation += Math.max(0, ps.temperature[i] - .42) * ps.mass[i]; this.history.peakTemperature = Math.max(this.history.peakTemperature, ps.temperature[i]); }
@@ -249,6 +252,7 @@ export class BrewingSession {
     const ps = this.engine.ps;
     for (const key of SAVE_FIELDS) {
       const values = saved.particles[key];
+      if (values === undefined && ['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted'].includes(key)) { ps[key].fill(key === 'arcaneThreshold' ? 8 : key === 'magicDecayTemperature' ? 1.4 : 0); continue; }
       if (values === undefined && key === 'solventMeltingTemperature') { ps[key].set(ps.meltingTemperature); continue; }
       if (values === undefined && (EFFECT_PROPERTIES.includes(key) || key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount' || key === 'powderContent' || key === 'dissolutionProgress')) { ps[key].fill(0); continue; }
       if (!Array.isArray(values) || values.length !== saved.count || values.some(v => !Number.isFinite(v))) throw new Error('Invalid saved particle data.');

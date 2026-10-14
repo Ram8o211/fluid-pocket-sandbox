@@ -1,3 +1,7 @@
+import { gatherIngredient } from '../src/game/gathering.mjs';
+import { compilePotionId } from '../src/game/potionId.mjs';
+import { startNegotiation, acceptCustomerOffer } from '../src/game/commerce.mjs';
+import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld, validateWorld } from '../src/game/world.mjs';
@@ -164,7 +168,7 @@ test('purchases debit coins, preserve stock, and unlock equipment and rare reage
   assert.equal(state.inventory[1], initial + 60); close(state.coins, 80 - refill.cost);
   assert.throws(() => buyUpgrade(state, 0)); state.completed = 4; state.coins = 500;
   buyUpgrade(state, 0); assert.ok(state.equipment.densimeter); assert.throws(() => buyUpgrade(state, 0));
-  buyUpgrade(state, 5); assert.equal(state.equipment.reagents, 1); assert.equal(state.inventory[7], 120);
+  buyUpgrade(state, 5); assert.equal(state.equipment.reagents, 1); assert.equal(state.inventory[7], 15);
 });
 test('recipe discoveries remember actual measurements and quantities', () => {
   const { state, brew } = setup(); brew.pour(1, 80, state.inventory); const sample = brew.bottle(60);
@@ -215,13 +219,18 @@ test('complete repeated commissions through physics, assessment, sale and progre
   for (let i = 0; i < 7; i++) {
     const brew = new BrewingSession(gameplayWorld.ingredients, state.equipment), recipe = state.order.witness;
     for (const p of recipe.portions) {
-      if (state.inventory[p.ingredientId] < p.ml) restock(state, p.ingredientId, Math.max(120, p.ml - state.inventory[p.ingredientId]));
+      if (state.inventory[p.ingredientId] < p.ml) {
+        if(p.ingredientId===1) restock(state,1,p.ml);
+        else { const patch=state.foraging.nodes.find(n=>n.ingredientId===p.ingredientId); patch.stock=patch.capacity;patch.updatedAt=Date.now();state.foraging.stamina=100;gatherIngredient(state,patch.id,10); }
+      }
       brew.pour(p.ingredientId, p.ml, state.inventory, { crushed: Boolean(p.crushed) });
     }
     for (let tick = 0; tick < recipe.ticks; tick++) { brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0); if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP); brew.step(); }
     resetExperimentSubject(state, 'stone');
     const trial = brew.takeSample(5); runExperiment(state, trial, 'stone', trial.volume);
-    state.pendingBottle = brew.bottle(recipe.volume); const sale = completeSale(state);
+    state.pendingBottle = brew.bottle(recipe.volume);
+    compilePotionId(state,state.pendingBottle,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,state.pendingBottle[k]])));
+    startNegotiation(state);acceptCustomerOffer(state);const sale = completeSale(state);
     assert.equal(sale.quality, 100); assert.ok(sale.profit > 0); assert.equal(state.completed, i + 1);
     if (i === 0) buyUpgrade(state, 0); if (i === 2) buyUpgrade(state, 2); if (i === 4) buyUpgrade(state, 4);
     nextCustomer(state);

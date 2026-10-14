@@ -245,10 +245,10 @@ test('all potion materials use fine pixel footprints at both graphics resolution
 
 test('naturally loose starter dust pours as dry grains and settles into a compact frictional pile',()=>{
   const world=generateRawWorld('compact-test'),state=newShop(world);
-  assert.equal(availableIngredients(world,state.equipment).length,8);
+  assert.equal(availableIngredients(world,state.equipment).length,11);
   const powders=world.ingredients.filter(i=>i.form==='powder');assert.equal(powders.length,1);
   for(const powder of powders){
-    const b=new BrewingSession(world.ingredients);assert.equal(b.pour(powder.id,40,state.inventory),40);
+    state.inventory[powder.id]=60;const b=new BrewingSession(world.ingredients);assert.equal(b.pour(powder.id,40,state.inventory),40);
     assert.equal(state.inventory[powder.id],20);const ps=b.engine.ps,mass=ps.totalMass();
     for(let n=0;n<320;n++)b.step();
     for(let i=0;i<ps.count;i++){
@@ -262,7 +262,7 @@ test('naturally loose starter dust pours as dry grains and settles into a compac
     const touched=b.stir({x:ps.x[0],y:ps.y[0]},{x:3,y:0});assert.ok(touched>0&&touched<ps.count);
     const restored=new BrewingSession(world.ingredients);restored.restore(b.snapshot());
     assert.equal(restored.engine.ps.powderContent[0],1);near(restored.engine.ps.totalMass(),mass);
-    const stock=state.inventory[powder.id];restock(state,powder.id);assert.equal(state.inventory[powder.id],stock+60);
+    const stock=state.inventory[powder.id];restock(state,powder.id);assert.equal(state.inventory[powder.id],stock+20);
   }
 });
 

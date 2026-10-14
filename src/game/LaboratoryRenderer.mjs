@@ -24,6 +24,22 @@ export class LaboratoryRenderer extends PlanarRenderer {
     if (this.canvas.width !== 384 * scale) { this.canvas.width = 384 * scale; this.canvas.height = 232 * scale; }
   }
   transform() { const factor = this.canvas.width / 384; return { w: this.canvas.width, h: this.canvas.height, scale: 40 * factor, cx: 192 * factor, cy: 158 * factor }; }
+  fittedCanvas() {
+    const rect = this.canvas.getBoundingClientRect();
+    const scale = Math.max(.0001, Math.min(rect.width / this.canvas.width, rect.height / this.canvas.height));
+    return { scale, left: rect.left + (rect.width - this.canvas.width * scale) / 2,
+      top: rect.top + (rect.height - this.canvas.height * scale) / 2 };
+  }
+  screenToWorld(clientX, clientY) {
+    const fit = this.fittedCanvas(), t = this.transform();
+    return { x: ((clientX - fit.left) / fit.scale - t.cx) / t.scale,
+      y: -((clientY - fit.top) / fit.scale - t.cy) / t.scale, z: 0 };
+  }
+  projectWorldToScreen(x, y) {
+    const fit = this.fittedCanvas(), t = this.transform();
+    return { x: fit.left + (t.cx + x * t.scale) * fit.scale,
+      y: fit.top + (t.cy - y * t.scale) * fit.scale };
+  }
   setQuality(quality) { this.quality = quality; this.resize(); }
   render() {
     this.resize(); const ctx = this.ctx, factor = this.canvas.width / 384, t = this.transform();
@@ -85,11 +101,18 @@ export class LaboratoryRenderer extends PlanarRenderer {
     }
     if (this.spoon) {
       const x = 192 + this.spoon.x * 40, y = 158 - this.spoon.y * 40;
-      ctx.strokeStyle = '#312237'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + 35, y - 47); ctx.lineTo(x, y); ctx.stroke();
-      ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#cea478'; ctx.lineWidth = 5; ctx.stroke();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#302330'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(x + 34, y - 49); ctx.lineTo(x, y); ctx.stroke();
+      ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#a96e40'; ctx.lineWidth = 6; ctx.stroke();
+      ctx.strokeStyle = '#dfb47c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 32, y - 49); ctx.lineTo(x - 1, y - 4); ctx.stroke();
       if (this.tool === 'pestle') { rect(x - 6, y - 5, 12, 13, '#75858d'); rect(x - 4, y - 5, 8, 3, '#ced6ce'); rect(x - 7, y + 5, 14, 3, '#4c5a65'); }
-      // A broad spoon bowl visually matches the expanded stirring footprint.
-      else { rect(x - 16, y - 6, 33, 15, '#e3b784'); rect(x - 12, y + 4, 25, 5, '#ae724d'); }
+      else {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(.55);
+        ctx.fillStyle = '#74472e'; ctx.beginPath(); ctx.ellipse(0,0,12,17,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#c3945c'; ctx.beginPath(); ctx.ellipse(-1,-2,10,14,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#8b5939'; ctx.beginPath(); ctx.ellipse(-1,-3,7,10,0,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#e3bd85'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(-1,-3,8,11,0,Math.PI,Math.PI*1.7);ctx.stroke();ctx.restore();
+      }
     }
     ctx.restore(); this.frame++;
   }

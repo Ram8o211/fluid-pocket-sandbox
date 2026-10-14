@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-continuous-fluids-24';
+const CACHE = 'alchemist-shop-magical-garden-25';
 const CORE = [
   './',
   './index.html',
@@ -12,6 +12,10 @@ const CORE = [
   './src/game/gathering.mjs',
   './src/game/experiments.mjs',
   './src/game/knowledge.mjs',
+  './src/game/potionId.mjs',
+  './src/game/commerce.mjs',
+  './src/game/TestingRenderer.mjs',
+  './src/simulation/ArcaneSolver.mjs',
   './src/game/potion.mjs',
   './src/game/brewing.mjs',
   './src/game/cauldron.mjs',

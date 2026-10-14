@@ -1,4 +1,7 @@
-import { generateWorld, availableIngredients } from './world.mjs';
+import { TestingRenderer } from './TestingRenderer.mjs';
+import { findPotionId, compilePotionId } from './potionId.mjs';
+import { startNegotiation, counterOffer, acceptCustomerOffer, certificationCost, certifyPotion, certificateFor, advanceComplaints, resolveComplaint } from './commerce.mjs';
+import { generateWorld, availableIngredients, seedNumber } from './world.mjs';
 import { BrewingSession } from './brewing.mjs';
 import { newShop, restock, tradeStock, discardVial, UPGRADES, upgradeStatus, buyUpgrade, completeSale, nextCustomer, recordDiscovery, guildLoan } from './economy.mjs';
 import { assessPotion, priceSale } from './evaluation.mjs';
@@ -7,7 +10,7 @@ import { propertyDescription } from './potion.mjs';
 import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
 import { icon, bottleSprite, ingredientSprite, naturalLandscapeSprite, experimentSubjectSprite, portraitSprite, workshopBackground } from './art.mjs';
-import { resourceStatus, gatherIngredient } from './gathering.mjs';
+import { resourceStatus, gatherIngredient, tendGarden, gardenStamina } from './gathering.mjs';
 import { runExperiment, resetExperimentSubject, splitPotionSample } from './experiments.mjs';
 import { EFFECT_DEFINITIONS, EFFECT_PROPERTIES, describeEffects } from './effects.mjs';
 import { observedPotion, discoveryKnowledge } from './knowledge.mjs';
@@ -23,6 +26,7 @@ let selected = 1, dose = 20, inShop = false, assist = false, pointer = null, too
 let last = performance.now(), accumulator = 0, lastHUD = 0, lastRender = 0;
 let toastTimer = 0, holdTimer = 0, holdInterval = 0, lastAutosave = 0, saveFailed = false;
 let latestInspection = null, selectedRecipe = null;
+let testingRenderer = null, selectedSubject = 'rabbit', testDose = 5, showUntreated = false, harvest = null, lastClaims = 0;
 let sandboxLoaded = null, roomTimer = 0, currentRoom = null, experimentReport = null;
 const isSandbox = () => state?.mode === 'sandbox';
 const rawIngredient = i => Boolean(i.form && !['liquid', 'powder'].includes(i.form));
@@ -30,8 +34,9 @@ const ingredientUnit = i => i.form && i.form !== 'liquid' ? 'measures' : 'ml';
 const requirementDescription = r => r.comparison === 'maximum' ? `At most ${(r.target * 100).toFixed(1)}% · unwanted effect` : propertyDescription(r.property, r.target);
 
 function notify(message) {
-  $('toast').textContent = message; $('toast').hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3200);
+  const target = $('sheet').open && $('panelNotice') ? $('panelNotice') : $('toast');
+  target.textContent = message; target.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; if ($('panelNotice')) $('panelNotice').hidden = true; }, 3200);
 }
 function randomSeed() {
   const bytes = new Uint32Array(1); crypto.getRandomValues(bytes);
@@ -56,12 +61,12 @@ function guard(action) {
   return (...args) => { try { return action(...args); } catch (err) { notify(err.message || 'That action could not be completed.'); } };
 }
 function sheet(title, content, footer = '') {
-  clearInterval(roomTimer); roomTimer = 0; currentRoom = null;
+  clearInterval(roomTimer); roomTimer = 0; currentRoom = null; testingRenderer = null; harvest = null;
   assist = false; pointer = null; stopPour();
-  $('sheetContent').innerHTML = `<header class="sheet-header"><h2 id="sheetTitle">${escape(title)}</h2><button class="icon-button" data-action="close" aria-label="Close panel">${icon('close')}</button></header><div class="sheet-body">${content}</div>${footer ? `<div class="sheet-footer">${footer}</div>` : ''}`;
+  $('sheetContent').innerHTML = `<header class="sheet-header"><h2 id="sheetTitle">${escape(title)}</h2><button class="icon-button" data-action="close" aria-label="Close panel">${icon('close')}</button></header><div class="sheet-body"><output id="panelNotice" class="panel-notice" role="status" hidden></output>${content}</div>${footer ? `<div class="sheet-footer">${footer}</div>` : ''}`;
   if (!$('sheet').open) $('sheet').showModal();
 }
-function closeSheet() { clearInterval(roomTimer); roomTimer = 0; currentRoom = null; if ($('sheet').open) $('sheet').close(); }
+function closeSheet() { clearInterval(roomTimer); roomTimer = 0; currentRoom = null; testingRenderer = null; harvest = null; if ($('sheet').open) $('sheet').close(); }
 
 async function openWorld(seed, saved = null, mode = 'shop') {
   $('newWorldBtn').disabled = true; $('continueBtn').disabled = true;
@@ -71,9 +76,10 @@ async function openWorld(seed, saved = null, mode = 'shop') {
     const candidate = saved || newShop(world, { sandbox: mode === 'sandbox' });
     const session = new BrewingSession(world.ingredients, candidate.equipment);
     if (saved?.brew) session.restore(saved.brew);
-    state = candidate; brew = session; selected = availableIngredients(world, state.equipment)[0].id; experimentReport = null;
+    state = candidate; advanceComplaints(state); brew = session; selected = availableIngredients(world, state.equipment)[0].id; experimentReport = null;
     renderer = new LaboratoryRenderer($('labCanvas'), brew); renderer.setQuality(state.settings.graphics);
     audio.enabled = state.settings.sound;
+    $('shop').insertBefore($('toast'), $('shop').querySelector('.shop-navigation'));
     inShop = true; accumulator = 0; $('menu').hidden = true; $('shop').hidden = false;
     $('ingredientRack').scrollLeft = 0;
     closeSheet(); renderAll(); persist();
@@ -85,6 +91,7 @@ async function openWorld(seed, saved = null, mode = 'shop') {
 }
 function menu() {
   if (state) persist(); inShop = false; assist = false; stopPour(); closeSheet();
+  $('menu').appendChild($('toast'));
   $('menu').hidden = false; $('shop').hidden = true; document.body.dataset.gameState = 'menu';
   $('continueBtn').disabled = !loaded?.state; $('saveMessage').textContent = loaded?.error || 'Your shop saves automatically on this device.';
 }
@@ -111,15 +118,16 @@ function renderAll() {
   const wanted = order.requirements.filter(r => r.comparison !== 'maximum'), limits = order.requirements.filter(r => r.comparison === 'maximum');
   $('requirements').innerHTML = wanted.map(requirementRow).join('') + (limits.length ? `<details class="order-limits"><summary>Unwanted effects · ${limits.length} limits</summary><div class="requirements">${limits.map(requirementRow).join('')}</div></details>` : '');
   $('orderClue').textContent = order.clue;
-  for (const [id, sprite, label] of [['measureBtn', 'measure', 'Inspect'], ['inventoryBtn', 'inventory', 'Ingredients'], ['bookBtn', 'book', 'Recipe book'], ['upgradesBtn', 'guild', 'Guild']]) $(id).innerHTML = icon(sprite) + `<span>${label}</span>`;
-  $('natureBtn').innerHTML = `${icon('leaf')}<span>Wild garden</span>`;
-  $('experimentsBtn').innerHTML = `${icon('flask')}<span>Experiments room</span>`;
+  for (const [id, sprite, label] of [['measureBtn', 'flask', 'Potion ID'], ['inventoryBtn', 'inventory', 'Ingredients'], ['bookBtn', 'book', 'Recipe book'], ['upgradesBtn', 'guild', 'Guild']]) $(id).innerHTML = icon(sprite) + `<span>${label}</span>`;
+  $('natureBtn').innerHTML = `${icon('leaf')}<span>Garden</span>`;
+  $('experimentsBtn').innerHTML = `${icon('flask')}<span>Trials</span>`;
+  $('complaintsBtn').innerHTML = `${icon('coin')}<span>Returns ${(state.complaints || []).filter(c=>c.status==='pending').length || ''}</span>`;
   renderRack(); renderTools(); updateHUD(); updateTutorial();
   document.body.dataset.gameState = state.stage;
 }
 function renderRack() {
   const rack = $('ingredientRack'), scroll = rack.scrollLeft, ingredients = availableIngredients(state.world, state.equipment);
-  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${escape(i.form || 'liquid')} · ${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)} ${ingredientUnit(i)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
+  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
   rack.scrollLeft = scroll;
   const ingredient = ingredients.find(i => i.id === selected) || ingredients[0]; selected = ingredient.id;
   $('selectedName').textContent = ingredient.name + (ingredient.form && ingredient.form !== 'liquid' ? ` · ${ingredient.form}` : '');
@@ -159,13 +167,13 @@ function updateHUD() {
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
 }
 const TUTORIAL = [
-  'Read the customer’s desired effects. Open Ingredients to learn the known effects of each plain ingredient and plan your mixture.',
-  'Start with water. Brew more than the customer’s vial so you can spare 5 ml for an experiment.',
-  'Choose ingredients with promising effects. Grind a small amount and stir with plenty of water; at least six parts water helps extraction.',
-  'Stir until the powder dissolves. Flame can help, but heat and frost may change the result. You decide how to prepare it.',
-  'Test a 5 ml dose in the Experiments room. Testing reveals this batch’s effects and its match to the customer’s request.',
-  'Compare your observations with the request. Adjust and retest, or bottle a suitable potion and remember the tested formula.',
-  'Serve your tested potion. Closer effects earn more coins. Each new or changed batch must be tested before serving.'
+  'Tap the customer for the request. Ingredient magic is known; mixture magic is yours to discover.',
+  'Pour water. Leave a little extra for creature trials.',
+  'Choose an essence. Grind plants and stones before adding them.',
+  'Drag the wooden spoon or hold Stir. Gentle warmth helps reluctant essences blend.',
+  'Open Trials. Watch a creature before and after a small dose.',
+  'Write every magical estimate in the potion ID. Adjust, retest, then bottle.',
+  'Bargain for a price. The expert seal protects this batch against false refund claims.'
 ];
 function updateTutorial() {
   if (!state) return;
@@ -204,34 +212,21 @@ function clean() {
   if (!brew.engine.ps.count) { notify('Your cauldron is already clean.'); return; }
   sheet('Clean the cauldron?', `<p>This drains ${Math.round(brew.occupiedVolume)} ml. Used ingredients cannot be recovered.</p><div class="confirm-actions"><button data-action="close">Keep brewing</button><button class="danger-button" data-action="confirm-clean">Drain and clean</button></div>`);
 }
-function measuredRows(sample, reveal = false) {
-  const equipment = state.equipment;
-  const visible = { color: true, temperature: true, density: equipment.densimeter, viscosity: equipment.viscometer, volatility: equipment.viscometer, stability: equipment.analyzer, potency: equipment.analyzer };
-  const tools = { density: 'Density stone', viscosity: 'Flow glass', volatility: 'Flow glass', stability: 'Arcane prism', potency: 'Arcane prism' };
-  return Object.entries(PROPERTIES).map(([property, spec]) => {
-    if (EFFECT_PROPERTIES.includes(property)) return '';
-    const unlocked = reveal || visible[property], value = sample[property];
-    return `<div class="measure-row${unlocked ? '' : ' locked'}"><span class="measure-label">${spec.label}</span><span class="measure-value">${unlocked ? `${property === 'color' ? `<span class="inline-swatch" style="background:${escape(value)}"></span>` : ''}${escape(propertyDescription(property, value))}` : `Unlock ${tools[property]} at the guild`}</span></div>`;
-  }).join('');
-}
 function effectRows(sample, knowledge = null) {
-  if (!knowledge) return `<div class="unknown-effects"><strong>Mixture effects unknown</strong><p>You know the plain ingredients. Test this batch in the Experiments room to discover its effects. A changed brew needs another test.</p><div class="effects-grid">${EFFECT_PROPERTIES.map(key => `<div class="effect-reading locked"><span>${escape(EFFECT_DEFINITIONS[key].label)}</span><strong>?</strong></div>`).join('')}</div>`;
-  return `<div class="effects-grid">${EFFECT_PROPERTIES.map(key => {
-    const spec = EFFECT_DEFINITIONS[key], value = Math.max(0, Math.min(1, Number(sample[key] || 0)));
-    return `<div class="effect-reading" style="--effect-color:${spec.color}"><span>${escape(spec.label)}</span><strong>${Math.round(value * 100)}%</strong><div class="effect-meter"><span style="width:${value * 100}%"></span></div></div>`;
-  }).join('')}</div>`;
+  const values = knowledge === true ? sample : knowledge?.estimates;
+  if (!values) return '<p class="unknown-effects">No potion ID yet. Observe a creature trial and write your estimates.</p>';
+  return `<div class="effects-grid">${EFFECT_PROPERTIES.map(key => `<div class="effect-reading" style="--effect-color:${EFFECT_DEFINITIONS[key].color}"><span>${EFFECT_DEFINITIONS[key].label}</span><strong>${Math.round((values[key]||0)*100)}%</strong><div class="effect-meter"><span style="width:${(values[key]||0)*100}%"></span></div></div>`).join('')}</div>`;
 }
-function showInstruments() {
-  if (!state) return;
-  const sample = state.pendingBottle || brew.inspect();
-  if (!sample) { sheet('Measuring bench', '<p>Pour an ingredient first. The thermometer and colour lens are ready; the guild can equip your bench with more instruments.</p><button class="primary" data-action="guild">Visit the guild</button>'); return; }
-  const liquid = state.pendingBottle || brew.inspectLiquid();
-  latestInspection = liquid || { ...sample, portions: sample.portions || brew.portions.map(p => ({ ...p })) };
-  const observation = observedPotion(state, liquid);
-  persist();
-  audio.play('measure');
-  sheet('Measuring bench', `<div class="vial-preview"><img src="${bottleSprite(sample.color)}" alt="Your measured potion"><div><h3>${Math.round(state.pendingBottle ? sample.volume : brew.liquidVolume)} ml in ${state.pendingBottle ? 'your vial' : 'the cauldron'}</h3><p>Instruments measure physical properties. Experiments reveal potion effects.</p></div></div>${measuredRows(sample)}<h3>Magic & chemistry · liquid potion</h3>${effectRows(liquid, observation)}${observation && !isSandbox() ? `<h3>Observed customer match</h3>${breakdownHTML(assessPotion(liquid, state.order))}` : ''}<div class="snapshot-info">${Math.round(sample.liquidFraction * 100)}% liquid · ${Math.round(sample.history.elapsed)} seconds brewed · ${state.pendingBottle ? 'Sealed vial' : `${brew.vaporVolume.toFixed(1)} ml steam under the lid`} · ${(sample.history.condensed || 0).toFixed(1)} ml recondensed</div><button class="primary" data-action="experiments">Test this potion</button><button class="secondary" data-action="save-inspection">${observation ? 'Save tested discovery' : 'Save untested formula'}</button><details><summary>How do these measurements work?</summary><p>Water dilutes the known ingredient effects; grinding, compatibility, stirring and temperature affect what reaches the liquid. Glows are clues. A measured experiment consumes potion and records its effects. Adding ingredients or changing the batch can invalidate an earlier test. °A is the guild’s temperature scale.</p></details>`);
+function showInstruments() { showPotionID(); }
+function showPotionID() {
+  const sample = state.pendingBottle || brew.inspectLiquid();
+  if (!sample) { sheet('Potion ID','<p>Brew a potion, then test a spare dose on a familiar.</p><button class="primary" data-action="experiments">Creature trials</button>'); return; }
+  latestInspection = sample;
+  const document = findPotionId(state,sample), tested = observedPotion(state,sample);
+  if (!tested) { sheet('Potion ID',`<div class="vial-preview"><img src="${bottleSprite(sample.color)}" alt="Potion"><p>This batch needs a creature trial.</p></div><button class="primary" data-action="experiments">Creature trials</button>`); return; }
+  sheet('Write a potion ID',`<p>Your observations, your estimates. Compare doses and untreated creatures; the guild does not fill in the answers.</p><input id="potionName" class="name-input" aria-label="Potion name" maxlength="40" placeholder="Potion name" value="${escape(document?.name || '')}"><div class="estimate-carousel mini-pages">${EFFECT_PROPERTIES.map(key=>`<article class="mini-card estimate-card"><h3 style="color:${EFFECT_DEFINITIONS[key].color}">${EFFECT_DEFINITIONS[key].label}</h3><div class="estimate-glyph" style="color:${EFFECT_DEFINITIONS[key].color}">✧</div><label>My estimate <output data-estimate-value="${key}">${Math.round((document?.estimates[key]||0)*100)}%</output><input type="range" data-estimate="${key}" aria-label="Estimate ${EFFECT_DEFINITIONS[key].label}" min="0" max="100" step="1" value="${Math.round((document?.estimates[key]||0)*100)}"></label></article>`).join('')}</div><p class="swipe-cue">Swipe through all eight enchantments →</p><button class="primary" data-action="compile-id">Compile potion ID</button><button class="secondary" data-action="experiments">Observe another trial</button>`);
 }
+
 function bottle() {
   if (state.stage === 'sale') { moveToNext(); return; }
   if (state.pendingBottle) { showVial(); return; }
@@ -240,29 +235,35 @@ function bottle() {
   if (state.tutorial < 6) state.tutorial = 6;
   audio.play('measure'); renderAll(); persist(); showVial();
 }
-function breakdownHTML(result) {
-  return `<div class="order-breakdown">${result.breakdown.map(row => `<div class="measure-row"><span class="measure-label">${PROPERTIES[row.property].label}</span><span class="measure-value">${escape(propertyDescription(row.property, row.actual))}<span class="target-note">Wanted: ${escape(requirementDescription(row))} · ${row.met ? 'within tolerance' : 'outside tolerance'}</span><span class="meter${row.met ? '' : ' fail'}"><span style="width:${Math.round(row.similarity * 100)}%"></span></span></span><strong>${Math.round(row.similarity * 100)}%</strong></div>`).join('')}</div>`;
-}
 function showVial() {
   const vial = state.pendingBottle; if (!vial) return;
-  const observation = observedPotion(state, vial);
   latestInspection = vial;
-  if (isSandbox()) {
-    sheet('Sandbox potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><h3>${vial.volume.toFixed(1)} ml sealed vial</h3><p>Experiment freely and record your discoveries.</p></div></div>${effectRows(vial, observation)}<button class="primary" data-action="experiments">Test a dose</button><button class="secondary" data-action="save-inspection">Save formula</button><button class="secondary" data-action="confirm-discard">Discard vial & keep brewing</button>`); return;
-  }
-  const sale = observation ? priceSale(vial, state.order, state.reputation) : null;
-  const estimate = sale ? `<div class="score">${Math.round(sale.quality)}<small> / 100 observed match</small></div><p>Expected offer: ${sale.payment} coins</p>` : '<div class="score">?<small> / 100 unknown match</small></div><p>Offer unknown · test this potion to estimate it.</p>';
-  sheet('Your bottled potion', `<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div>${estimate}<p>${vial.volume.toFixed(1)} / ${state.order.volume} ml · Sealed and ready</p></div></div>${sale ? breakdownHTML(sale) : ''}${effectRows(vial, observation)}<p class="quiet">Reagents used: ${vial.cost.ingredients.toFixed(1)} coins · A short vial lowers the offer. Testing a sealed vial consumes its sale quantity.</p><button class="primary" data-action="sell"${!observation && state.order.conceptVersion === 1 ? ' disabled' : ''}>${!observation && state.order.conceptVersion === 1 ? 'Test before serving' : `Sell to ${escape(state.order.customer.name)}${sale ? ` · ${sale.payment} coins` : ' · offer unknown'}`}</button><button class="secondary" data-action="experiments">Test 5 ml before selling</button><button class="secondary" data-action="save-inspection">${observation ? 'Save tested formula' : 'Save untested formula'}</button><div class="action-list"><button class="danger-button" data-action="discard-vial">Discard vial and try again</button><button data-action="supplies">Visit supplies</button></div>`);
+  const document = findPotionId(state,vial), seal = certificateFor(state,vial), cost = certificationCost(state);
+  sheet('Sealed potion',`<div class="vial-preview"><img src="${bottleSprite(vial.color)}" alt="Bottled potion"><div><h3>${escape(document?.name || 'Unidentified potion')}</h3><p>${vial.volume.toFixed(1)} / ${state.order.volume} ml</p>${document?`<small>${escape(document.id)}</small>`:''}</div></div>${effectRows(vial,document)}${document?'<p class="quiet">Your written estimates. The customer will discover the real effects after using it.</p>':''}<div class="vial-actions"><button class="primary" data-action="${isSandbox()?'experiments':'sell'}"${!isSandbox()&&!document?' disabled':''}>${isSandbox()?'Creature trials':'Negotiate price'}</button><button class="secondary" data-action="potion-id">${document?'Edit potion ID':'Write potion ID'}</button><button class="secondary" data-action="experiments">Test a spare dose</button>${!isSandbox()?`<button data-action="certify"${seal||state.coins<cost||!document?' disabled':''}>${seal?'Expert seal attached':`Expert seal · ${cost} coins`}</button><p class="quiet">A seal applies only to this batch. It defeats false claims; genuine faults still require a refund.</p>`:''}<button data-action="save-inspection">Remember formula</button><button class="danger-button" data-action="discard-vial">Discard vial</button></div>`);
 }
-function sell() {
-  completeSale(state); state.tutorial = 7;
+function showNegotiation() {
+  const deal = startNegotiation(state); persist();
+  sheet('At the counter',`<div class="vial-preview"><img style="width:56px;height:56px" src="${portraitSprite(state.order.customer.portraitSeed)}" alt="${escape(state.order.customer.name)}"><div><h3>${escape(state.order.customer.name)}</h3><p>${deal.agreed?'Agreed. I will try it at home.':deal.round>=4?'That is my final offer.':deal.round?'Could you meet me here?':'What price would you accept?'}</p></div></div><div class="sale-coins">${icon('coin')}${deal.offer}</div><p class="quiet">Customer offer · ${deal.round}/4 rounds</p>${deal.history.length?`<div class="deal-history">${deal.history.map(h=>`<span>You ${h.ask} ↔ ${h.offer}</span>`).join('')}</div>`:''}<label class="setting-row">Your price <input id="sellerPrice" type="number" inputmode="numeric" min="1" max="${state.order.budget*3}" value="${Math.min(state.order.budget,deal.offer+10)}"></label><button class="primary" data-action="accept-offer">${deal.agreed?'Seal the agreement':`Accept ${deal.offer} coins`}</button><button class="secondary" data-action="counter-offer"${deal.agreed||deal.round>=4?' disabled':''}>Make an offer</button><button data-action="review-vial">Back to vial</button>`);
+}
+function sell() { showNegotiation(); }
+function finishAgreement() {
+  acceptCustomerOffer(state); completeSale(state); state.tutorial = 7;
   audio.play('sale'); renderAll(); persist(); showSale();
 }
 function showSale() {
   const sale = state.lastSale; if (!sale) return;
   latestInspection = sale.sample;
-  sheet(sale.quality >= 90 ? 'A splendid commission' : sale.acceptable ? 'Commission complete' : 'A lesson in alchemy', `<div class="vial-preview"><img src="${portraitSprite(sale.customer.portraitSeed, sale.quality >= 90 ? 'happy' : sale.acceptable ? 'neutral' : 'sad')}" alt="${escape(sale.customer.name)}" style="width:64px;height:64px"><div><div class="score">${Math.round(sale.quality)}<small> / 100 quality</small></div><p>${escape(sale.customer.name)} · ${escape(sale.customer.role)}</p></div></div><p class="sale-dialogue">“${escape(sale.reaction)}”</p><div class="sale-coins">${icon('coin')}+${sale.payment}</div><div class="profit-line"><span>Profit after reagent, energy and vial costs</span><strong>${sale.profit >= 0 ? '+' : ''}${sale.profit.toFixed(1)}</strong></div><div class="profit-line"><span>Shop reputation</span><strong>${sale.reputationDelta >= 0 ? '+' : ''}${sale.reputationDelta}</strong></div>${sale.repayment ? `<p class="quiet">${sale.repayment} coins repaid to the guild.</p>` : ''}${observedPotion(state, sale.sample) ? breakdownHTML(sale) : '<p class="quiet">The customer has judged your potion. Its precise effects remain unknown until you experiment with the formula.</p>'}<p class="progress-note">${state.completed === 1 ? 'The guild now offers a density stone. Spend your earnings to learn more about every brew.' : `You have completed ${state.completed} commissions. Visit the guild for new tools and reagents.`}</p><button class="primary" data-action="next">Welcome the next customer</button><button class="secondary" data-action="save-inspection">Remember this formula</button>`);
+  sheet('Potion delivered',`<div class="vial-preview"><img src="${portraitSprite(sale.customer.portraitSeed,'happy')}" style="width:60px;height:60px" alt="${escape(sale.customer.name)}"><p>“Thank you. I will try this at home.”</p></div><div class="sale-coins">${icon('coin')}+${sale.payment}</div><p class="quiet">Agreed payment. A disappointed customer may return later; keep the receipt and the potion ID.</p><div class="profit-line"><span>Brewing margin</span><strong>${sale.profit.toFixed(1)}</strong></div><button class="primary" data-action="next">Next customer</button><button class="secondary" data-action="save-inspection">Remember formula</button><button data-action="returns">Receipts & returns</button>`);
 }
+function showReturns() {
+  advanceComplaints(state); persist();
+  const claims = (state.complaints || []).filter(c=>c.status==='pending');
+  sheet('Receipts & returns',`<p>Refunds are binding. Unpaid amounts become guild debt. A matching expert seal can contest a false claim.</p><div class="mini-pages">${claims.map(c=>`<article class="mini-card"><img class="return-portrait" src="${portraitSprite(c.customer.portraitSeed,'sad')}" alt="${escape(c.customer.name)}"><h3>${escape(c.customer.name)}</h3><p>“${escape(c.reason)}”</p><div class="sale-coins">${c.payment} ${icon('coin')}</div><button class="primary" data-refund="${c.id}">Refund ${c.payment}</button>${c.certified?`<button class="secondary" data-contest="${c.id}">Present this batch's seal</button>`:''}<p class="quiet">The guild settles this claim in ${Math.max(0,Math.ceil((c.deadline-Date.now())/1000))}s.</p></article>`).join('')||'<article class="mini-card"><h3>No returning customers</h3><p>Customers use their potions at home before reporting back.</p></article>'}${(state.deliveries||[]).slice(0,12).map(r=>`<article class="mini-card"><h3>${escape(r.customer.name)}</h3><p>${r.payment} coins · ${r.certified?'Expert seal':'Uncertified'}</p><p class="quiet">${escape(r.potionId||'Legacy potion')}<br>${escape((state.complaints||[]).find(c=>c.orderId===r.orderId)?.status || r.status)}</p></article>`).join('')}</div><p class="swipe-cue">Swipe receipts →</p>`);
+}
+function showOrder() {
+  sheet(`${state.order.customer.name}'s request`,`<p class="sale-dialogue">“${escape(state.order.customer.dialogue)}”</p><p>${state.order.volume} ml · budget ${state.order.budget} coins</p><div class="mini-pages">${state.order.requirements.map(r=>`<article class="mini-card"><h3>${PROPERTIES[r.property].label}</h3><div class="estimate-glyph">✧</div><p>${r.comparison==='maximum'?`At most ${(r.target*100).toFixed(1)}%`:`${Math.max(0,(r.target-r.tolerance)*100).toFixed(1)}–${Math.min(100,(r.target+r.tolerance)*100).toFixed(1)}%`}</p><p class="quiet">${r.comparison==='maximum'?'Unwanted enchantment':'Desired enchantment'}</p></article>`).join('')}</div><p class="swipe-cue">Swipe through the request →</p>`);
+}
+
 async function moveToNext() {
   const button = $('sheetContent').querySelector('[data-action="next"]'); if (button) button.disabled = true;
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -270,120 +271,67 @@ async function moveToNext() {
   catch (err) { if (button) button.disabled = false; notify(err.message); }
 }
 function showInventory() {
-  const rows = availableIngredients(state.world, state.equipment).map(i => {
-    const cost = Math.ceil(i.price * 60);
-    const trade = Math.floor(i.price * 60 * .55);
-    const tradeable = trade > 0 && !state.foraging.nodes.some(node => node.ingredientId === i.id && node.unlimited);
-    return `<div class="stock-row"><img src="${ingredientSprite(i)}" alt=""><div class="stock-info"><strong>${escape(i.name)} · ${escape(i.form || 'liquid')}</strong><p>${isSandbox() ? 'Infinite' : Math.floor(state.inventory[i.id] || 0)} ${ingredientUnit(i)} in stock</p><p>${escape(i.lore)}</p><details class="plain-ingredient-effects"><summary>Known plain ingredient effects</summary>${effectRows(i.material, true)}</details>${!isSandbox() && tradeable ? `<button data-trade="${i.id}"${(state.inventory[i.id] || 0) < 60 ? ' disabled' : ''}>Trade 60 · +${trade} coins</button>` : ''}</div>${!isSandbox() ? `<button data-restock="${i.id}"${state.coins < cost ? ' disabled' : ''}>Buy 60<br>${cost} coins</button>` : ''}</div>`;
-  }).join('');
-  sheet('Ingredient supplies', `<p>${isSandbox() ? 'Every ingredient is unlimited. Grinding and pouring still use the same particle simulation.' : 'Gather ingredients for free in the Wild garden, or buy raw stock from the village.'} These plain ingredient effects are known from the start. Mixture effects must be discovered by testing. Each dry measure occupies 1 ml of cauldron capacity. Grind plants and stones, then stir a small amount into plenty of water.</p><button class="primary" data-action="nature">Go gathering</button>${rows}${!isSandbox() ? `<details><summary>Apprentice emergency fund</summary><p>If your total coins and remaining stock are worth less than 15 coins, the guild offers a 25 coin loan. You repay 30 coins from future sales. Only one loan can be outstanding.</p><button data-action="loan">Request guild loan</button><p>Outstanding debt: ${state.debt || 0} coins</p></details>` : ''}`);
+  const rows = availableIngredients(state.world,state.equipment).map(i=>`<article class="mini-card stock-card"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(i.name)}</h3><p>${isSandbox()?'∞':Math.floor(state.inventory[i.id]||0)} ${ingredientUnit(i)}</p><p>${escape(i.lore)}</p>${effectRows(i.material,true)}<p class="quiet">Awakening rune: ${i.material.arcaneThreshold < 0?'deep frost':i.material.arcaneThreshold>1.2?'distant flame':Math.round(i.material.arcaneThreshold*100)+'°A'}. Blending changes the rune.</p><button class="primary" data-garden-node="${state.foraging.nodes.find(n=>n.ingredientId===i.id)?.id}">Visit garden bed</button>${!isSandbox()?`<button data-restock="${i.id}">Village parcel · 20 · ${i.solvent?0:Math.ceil(i.price*100+8)} coins</button>`:''}</article>`).join('');
+  sheet('Known ingredients',`<div class="mini-pages">${rows}</div><p class="swipe-cue">Swipe ingredients →</p>${!isSandbox()?'<button data-action="loan">Emergency guild loan</button>':''}`);
 }
 function resourceText(status) {
-  if (status.locked) return 'Requires a guild reagent unlock';
-  if (status.unlimited || isSandbox()) return 'Infinite supply';
-  const seconds = Math.max(0, Math.ceil((status.nextReadyAt - Date.now()) / 1000));
-  return `${status.available} / ${status.capacity} ready${status.available < status.capacity ? ` · ${status.available ? 'regrowing' : `next in ${seconds}s`}` : ' · fully grown'}`;
+  if (status.locked) return 'Guild bed · locked';
+  if (status.unlimited) return 'Fresh spring water';
+  const seconds=Math.max(0,Math.ceil((status.nextReadyAt-Date.now())/1000));
+  return `${status.available}/${status.capacity} ripe${status.depleted?` · wait ${Math.ceil(seconds/60)}m`:''}`;
 }
-function showNature() {
-  const nodes = state.foraging.nodes;
-  const rows = nodes.map(node => {
-    const ingredient = state.world.ingredients.find(i => i.id === node.ingredientId), status = resourceStatus(state, node.id);
-    return `<article class="resource-card"><img src="${ingredientSprite(ingredient)}" alt=""><div><strong>${escape(node.name)}</strong><p>${escape(ingredient.name)} · ${escape(node.biome)}</p><p class="resource-status" data-resource-status="${node.id}">${escape(resourceText(status))}</p><div class="resource-meter"><span data-resource-fill="${node.id}" style="width:${status.unlimited ? 100 : 100 * status.stock / status.capacity}%"></span></div></div><div class="resource-actions"><button data-gather="${node.id}"${status.locked || !status.available ? ' disabled' : ''}>Gather ${status.unlimited || isSandbox() ? 20 : Math.min(20, status.available)}</button><button data-gather-all="${node.id}"${status.locked || !status.available ? ' disabled' : ''}>${status.unlimited || isSandbox() ? 'Fill 60' : 'Gather all'}</button></div></article>`;
-  }).join('');
-  sheet('Wild garden', `<p class="room-intro">A stream, a woodland and a rocky clearing. Pick what you need; depleted patches recover with time, even while you are away.</p><div class="natural-scene"><img src="${naturalLandscapeSprite(state.seed)}" alt="A pixel-art woodland with a stream, flowers, mushrooms and mineral deposits">${nodes.map(node => `<button class="gather-hotspot" data-gather="${node.id}" style="left:${Math.max(6, Math.min(94, node.x * 100))}%;top:${Math.max(10, Math.min(90, node.y * 100))}%" aria-label="Gather ${escape(node.name)}"><img src="${ingredientSprite(state.world.ingredients.find(i => i.id === node.ingredientId))}" alt=""></button>`).join('')}</div><p class="quiet">Plants return as new growth. Stones become available as new deposits emerge. Plain water is always available.</p><div class="resource-list">${rows}</div><button class="primary" data-action="close">Return to brewing</button>`);
-  currentRoom = 'nature';
-  roomTimer = setInterval(updateNature, 1000);
+function showNature(nodeId = null) {
+  const nodes=state.foraging.nodes;
+  sheet('Your garden',`<div class="garden-summary">Stamina <strong id="gardenStamina">${Math.floor(gardenStamina(state))}</strong>/100 · Jars hold ${state.equipment.viscometer?96:72} measures</div><div class="natural-scene"><img src="${naturalLandscapeSprite(state.seed)}" alt="Your magical garden">${nodes.map(n=>`<button class="gather-hotspot" data-garden-node="${n.id}" style="left:${n.x*100}%;top:${n.y*100}%" aria-label="Visit ${escape(n.name)}"><img src="${ingredientSprite(state.world.ingredients.find(i=>i.id===n.ingredientId))}" alt=""></button>`).join('')}</div><div class="mini-pages resource-list">${nodes.map(n=>{const i=state.world.ingredients.find(i=>i.id===n.ingredientId),status=resourceStatus(state,n.id);return `<article class="mini-card resource-card" data-bed="${n.id}"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(n.name)}</h3><p>${escape(i.name)}</p><p data-resource-status="${n.id}">${resourceText(status)}</p><div class="resource-meter"><span data-resource-fill="${n.id}" style="width:${status.unlimited?100:status.stock/status.capacity*100}%"></span></div><button class="primary" data-gather="${n.id}"${status.locked||status.depleted||!status.unlimited&&status.stamina<(state.equipment.viscometer?9:12)?' disabled':''}>${status.unlimited?'Collect 20 ml':'Harvest · ${state.equipment.viscometer?9:12} stamina'}</button>${status.unlimited?'':`<button data-tend="${n.id}"${status.locked||status.tendedUntil>Date.now()?' disabled':''}>Tend · 5 water · 6 stamina</button>`}</article>`;}).join('')}</div><p class="swipe-cue">Swipe beds →</p>`);
+  currentRoom='nature';roomTimer=setInterval(updateNature,1000);
+  if(nodeId) requestAnimationFrame(()=>$('sheetContent').querySelector(`[data-bed="${nodeId}"]`)?.scrollIntoView({block:'nearest',inline:'start'}));
 }
 function updateNature() {
-  if (currentRoom !== 'nature' || !$('sheet').open) return;
-  for (const node of state.foraging.nodes) {
-    const status = resourceStatus(state, node.id);
-    const label = $('sheetContent').querySelector(`[data-resource-status="${node.id}"]`);
-    if (label) label.textContent = resourceText(status);
-    const fill = $('sheetContent').querySelector(`[data-resource-fill="${node.id}"]`);
-    if (fill) fill.style.width = `${status.unlimited || isSandbox() ? 100 : 100 * status.stock / status.capacity}%`;
-    for (const button of $('sheetContent').querySelectorAll(`[data-gather="${node.id}"], [data-gather-all="${node.id}"]`)) {
-      button.disabled = status.locked || !status.available;
-      if (button.closest('.resource-actions') && button.dataset.gather) button.textContent = `Gather ${status.unlimited || isSandbox() ? 20 : Math.min(20, status.available)}`;
-    }
-  }
+  if(currentRoom!=='nature')return;
+  $('gardenStamina').textContent=Math.floor(gardenStamina(state));
+  for(const node of state.foraging.nodes){const status=resourceStatus(state,node.id);const label=$('sheetContent').querySelector(`[data-resource-status="${node.id}"]`);if(label)label.textContent=resourceText(status);const fill=$('sheetContent').querySelector(`[data-resource-fill="${node.id}"]`);if(fill)fill.style.width=`${status.unlimited?100:status.stock/status.capacity*100}%`;const button=$('sheetContent').querySelector(`[data-gather="${node.id}"]`);if(button)button.disabled=status.locked||status.depleted||!status.unlimited&&status.stamina<(state.equipment.viscometer?9:12);}
 }
-function gather(nodeId, all = false) {
-  const status = resourceStatus(state, nodeId);
-  const quantity = all && !status.unlimited && !isSandbox() ? status.available : all ? 60 : Math.min(20, status.available);
-  const result = gatherIngredient(state, nodeId, quantity);
-  renderRack(); persist(); updateNature(); audio.play();
-  notify(`Gathered ${result.quantity} ${ingredientUnit(state.world.ingredients.find(i => i.id === result.ingredientId))}.`);
+function startHarvest(nodeId) {
+  const status=resourceStatus(state,nodeId);
+  if(status.unlimited){const result=gatherIngredient(state,nodeId,20);renderRack();persist();updateNature();notify(`Collected ${result.quantity} ml.`);return;}
+  if(status.locked||status.depleted||status.stamina<(state.equipment.viscometer?9:12))throw new Error('This bed is not ready to harvest.');
+  const target=.24+(seedNumber(`${state.seed}:${nodeId}:${status.harvests||0}`)%51)/100;
+  sheet('A careful harvest',`<img class="harvest-icon" src="${ingredientSprite(state.world.ingredients.find(i=>i.id===status.ingredientId))}" alt="Ingredient"><p>Tap Harvest when the marker crosses the green band. Careful timing saves more of the crop.</p><div class="harvest-meter"><span class="harvest-target" style="left:${(target-.1)*100}%;width:20%"></span><span id="harvestMarker"></span></div><button class="primary" data-action="harvest">Harvest</button><button data-action="nature">Leave it growing</button>`);
+  harvest={nodeId,target,start:performance.now(),position:0};currentRoom='harvest';
 }
-function subjectAppearance(subject) {
-  const stats = subject.stats;
-  if (!stats.alive) return 'dead';
-  if (stats.burning > 2) return 'burning';
-  if (stats.freezing > 2) return 'frozen';
-  if (stats.transformation > 2) return 'transformed';
-  if (stats.health < 65) return 'hurt';
-  if (stats.love > 2) return 'loved';
-  if (stats.strength > (subject.id === 'beetle' ? 37 : 22)) return 'strong';
-  return 'healthy';
+function finishHarvest() {
+  if(!harvest)return;
+  const {nodeId,target,position}=harvest;
+  const precision=Math.max(0,1-Math.abs(position-target)/.35);
+  const result=gatherIngredient(state,nodeId,10,Date.now(),{precision});
+  renderRack();persist();audio.play();showNature(nodeId);notify(`Harvested ${result.quantity}${result.wasted?` · ${result.wasted} lost`:''}.`);
 }
 function showExperiments() {
-  const available = state.pendingBottle?.volume || brew.liquidVolume, report = experimentReport || state.experiments.records[0];
-  const cards = Object.values(state.experiments.subjects).map(subject => `<article class="subject-card"><img src="${experimentSubjectSprite(subject.id, subjectAppearance(subject))}" alt="${escape(subject.name)}, ${subjectAppearance(subject)}"><h3>${escape(subject.name)}</h3><p>${escape(subject.description)}</p><p class="subject-stats">${subject.stats.alive ? `Vitality ${Math.round(subject.stats.health)}%` : 'Life extinguished'}${subject.kind === 'plant' ? ` · Growth ${Math.round(subject.stats.growth)}%` : ''} · ${subject.trials} trials</p><button data-test="${subject.id}"${available < 1 || !subject.stats.alive ? ' disabled' : ''}>Test ${Math.min(5, available).toFixed(available < 5 ? 1 : 0)} ml</button><button class="reset-subject" data-reset-subject="${subject.id}">Reset subject</button></article>`).join('');
-  const observedChanges = report ? Object.entries({ health: 'Health', vitality: 'Energy', growth: 'Growth', strength: 'Strength', love: 'Affection', transformation: 'Transformation', burning: 'Fire aura', freezing: 'Frost' }).filter(([key]) => Math.abs(report.after[key] - report.before[key]) > .05).map(([key, label]) => `<div class="observed-change"><span>${label}</span><strong>${report.before[key].toFixed(1)} → ${report.after[key].toFixed(1)}</strong></div>`).join('') : '';
-  const reportHTML = report ? `<section id="experimentReport" class="experiment-report" role="status"><div class="eyebrow">TRIAL ${report.serial} · ${report.volume.toFixed(1)} ML</div><h3>${escape(report.subjectName)}</h3><ul>${report.observations.map(line => `<li>${escape(line)}</li>`).join('')}</ul>${observedChanges}<h3>Discovered effects · tested sample</h3>${effectRows(report.sample, true)}${!isSandbox() ? `<h3>Match of tested effects</h3>${breakdownHTML(assessPotion({ ...report.sample, volume: state.order.volume }, state.order))}` : ''}<button class="secondary" data-observation="${report.serial}">Remember this tested formula</button><p>${report.safe ? 'No harmful response observed at this dose.' : 'Harmful effects observed. Review the composition before serving.'}</p></section>` : '<p id="experimentReport" class="empty-note">The effects of this mixture are unknown until you test a measured dose. Reset a subject to compare potions from the same starting condition.</p>';
-  sheet('Experiments room', `<p class="room-intro">Discover your mixture’s effects on an animal, a plant or a mineral, compare with the customer’s request, then adjust and retest. Each test uses real liquid from your ${state.pendingBottle ? 'sealed vial' : 'cauldron'}.</p><div class="experiment-supply">${available.toFixed(1)} ml available · ${state.pendingBottle ? 'Testing reduces the vial’s sale quantity' : 'Brew a little extra for your tests'}</div><div class="subjects-grid">${cards}</div>${reportHTML}${state.experiments.records.length ? `<details><summary>Observation journal · ${state.experiments.records.length} trials</summary>${state.experiments.records.slice(0, 8).map(record => `<p><strong>${escape(record.subjectName)}</strong> · ${record.volume.toFixed(1)} ml · ${escape(record.observations.join(' '))}</p>`).join('')}</details>` : ''}<button class="primary" data-action="${state.pendingBottle ? 'review-vial' : 'close'}">${state.pendingBottle ? 'Return to vial' : 'Return to brewing'}</button>`);
-  currentRoom = 'experiments';
+  const subject=state.experiments.subjects[selectedSubject],report=state.experiments.records.find(r=>r.subjectId===selectedSubject);
+  const available=state.pendingBottle?.volume || brew.liquidVolume;
+  sheet('Creature trials',`<div class="subject-selector">${Object.values(state.experiments.subjects).map(c=>`<button data-subject="${c.id}" class="${c.id===selectedSubject?'active':''}"><img src="${experimentSubjectSprite(c.id,'healthy')}" alt=""><span>${escape(c.name)}</span></button>`).join('')}</div><canvas id="creatureCanvas" width="320" height="176" aria-label="Creature enclosure, visual potion response"></canvas><div id="experimentReport" class="trial-controls"><button data-action="untreated" aria-pressed="${showUntreated}">${showUntreated?'Observe response':'Untreated view'}</button><label>Dose <select id="trialDose">${[2,5,10].map(v=>`<option value="${v}"${testDose===v?' selected':''}>${v} ml</option>`).join('')}</select></label><button data-test="${subject.id}"${available<1||!subject.stats.alive||subject.readyAt>Date.now()?' disabled':''}>Give dose</button><button data-reset-subject="${subject.id}">Fresh trial · ${isSandbox()?0:state.equipment.densimeter?1:3} coins</button></div><p class="quiet">${available.toFixed(1)} ml available · ${subject.trials} trials · ${report?`${report.volume.toFixed(1)} ml last dose`:'Untreated'}${subject.readyAt>Date.now()?' · resting':''}</p><div class="action-list"><button class="primary" data-action="potion-id"${!observedPotion(state,state.pendingBottle||brew.inspectLiquid())?' disabled':''}>Write potion ID</button><button class="secondary" data-action="${state.pendingBottle?'review-vial':'close'}">${state.pendingBottle?'Back to vial':'Back to brewing'}</button></div>`);
+  currentRoom='experiments';testingRenderer=new TestingRenderer($('creatureCanvas'));
+  roomTimer=setInterval(()=>{if(currentRoom==='experiments'){const c=state.experiments.subjects[selectedSubject],b=$('sheetContent').querySelector('[data-test]');if(b)b.disabled=!(state.pendingBottle?.volume||brew.liquidVolume)||!c.stats.alive||c.readyAt>Date.now();}},1000);
 }
 function testPotion(subjectId) {
-  const subject = state.experiments.subjects[subjectId];
-  if (!subject?.stats.alive) throw new Error('Reset this subject before another experiment.');
-  const preparation = structuredClone(state.pendingBottle || brew.inspectLiquid());
-  let sample;
-  if (state.pendingBottle) {
-    const split = splitPotionSample(state.pendingBottle, 5);
-    experimentReport = runExperiment(state, split.dose, subjectId, split.dose.volume, Date.now(), preparation);
-    state.pendingBottle = split.remaining;
-    if (!split.remaining) state.stage = 'brewing';
-  } else {
-    if (brew.liquidVolume < 1) throw new Error('Add water and dissolve ground ingredients before testing.');
-    sample = brew.takeSample(5);
-    experimentReport = runExperiment(state, sample, subjectId, sample.volume, Date.now(), preparation);
-  }
-  latestInspection = preparation;
-  if (state.tutorial < 5) state.tutorial = 5;
-  audio.play('measure'); renderAll(); persist(); showExperiments();
-  requestAnimationFrame(() => {
-    const result = $('experimentReport');
-    if (currentRoom !== 'experiments' || !result) return;
-    result.tabIndex = -1;
-    result.focus({ preventScroll: true });
-    result.scrollIntoView({ block: 'nearest', behavior: 'auto' });
-  });
+  const subject=state.experiments.subjects[subjectId];
+  if(!subject?.stats.alive||subject.readyAt>Date.now())throw new Error('Prepare a fresh trial or let this familiar rest.');
+  const preparation=structuredClone(state.pendingBottle||brew.inspectLiquid());
+  if(state.pendingBottle){const split=splitPotionSample(state.pendingBottle,testDose);experimentReport=runExperiment(state,split.dose,subjectId,split.dose.volume,Date.now(),preparation);state.pendingBottle=split.remaining;if(!split.remaining)state.stage='brewing';}
+  else {if(brew.liquidVolume<1)throw new Error('Prepare a liquid potion first.');const sample=brew.takeSample(testDose);experimentReport=runExperiment(state,sample,subjectId,sample.volume,Date.now(),preparation);}
+  state.negotiation=null;latestInspection=preparation;selectedSubject=subjectId;showUntreated=false;
+  if(state.tutorial<5)state.tutorial=5;
+  audio.play('measure');renderAll();persist();showExperiments();
 }
+
 function showGuild() {
-  if (isSandbox()) { sheet('Sandbox instruments', '<p>Every instrument, the master cauldron, furnace and rare ingredient are already unlocked. Use the measuring bench or experiment freely.</p><button class="primary" data-action="close">Return to brewing</button>'); return; }
-  const rows = UPGRADES.map((u, index) => {
-    const status = upgradeStatus(state, u);
-    return `<div class="upgrade-row">${icon(u.id === 'reagents' ? 'vial' : u.id === 'furnace' ? 'flame' : u.id === 'cauldron' ? 'inventory' : 'measure')}<div class="upgrade-info"><strong>${u.name}</strong><p>${u.description}</p><small>${status.owned ? 'Owned' : !status.available ? `Requires ${u.sales} commissions${u.level > 1 ? ' and the previous upgrade' : ''}` : 'Ready to unlock'}</small></div><button data-upgrade="${index}"${!status.available || !status.affordable ? ' disabled' : ''}>${status.owned ? 'Owned' : `${u.cost}<br>coins`}</button></div>`;
-  }).join('');
-  sheet('Alchemists’ guild', `<p>${Math.floor(state.coins)} coins · ${state.completed} commissions · Reputation ${state.reputation}</p><p class="quiet">Buy instruments to discover hidden measurements. Shop improvements and reagents open as you complete more commissions.</p>${rows}`);
+  const rows=UPGRADES.map((u,index)=>{const status=upgradeStatus(state,u);return `<article class="mini-card"><h3>${u.name}</h3><p>${u.description}</p><p class="quiet">${status.owned?'Owned':!status.available?`Requires ${u.sales} commissions`:'Ready'}</p><button class="primary" data-upgrade="${index}"${!status.available||!status.affordable||isSandbox()?' disabled':''}>${status.owned?'Owned':`${u.cost} coins`}</button></article>`;}).join('');
+  sheet('Alchemists’ guild',`<p>${Math.floor(state.coins)} coins · ${state.completed} commissions</p><div class="mini-pages">${rows}</div><p class="swipe-cue">Swipe improvements →</p><button class="secondary" data-action="review-vial"${!state.pendingBottle?' disabled':''}>Expert certification · sealed batch</button>`);
 }
 function showBook() {
-  const rows = state.discoveries.map((d, index) => {
-    const sample = d.sample;
-    const portions = d.preparation?.portions || sample.portions || [];
-    const grouped = new Map();
-    for (const p of portions) {
-      const key = `${p.ingredientId}:${Boolean(p.crushed)}`, prior = grouped.get(key);
-      grouped.set(key, { ...p, ml: (prior?.ml || 0) + p.ml });
-    }
-    return `<div class="recipe-row"><img src="${bottleSprite(sample.color)}" alt=""><div class="recipe-info"><strong>${escape(d.name)}</strong><small class="formula-knowledge">${d.tested ? 'Tested discovery' : 'Untested formula · effects unknown'}</small><p>${Math.round(sample.volume)} ml · ${escape(propertyDescription('color', sample.color))} · ${escape(propertyDescription('temperature', sample.temperature))}</p><ul>${[...grouped.values()].map(p => {
-      const ingredient = state.world.ingredients.find(i => i.id === p.ingredientId);
-      return `<li>${p.ml.toFixed(1)} ${ingredient ? ingredientUnit(ingredient) : 'ml'} ${escape(ingredient?.name || 'reacted ingredient')}${p.crushed ? ' · ground' : ''}</li>`;
-    }).join('')}</ul><p>${Math.round(sample.history.elapsed)} s brewed · ${sample.history.heatEnergy.toFixed(1)} heat energy · ${sample.history.coldEnergy.toFixed(1)} frost energy · ${sample.history.stirred.toFixed(1)} stirring</p><button data-recipe="${index}">${d.tested ? 'Read discoveries' : 'Read formula'}</button>${portions.length ? `<button data-prepare="${index}">Prepare these portions</button>` : ''}</div></div>`;
-  }).join('');
-  sheet('Your recipe book', `<p>Your experiments build your knowledge. Tested discoveries retain their observed effects; untested formulas remain hypotheses.</p>${rows || '<p class="empty-note">The pages are waiting. Test a mixture in the Experiments room and remember its formula.</p>'}${state.experiments.records.length ? `<h3>Discovered experiment formulas</h3>${state.experiments.records.slice(0, 12).map(record => `<div class="journal-formula"><strong>Trial ${record.serial} · ${escape(record.subjectName)}</strong><p>${escape(record.observations.join(' '))}</p><button data-observation="${record.serial}">Save tested formula</button></div>`).join('')}` : ''}<p class="quiet">Pouring a recorded formula only transfers its ingredients. Stir and control the temperature yourself; the engine determines the new result.</p>`);
+  sheet('Formula book',`<div class="mini-pages">${state.discoveries.map((d,index)=>`<article class="mini-card"><img class="book-vial" src="${bottleSprite(d.sample.color)}" alt=""><h3>${escape(d.name)}</h3><p class="quiet">${d.potionId?'Player estimates recorded':'No written estimates'}</p>${effectRows(d.sample,d.potionId)}<ul class="formula-portions">${(d.preparation?.portions||d.sample.portions||[]).map(p=>`<li>${p.ml.toFixed(1)} ${escape(state.world.ingredients.find(i=>i.id===p.ingredientId)?.name||'Essence')}${p.crushed?' · ground':''}</li>`).join('')}</ul><button data-prepare="${index}">Prepare portions</button></article>`).join('')||'<article class="mini-card"><h3>Your first formula</h3><p>Bottle a potion, compile its ID, then remember the formula.</p></article>'}</div><p class="swipe-cue">Swipe formulas →</p>`);
 }
+
 function showDiscovery(sample) {
   latestInspection = sample;
   sheet('Record a discovery', `<p>${observedPotion(state, sample) ? 'Tested discovery. Name this' : 'Untested formula: its effects remain unknown. Name this'} ${Math.round(sample.volume)} ml ${escape(propertyDescription('color', sample.color).toLowerCase())} brew.</p><input id="discoveryName" class="name-input" maxlength="40" placeholder="e.g. Moonlit travelling tonic" aria-label="Discovery name"><button class="primary" data-action="record-discovery">Write in recipe book</button>`);
@@ -406,8 +354,9 @@ function prepareRecipe(index) {
   closeSheet(); renderRack(); updateHUD(); persist(); notify('Portions poured. Stir and apply the recorded heat or frost.');
 }
 function showSettings() {
-  sheet('Shop settings', `<label class="setting-row">Gentle sound effects<input id="soundSetting" type="checkbox"${state.settings.sound ? ' checked' : ''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics === 'balanced' ? ' selected' : ''}>Crisp · balanced</option><option value="eco"${state.settings.graphics === 'eco' ? ' selected' : ''}>Low · battery saver</option></select></label><p class="quiet">Both presets use the same 2D physics and potion quantities. Battery saver renders at 30 frames per second with fewer glows. Crisp mode uses finer material pixels.</p><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Replay tutorial</button><button data-action="menu">Main menu</button><a href="./sandbox.html?mode=2D">Original physics sandbox</a></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><h3>How to brew</h3><ol class="help-list"><li>Read the desired effects and limits. The customer gives an outcome; you choose the formula.</li><li>Gather plants, mushrooms and stones in the Wild garden. Depleted patches regrow over time.</li><li>Start with plain water. Select a raw ingredient and Grind & add, or add it whole and crush it with the Pestle inside the cauldron.</li><li>Use at least six parts water for one part ground ingredient to dissolve it. Hold Stir or drag through the brew. Less water makes thick liquid dough when kneaded; untouched dry grains remain solid.</li><li>Flame and Frost change energy and phases. Particle glows hint at strength, love, death, transformation, fire and freezing magic.</li><li>Read the known effects in Ingredients. Mixtures start unknown: test 5 ml in the Experiments room, compare the discovered effects, and adjust and retest until you are satisfied.</li><li>Bottle liquid after trapped steam condenses. Sell the vial and save useful formulas. Sandbox offers infinite resources and saves separately.</li></ol><details><summary>Save and simulation details</summary><p>The world, stock, resource recovery, experiments, vial and full cauldron save on this browser. Panels pause brewing while you read; natural resources continue recovering with time. Temperature, phases and particle properties are restored. A frozen coherent body is rebuilt on load. Export your save before clearing browser data.</p></details>`);
+  sheet('Settings',`<label class="setting-row">Sound<input id="soundSetting" type="checkbox"${state.settings.sound?' checked':''}></label><label class="setting-row">Graphics<select id="graphicsSetting"><option value="balanced"${state.settings.graphics==='balanced'?' selected':''}>Balanced</option><option value="eco"${state.settings.graphics==='eco'?' selected':''}>Battery saver</option></select></label><div class="action-list"><button data-action="export">Export save</button><button data-action="import">Import save</button><button data-action="tutorial">Tutorial</button><button data-action="menu">Main menu</button></div><input type="file" id="importSaveInput" accept="application/json,.json" class="hidden-input"><details><summary>Brewing guide</summary><p>Grind dry ingredients and stir with water. Gentle warmth helps separate essences blend; too much heat destroys magic. Opposed awakening runes can average into a reachable temperature and turn one enchantment overwhelming. Watch all creature responses, compare doses, and write a potion ID. Negotiate a price; refund real faults. An expensive expert seal protects the specific batch against false claims. Garden beds regrow while you are away, with limited harvests and stamina.</p></details>`);
 }
+
 function exportSave() {
   const blob = new Blob([encodeSave(state, brew)], { type: 'application/json' }), url = URL.createObjectURL(blob), anchor = document.createElement('a');
   anchor.href = url; anchor.download = isSandbox() ? 'alchemists-sandbox-save.json' : 'alchemists-shop-save.json'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -419,7 +368,7 @@ function bindUI() {
   $('sandboxBtn').onclick = () => openWorld(sandboxLoaded?.state?.seed || $('worldSeed').value.trim() || randomSeed(), sandboxLoaded?.state || null, 'sandbox');
   $('shuffleSeed').onclick = () => { $('worldSeed').value = randomSeed(); audio.play(); };
   $('menuBtn').onclick = menu; $('settingsBtn').onclick = showSettings;
-  $('clueBtn').onclick = () => { $('orderClue').hidden = !$('orderClue').hidden; };
+  $('clueBtn').onclick = showOrder; $('customerDetailsBtn').onclick = showOrder; $('complaintsBtn').onclick = showReturns;
   $('skipTutorial').onclick = () => { state.tutorial = 7; updateTutorial(); persist(); };
   $('measureBtn').onclick = guard(showInstruments); $('inventoryBtn').onclick = showInventory; $('bookBtn').onclick = showBook; $('upgradesBtn').onclick = showGuild;
   $('natureBtn').onclick = guard(showNature); $('experimentsBtn').onclick = guard(showExperiments);
@@ -479,11 +428,15 @@ function bindUI() {
   $('labCanvas').onkeyup = event => { if (event.code === 'Space') assist = false; };
   $('sheetContent').onclick = guard(event => {
     const button = event.target.closest('button'); if (!button) return;
-    if (button.dataset.gather) { gather(button.dataset.gather); return; }
-    if (button.dataset.gatherAll) { gather(button.dataset.gatherAll, true); return; }
+    if (button.dataset.gardenNode) { showNature(button.dataset.gardenNode); return; }
+    if (button.dataset.tend) { tendGarden(state,button.dataset.tend); persist(); renderRack(); showNature(button.dataset.tend); return; }
+    if (button.dataset.subject) { selectedSubject=button.dataset.subject;showUntreated=false;showExperiments();return; }
+    if (button.dataset.refund || button.dataset.contest) { const claim=resolveComplaint(state,button.dataset.refund||button.dataset.contest,Boolean(button.dataset.contest));renderAll();persist();showReturns();notify(claim.status==='dismissed'?'False claim dismissed by the expert seal.':'Refund settled.');return; }
+    if (button.dataset.gather) { startHarvest(button.dataset.gather); return; }
+
     if (button.dataset.test) { testPotion(button.dataset.test); return; }
-    if (button.dataset.resetSubject) { resetExperimentSubject(state, button.dataset.resetSubject); experimentReport = null; persist(); showExperiments(); return; }
-    if (button.dataset.restock) { const result = restock(state, Number(button.dataset.restock)); renderAll(); persist(); showInventory(); notify(`Refilled ${result.quantity} ml for ${result.cost} coins.`); return; }
+    if (button.dataset.resetSubject) { resetExperimentSubject(state, button.dataset.resetSubject); experimentReport = null; renderAll(); persist(); showExperiments(); return; }
+    if (button.dataset.restock) { const result = restock(state, Number(button.dataset.restock), 20); renderAll(); persist(); showInventory(); notify(`Refilled ${result.quantity} ml for ${result.cost} coins.`); return; }
     if (button.dataset.trade) { const result = tradeStock(state, Number(button.dataset.trade)); renderAll(); persist(); showInventory(); notify(`Traded ${result.quantity} ml for ${result.payment} coins.`); return; }
     if (button.dataset.upgrade) { const upgrade = buyUpgrade(state, Number(button.dataset.upgrade)); brew.equipment = state.equipment; audio.play('sale'); renderAll(); persist(); showGuild(); notify(`${upgrade.name} is ready.`); return; }
     if (button.dataset.observation) {
@@ -491,16 +444,20 @@ function bindUI() {
       if (!report) throw new Error('Experiment not found.');
       showDiscovery(report.preparation?.mass ? report.preparation : report.sample); return;
     }
-    if (button.dataset.recipe) {
-      selectedRecipe = state.discoveries[Number(button.dataset.recipe)];
-      sheet(selectedRecipe.name, `${measuredRows(selectedRecipe.sample, true)}<h3>Magic & chemistry</h3>${effectRows(selectedRecipe.sample, discoveryKnowledge(selectedRecipe))}<div class="snapshot-info">Peak temperature ${Math.round(selectedRecipe.sample.history.peakTemperature * 100)}°A · ${selectedRecipe.sample.history.evaporated.toFixed(1)} ml evaporated</div><button class="primary" data-action="book">Back to recipe book</button>`); return;
-    }
     if (button.dataset.prepare) { prepareRecipe(Number(button.dataset.prepare)); return; }
     switch (button.dataset.action) {
       case 'close': closeSheet(); break;
       case 'confirm-new': openWorld($('worldSeed').value.trim() || randomSeed()); break;
       case 'confirm-clean': brew.clean(); closeSheet(); renderAll(); persist(); notify('Cauldron drained and cleaned.'); break;
       case 'sell': sell(); break;
+      case 'potion-id': showPotionID();break;
+      case 'compile-id': { const estimates=Object.fromEntries([...$('sheetContent').querySelectorAll('[data-estimate]')].map(input=>[input.dataset.estimate,Number(input.value)/100])); compilePotionId(state,latestInspection,estimates,$('potionName').value);persist();if(state.pendingBottle)showVial();else {closeSheet();notify('Potion ID compiled. Bottle when ready.');}break; }
+      case 'counter-offer': counterOffer(state,Number($('sellerPrice').value));showNegotiation();break;
+      case 'accept-offer': finishAgreement();break;
+      case 'certify': certifyPotion(state);renderAll();persist();showVial();break;
+      case 'returns': showReturns();break;
+      case 'harvest': finishHarvest();break;
+      case 'untreated': showUntreated=!showUntreated;button.textContent=showUntreated?'Observe response':'Untreated view';button.setAttribute('aria-pressed',String(showUntreated));break;
       case 'discard-vial': sheet('Discard this vial?', '<p>The sealed potion and its ingredients will be lost. Your customer will wait while you brew another.</p><div class="confirm-actions"><button data-action="close">Keep the vial</button><button class="danger-button" data-action="confirm-discard">Discard and brew again</button></div>'); break;
       case 'confirm-discard': discardVial(state); if (state.tutorial === 6) state.tutorial = 5; closeSheet(); renderAll(); persist(); notify('Vial discarded. Your customer is still waiting.'); break;
       case 'supplies': showInventory(); break;
@@ -520,6 +477,7 @@ function bindUI() {
     }
   });
   $('sheetContent').oninput = guard(event => {
+    if(event.target.dataset.estimate) { $('sheetContent').querySelector(`[data-estimate-value="${event.target.dataset.estimate}"]`).textContent=event.target.value+'%'; }
     if (event.target.id === 'thermalPower') {
       const power = Number(event.target.value) / 100, kind = event.target.dataset.thermal;
       brew.setThermal(kind === 'heat' ? power : 0, kind === 'cool' ? power : 0);
@@ -528,6 +486,7 @@ function bindUI() {
   });
   $('sheetContent').onchange = async event => {
     try {
+      if (event.target.id === 'trialDose') testDose=Number(event.target.value);
       if (event.target.id === 'soundSetting') { state.settings.sound = event.target.checked; audio.enabled = state.settings.sound; audio.play(); persist(); }
       if (event.target.id === 'graphicsSetting') { state.settings.graphics = event.target.value; renderer.setQuality(state.settings.graphics); persist(); }
       if (event.target.id === 'importSaveInput' && event.target.files[0]) {
@@ -556,7 +515,10 @@ function loop(now) {
     }
     if (now - lastAutosave > 8000) persist();
   } else accumulator = 0;
-  if (inShop && renderer && now - lastRender >= (renderer.quality === 'eco' ? 32 : 16)) { renderer.render(); lastRender = now; }
+  if(currentRoom==='harvest'&&harvest){const phase=((now-harvest.start)/1500)%2;harvest.position=phase<1?phase:2-phase;$('harvestMarker').style.left=`${harvest.position*100}%`;}
+  if(currentRoom==='experiments'&&testingRenderer){const subject=state.experiments.subjects[selectedSubject],report=state.experiments.records.find(r=>r.subjectId===selectedSubject);testingRenderer.render(subject,report,now,showUntreated);}
+  if(state&&inShop&&!isSandbox()&&now-lastClaims>1000){lastClaims=now;const before=JSON.stringify((state.complaints||[]).map(c=>c.status));const arrived=advanceComplaints(state);if(arrived.length||before!==JSON.stringify((state.complaints||[]).map(c=>c.status))){renderAll();persist();if(!$('sheet').open&&arrived.length)showReturns();else notify('A customer return has reached the counter.');}}
+  if (inShop && renderer && !$('sheet').open && now - lastRender >= (renderer.quality === 'eco' ? 32 : 16)) { renderer.render(); lastRender = now; }
   if (inShop && now - lastHUD > 200) { updateHUD(); if (active) advanceTutorial(); lastHUD = now; }
   requestAnimationFrame(loop);
 }

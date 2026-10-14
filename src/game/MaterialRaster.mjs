@@ -55,9 +55,12 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
     // not average separated ingredients across the whole cauldron.
     const alpha = Math.min(1, Math.max(0, (density - .28) / .28));
     if (alpha === 0) continue;
-    pixels[index] = raster.field[index + 1] / density;
-    pixels[index + 1] = raster.field[index + 2] / density;
-    pixels[index + 2] = raster.field[index + 3] / density;
+    const texel = raster.touched[n], above = texel >= t.w ? raster.field[index - t.w * 4] : 0;
+    const shine = Math.max(0, Math.min(.18, (density - above) * .16));
+    const shade = .94 + shine;
+    pixels[index] = raster.field[index + 1] / density * shade;
+    pixels[index + 1] = raster.field[index + 2] / density * shade;
+    pixels[index + 2] = raster.field[index + 3] / density * shade;
     pixels[index + 3] = alpha * 255;
   }
 }
@@ -83,8 +86,10 @@ export function paintMaterialParticles(ps, t, pixels, particleColor, colorScratc
     const left = Math.max(0, originX), right = Math.min(t.w, originX + diameter);
     for (let py = top; py < bottom; py++) for (let px = left; px < right; px++) {
       const ox = px - x, oy = py - y;
+      const half = Math.max(1, diameter / 2);
+      if ((ox + .5) ** 2 + (oy + .5) ** 2 > half * half + .5) continue;
       const hash = ((i * 67 + ox * 23 + oy * 41) >>> 0) % 11 - 5;
-      const shade = 1 + variation * hash / 5;
+      const shade = 1 + variation * hash / 5 - oy / half * .08;
       const index = (py * t.w + px) * 4, oldAlpha = pixels[index + 3] / 255;
       if(oldAlpha===0){pixels[index]=colorScratch.r*shade;pixels[index+1]=colorScratch.g*shade;pixels[index+2]=colorScratch.b*shade;pixels[index+3]=alpha*255;continue;}
       const outAlpha = alpha + oldAlpha * (1 - alpha), oldWeight = oldAlpha * (1 - alpha);

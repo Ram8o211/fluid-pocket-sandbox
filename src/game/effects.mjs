@@ -10,8 +10,8 @@ export const EFFECT_DEFINITIONS = Object.freeze({
   transformation: Object.freeze({ label: 'Transformation', color: '#65e4c9', kind: 'magic' }),
   fire: Object.freeze({ label: 'Fire', color: '#ff9052', kind: 'magic' }),
   freeze: Object.freeze({ label: 'Frost', color: '#8cdfff', kind: 'magic' }),
-  acidity: Object.freeze({ label: 'Acidity', color: '#d5e873', kind: 'chemical' }),
-  poison: Object.freeze({ label: 'Poison', color: '#92cc71', kind: 'chemical' })
+  acidity: Object.freeze({ label: 'Withering', color: '#d5e873', kind: 'magic' }),
+  poison: Object.freeze({ label: 'Venom', color: '#92cc71', kind: 'magic' })
 });
 
 /** Accept a measured vial or a material. Concentrations are always normalized;
