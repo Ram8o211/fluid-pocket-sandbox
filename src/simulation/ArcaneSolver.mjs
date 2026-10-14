@@ -38,9 +38,10 @@ export function stepArcana(ps, dt, events = null, mixtures = null) {
     const root = mixtures?.root?.(ps.mixtureGroup[i]);
     const recipe = root?.arcaneRecipe;
     const blended = recipe?.sourceCount > 1 && ps.mixtureProgress[i] >= .35;
+    const authoritative = recipe?.sourceCount === 1 || blended;
     const temperature = ps.temperature[i];
-    const threshold = blended ? recipe.threshold : ps.arcaneThreshold[i];
-    if (blended) ps.arcaneThreshold[i] = threshold;
+    const threshold = authoritative ? recipe.threshold : ps.arcaneThreshold[i];
+    if (authoritative) ps.arcaneThreshold[i] = threshold;
     // A newly formed compatible group must finish blending before it can
     // awaken; otherwise an old single-ingredient rune can fire first.
     const awaitingBlend = recipe?.sourceCount > 1 && !blended;
