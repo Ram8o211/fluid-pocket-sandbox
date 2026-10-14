@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sandboxIngredientProperties, sandboxMixtureProperties } from '../src/game/sandboxProperties.mjs';
 import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
+import { generateWorld } from '../src/game/world.mjs';
+import { BrewingSession } from '../src/game/brewing.mjs';
+import { stepArcana } from '../src/simulation/ArcaneSolver.mjs';
 
 const properties = {
   r: .2, g: .3, b: .4, baseDensity: 1, viscosity: .2,
@@ -114,4 +117,82 @@ test('inspector proportions use original volume shares, not densities or fused p
   assert.ok(Math.abs(mixture.sources[1].fraction-1/3)<1e-10);
   assert.equal(mixture.arcaneThreshold,.2);
   assert.equal(mixture.awakeningDirection,'above');
+});
+
+test('a pure negative-rune ingredient retains its exact threshold in the pot and after an old save resumes', () => {
+  const world = generateWorld('single-rune-sign-regression');
+  const ironroot = world.ingredients.find(item => item.id === 2);
+  assert.equal(ironroot.material.arcaneThreshold, -8);
+  const brew = new BrewingSession(world.ingredients);
+  assert.equal(brew.pour(2, 20, {}, { infinite: true }), 20);
+  const ingredientReading = sandboxIngredientProperties(ironroot);
+  const freshReading = sandboxMixtureProperties(brew)[0];
+  assert.equal(ingredientReading.arcaneThreshold, -8);
+  assert.equal(freshReading.arcaneThreshold, -8);
+  assert.equal(freshReading.awakeningDirection, 'below');
+  assert.equal(freshReading.sources.length, 1);
+  assert.equal(freshReading.sources[0].fraction, 1);
+
+  const ps = brew.engine.ps, mixtures = brew.engine.reactions.mixtures;
+  mixtures.beginFrame(ps);
+  mixtures.finishFrame(ps, {}, .025);
+  assert.equal(sandboxMixtureProperties(brew)[0].arcaneThreshold, -8);
+
+  // Reproduce the screenshot's stale +800 °A material and particle values,
+  // which can be present in older saved cauldron state.
+  const legacy = brew.snapshot();
+  legacy.materials.find(material => material.id === ironroot.id).arcaneThreshold = 8;
+  legacy.particles.arcaneThreshold.fill(8);
+  const restored = new BrewingSession(world.ingredients);
+  restored.restore(legacy);
+  const livePs = restored.engine.ps;
+  assert.equal(restored.engine.materials.get(ironroot.id).arcaneThreshold, -8);
+  assert.equal(livePs.arcaneThreshold[0], -8);
+  const read = sandboxMixtureProperties(restored)[0];
+  assert.equal(read.arcaneThreshold, -8);
+  assert.equal(read.awakeningDirection, 'below');
+  assert.equal(read.sources.length, 1);
+  assert.equal(read.sources[0].fraction, 1);
+  restored.engine.reactions.mixtures.beginFrame(livePs);
+  restored.engine.reactions.mixtures.finishFrame(livePs, {}, .025);
+  assert.equal(sandboxMixtureProperties(restored)[0].arcaneThreshold, -8);
+});
+
+test('singleton rune stays authoritative even if live parcel threshold is stale', () => {
+  const world = generateWorld('singleton-live-rune');
+  const ingredient = world.ingredients.find(item => item.id === 2);
+  const brew = new BrewingSession(world.ingredients);
+  brew.pour(2, 5, {}, { infinite: true });
+  const ps = brew.engine.ps, mix = brew.engine.reactions.mixtures;
+  mix.beginFrame(ps);
+  mix.finishFrame(ps, {}, .025);
+  assert.equal(mix.root(ps.mixtureGroup[0]).arcaneRecipe.threshold, -8);
+  ps.arcaneThreshold.fill(8);
+  stepArcana(ps, .025, null, mix);
+  for (let i = 0; i < ps.count; i++) assert.equal(ps.arcaneThreshold[i], ingredient.material.arcaneThreshold);
+  assert.equal(sandboxMixtureProperties(brew)[0].arcaneThreshold, -8);
+});
+
+test('positive single-ingredient thresholds remain positive after save and mixing', () => {
+  const world = generateWorld('positive-singleton-rune');
+  const heartpetal = world.ingredients.find(item => item.id === 3);
+  const brew = new BrewingSession(world.ingredients);
+  brew.pour(3, 10, {}, { infinite: true });
+  const ps = brew.engine.ps, mix = brew.engine.reactions.mixtures;
+  mix.beginFrame(ps);
+  mix.finishFrame(ps, {}, .025);
+  assert.equal(sandboxMixtureProperties(brew)[0].arcaneThreshold, 9);
+  assert.equal(sandboxMixtureProperties(brew)[0].awakeningDirection, 'above');
+});
+
+test('unregistered source materials never silently create a positive +800°A recipe', () => {
+  const world = generateWorld('missing-source-rune');
+  const brew = new BrewingSession(world.ingredients);
+  brew.pour(2, 5, {}, { infinite: true });
+  const ps = brew.engine.ps, mix = brew.engine.reactions.mixtures;
+  mix.materials.delete(2);
+  mix.beginFrame(ps);
+  mix.finishFrame(ps, {}, .025);
+  assert.equal(mix.root(ps.mixtureGroup[0]).arcaneRecipe, null);
+  assert.equal(sandboxMixtureProperties(brew)[0].arcaneThreshold, -8);
 });
