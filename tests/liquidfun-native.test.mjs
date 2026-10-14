@@ -60,6 +60,37 @@ test('real LiquidFun settles a poured bowl of water with no suspended or escapin
   b.dispose();
 });
 
+test('settled native liquids have no sustained pool bounce and still respond to a spoon', () => {
+  const b = brew(), ps = b.engine.ps;
+  try {
+    b.pour(1, 50, { 1: 100 });
+    for (let tick = 0; tick < 320; tick++) b.step();
+    const levels = [], surfaceLevels = [], upwardSpeeds = [];
+    for (let tick = 0; tick < 120; tick++) {
+      b.step();
+      if (tick % 5) continue;
+      const ys = Array.from(ps.y.subarray(0, ps.count)).sort((a, b) => a - b);
+      levels.push(ys.reduce((sum, y) => sum + y, 0) / ys.length);
+      surfaceLevels.push(ys[Math.floor(ys.length * .95)]);
+      const rising = Array.from(ps.vy.subarray(0, ps.count))
+        .map(v => Math.max(0, v)).sort((a, b) => a - b);
+      upwardSpeeds.push(rising[Math.floor(rising.length * .95)]);
+    }
+    const span = values => Math.max(...values) - Math.min(...values);
+    assert.ok(span(levels) < .05, `stationary pool must not heave: center-height span ${span(levels)}`);
+    assert.ok(span(surfaceLevels) < .13, `stationary surface must not bounce: surface-height span ${span(surfaceLevels)}`);
+    assert.ok(Math.max(...upwardSpeeds) < .75,
+      `stationary pool must not keep launching particles: p95 upward speed ${Math.max(...upwardSpeeds)}`);
+
+    const touch = { x: ps.x[0], y: ps.y[0] };
+    const touched = b.stir(touch, { x: 4, y: 1 }, .025);
+    assert.ok(touched > 0, 'still water must remain responsive to an active spoon');
+    const before = ps.x[0];
+    b.step();
+    assert.ok(ps.x[0] > before, 'native fluid must still move with the spoon');
+  } finally { b.dispose(); }
+});
+
 test('material viscosity and wet dough still resist relative motion with the native backend', () => {
   const relativeSpeed = (viscosity, powderContent = 0) => {
     const b = brew(), ps = b.engine.ps;
