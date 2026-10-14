@@ -19,7 +19,9 @@ test('fresh worlds provide neutral water and raw ingredients covering every effe
     assert.ok(water.solvent); assert.equal(water.crushable, false);
     for (const effect of effects) {
       assert.equal(water.material[effect], 0);
-      assert.ok(world.ingredients.some(i => i.material[effect] > .5), `Missing ${effect}`);
+      assert.ok(world.ingredients.some(i => i.material[effect] > .01), `Missing ${effect}`);
+      assert.ok(world.ingredients.every(i => i.material[effect] <= .12 + 1e-8),
+        `${effect} must stay innate until an arcane awakening`);
     }
     for (const ingredient of world.ingredients.filter(i => i.form !== 'liquid' && i.form !== 'powder')) {
       assert.ok(ingredient.material.meltingTemperature > .36);
