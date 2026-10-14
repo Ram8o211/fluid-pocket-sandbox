@@ -32,11 +32,16 @@ export class LiquidFunFluid {
     // Fine 2D parcels fit a full 440ml cauldron without artificial packing.
     this.definition.radius = .039;
     this.definition.destroyByAge = false;
-    this.definition.dampingStrength = .17;
+    // Suppress residual energy in a settled pool without damping deliberate
+    // spoon strokes or a newly poured stream at the game layer.
+    this.definition.dampingStrength = .55;
     this.definition.pressureStrength = .12;
-    this.definition.viscousStrength = .08;
-    this.definition.surfaceTensionNormalStrength = .16;
-    this.definition.surfaceTensionPressureStrength = .12;
+    this.definition.viscousStrength = .14;
+    // The tensile particle flag acts like a spring across the surface: its
+    // repeated restoring impulses made an otherwise still pool oscillate.
+    // Water pressure and viscosity are enough for non-elastic liquid motion.
+    this.definition.surfaceTensionNormalStrength = 0;
+    this.definition.surfaceTensionPressureStrength = 0;
     this.definition.staticPressureStrength = .28;
     this.definition.staticPressureIterations = 6;
     this.system = this.world.CreateParticleSystem(this.definition);
@@ -56,7 +61,7 @@ export class LiquidFunFluid {
     const seed = (width, height) => {
       const def = new this.r.b2ParticleGroupDef();
       def.flags = (this.r.b2_waterParticle || 0) | (this.r.b2_viscousParticle || 0)
-        | (this.r.b2_tensileParticle || 0) | (this.r.b2_staticPressureParticle || 0);
+        | (this.r.b2_staticPressureParticle || 0);
       def.stride = 1;
       const shape = new this.r.b2PolygonShape();
       shape.vertices = [[-.25, -.25], [width - .75, -.25],

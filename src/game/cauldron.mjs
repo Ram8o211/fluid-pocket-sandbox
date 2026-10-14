@@ -1,5 +1,6 @@
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { isPowder } from '../simulation/PowderSolver.mjs';
+import { Phase } from '../simulation/Phase.mjs';
 
 // One clockwise cutaway outline, in simulation units, for both the visible
 // copper walls and their collision planes. The top plane is the sealed lid.
@@ -54,7 +55,10 @@ export function confineCauldronParticle(ps, i) {
         // Dry grains and dough lose all inward normal speed: a collision may
         // stop or redirect sliding but must never reverse into elastic recoil.
         const granular = isPowder(ps,i);
-        const rebound = granular ? 1 : 1.03;
+        // Liquid and granular contacts are inelastic: the old 3% liquid
+         // restitution repeatedly re-injected energy at the floor.
+         // Gas keeps its small rebound so steam retains vertical thickness.
+         const rebound = granular || ps.phase[i] === Phase.LIQUID ? 1 : 1.03;
         ps.vx[i] -= p.nx * normalSpeed * rebound;
         ps.vy[i] -= p.ny * normalSpeed * rebound;
         if (granular) {
