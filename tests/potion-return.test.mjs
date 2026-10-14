@@ -152,6 +152,9 @@ test('the original arcane ratio and signed threshold survive fused materials, bo
   const fused = brew.engine.resolveFusion(ps, 0, 40, ps.materialId[0], ps.materialId[40]);
   for (let i = 0; i < ps.count; i++) ps.materialId[i] = fused;
   const sealed = brew.bottle(20);
+  near(mixtures.root(ps.mixtureGroup[0]).amount, 10);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(13), 10 / 3);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(14), 20 / 3);
   const remaining = splitPotionSample(sealed, 5).remaining;
   const content = remaining.contents;
   assert.ok(content.recipes?.length);
@@ -159,6 +162,8 @@ test('the original arcane ratio and signed threshold survive fused materials, bo
   assert.equal(ps.count > 0, true);
   const restoredMl = brew.returnPotion(remaining);
   near(restoredMl, 15);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(13), 25 / 3);
+  near(mixtures.root(ps.mixtureGroup[0]).sourceAmounts.get(14), 50 / 3);
   mixtures.beginFrame(ps);
   mixtures.finishFrame(ps, {}, .025);
   const live = mixtures.root(ps.mixtureGroup[0]).arcaneRecipe;
