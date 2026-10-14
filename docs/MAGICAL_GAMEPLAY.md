@@ -31,9 +31,8 @@ values into the player’s ID.
   reflect the same input shares (Strength 33%, Venom 66% for 1:2); unrelated
   magic becomes zero. A solitary ingredient awakens its strongest channel.
   Each particle glows using the actual homogeneous mixture's eight magic
-  channels and its strength (including gas and powder).
-  including gas and dry granules. Excess heat attenuates live fields;
-  irreversible awakening and heat damage are saved per particle.
+  channels and its strength (including gas and powder). Excess heat attenuates
+  live fields; irreversible awakening and heat damage are saved per particle.
 - **Knowledge:** trials consume real potion and update bounded creature state.
   A six-second recovery (three with the sanctuary) limits repeated exposure.
   All eight visual channels animate together in a large enclosure with a
