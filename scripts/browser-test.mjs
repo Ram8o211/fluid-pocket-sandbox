@@ -16,7 +16,7 @@ const errors=[],failedResponses=[];let browser,page;
 const readSave=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-save')));
 const readSandbox=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')));
 async function closePanel(){await page.locator('[data-action="close"]').first().click();}
-async function screenshot(name){await page.screenshot({path:`test-results/${name}.png`});}
+async function screenshot(name){await page.screenshot({path:`test-results/${name}.png`,animations:'disabled'});}
 async function room(id){await page.locator(id).click();}
 async function dose(amount){await page.locator(`[data-dose="${amount}"]`).click();}
 async function pourRecipe(recipe){

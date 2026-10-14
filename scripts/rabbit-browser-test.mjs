@@ -23,9 +23,11 @@ const readState = () => page.evaluate(() => JSON.parse(localStorage.getItem('alc
 const rabbit = (state, id) => state.experiments.rabbits.find(subject => subject.id === id);
 const alive = state => state.experiments.rabbits.filter(subject => subject.stats.alive);
 async function screenshot(name) {
-  // runFor pauses the virtual clock; screenshots need live animation frames.
-  await page.clock.resume();
-  await page.screenshot({ path: `test-results/${name}.png`, fullPage: true });
+  // Export the actual game canvases. Chromium compositor captures can hang
+  // after virtual-clock jumps; canvas pixels preserve the trial evidence.
+  const scenes = await page.locator('#rabbitPenCanvas, #creatureCanvas').evaluateAll(canvases =>
+    canvases.map(canvas => ({ id: canvas.id, png: canvas.toDataURL() })));
+  for (const scene of scenes) await writeFile(`test-results/${name}-${scene.id}.png`, Buffer.from(scene.png.split(',')[1], 'base64'));
 }
 async function closePanel() { await page.locator('[data-action="close"]').first().click(); }
 async function selectRabbit(id) { await page.locator(`[data-subject="${id}"]`).click(); }
