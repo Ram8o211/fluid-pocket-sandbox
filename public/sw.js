@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-signed-arcana-glow-30';
+const CACHE = 'alchemist-shop-liquidfun-31';
 const CORE = [
   './',
   './index.html',
@@ -11,6 +11,9 @@ const CORE = [
   './src/game/effects.mjs',
   './src/game/sandboxProperties.mjs',
   './src/game/magicLight.mjs',
+  './src/game/LiquidFunFluid.mjs',
+  './public/vendor/liquidfun.js',
+  './public/vendor/LIQUIDFUN-LICENSE.txt',
   './src/game/gathering.mjs',
   './src/game/experiments.mjs',
   './src/game/potionTransfer.mjs',
