@@ -55,6 +55,10 @@ export class LiquidFunFluid {
     this.system = this.world.CreateParticleSystem(this.definition);
     this.system.SetMaxParticleCount(ps.capacity);
     const def = new this.r.b2ParticleDef();
+    // Upstream b2ParticleDef initializes color as b2Vec2; replace it with
+    // its actual b2ParticleColor to avoid undefined channel values in C++.
+    if (typeof this.r.b2ParticleColor === 'function')
+      def.color = new this.r.b2ParticleColor(255, 255, 255, 255);
     // No built-in color mixing: magical colors belong to the game's live
     // chemical channels, not to the physical engine's particle pigments.
     def.flags = this.r.b2_waterParticle;
