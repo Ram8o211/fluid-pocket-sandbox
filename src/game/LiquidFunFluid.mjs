@@ -34,15 +34,15 @@ export class LiquidFunFluid {
     this.definition.destroyByAge = false;
     // Suppress residual energy in a settled pool without damping deliberate
     // spoon strokes or a newly poured stream at the game layer.
-    this.definition.dampingStrength = .55;
-    this.definition.pressureStrength = .12;
-    this.definition.viscousStrength = .14;
+    this.definition.dampingStrength = 1.05;
+    this.definition.pressureStrength = .09;
+    this.definition.viscousStrength = .18;
     // The tensile particle flag acts like a spring across the surface: its
     // repeated restoring impulses made an otherwise still pool oscillate.
     // Water pressure and viscosity are enough for non-elastic liquid motion.
     this.definition.surfaceTensionNormalStrength = 0;
     this.definition.surfaceTensionPressureStrength = 0;
-    this.definition.staticPressureStrength = .28;
+    this.definition.staticPressureStrength = .22;
     this.definition.staticPressureIterations = 6;
     this.system = this.world.CreateParticleSystem(this.definition);
     this.indices = [];
