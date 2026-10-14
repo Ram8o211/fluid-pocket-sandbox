@@ -9,7 +9,11 @@ function setup(count = 1, quality = 'balanced', scale = 40) {
   const ps = { count };
   for (const key of ['x', 'y', 'vx', 'vy', 'mass', 'particleRadius', 'temperature', 'mixtureProgress', ...EFFECT_PROPERTIES]) ps[key] = new Float32Array(count);
   ps.mass.fill(.25); ps.particleRadius.fill(.1); ps.temperature.fill(.28);
-  const renderer = { sim: { ps, time: 0 }, quality, getGlowSprite: colour => ({ key: colour }), magicColor: new Array(160),
+  const cachedSprites = new Map();
+  const renderer = { sim: { ps, time: 0 }, quality, getGlowSprite: colour => {
+    if (!cachedSprites.has(colour)) cachedSprites.set(colour, { key: colour });
+    return cachedSprites.get(colour);
+  }, magicColor: new Array(160),
     magicX: new Float32Array(160), magicY: new Float32Array(160),
     magicIntensity: new Float32Array(160), magicCount: 0 };
   const images = [], ctx = { save() {}, restore() {}, drawImage(sprite, x, y, w, h) { images.push({ sprite, x, y, w, h, alpha: this.globalAlpha }); } };
