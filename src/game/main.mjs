@@ -135,6 +135,8 @@ function sandboxAwakening(properties) {
   const fraction = Math.round(Math.max(0, Math.min(1, properties.awakenedFraction || 0)) * 100);
   const charge = Math.round(Math.max(0, Math.min(1, properties.awakeningCharge || 0)) * 100);
   const effect = properties.dominantEffect ? EFFECT_DEFINITIONS[properties.dominantEffect]?.label : null;
+  const expected = EFFECT_PROPERTIES.filter(key => (properties.awakeningEffects?.[key] || 0) >= .005)
+    .map(key => escape(EFFECT_DEFINITIONS[key].label) + ' ' + Math.round(properties.awakeningEffects[key] * 100) + '%').join(' · ');
   const threshold = sandboxTemperature(properties.arcaneThreshold);
   const condition = properties.awakeningDirection === 'below' ? 'Below' : 'Above';
   const status = fraction === 100 ? 'Awakened' : fraction > 0 ? fraction + '% awakened'
@@ -143,11 +145,11 @@ function sandboxAwakening(properties) {
     ? 'No active enchantment to amplify. Adding magical ingredients can create a new rune.'
     : !properties.awakeningReachable && fraction === 0
       ? 'This rune cannot awaken alone at usable temperatures. Mix opposing runes to shift its critical temperature.'
-      : 'Sustain the trigger temperature for about 0.4 s: the strongest effect becomes 98%, all others 0.2%.';
+      : 'Sustain the trigger temperature for about 0.4 s: awakened effects follow the proportions of the ingredients; other effects become zero.';
   return '<section class="sandbox-awakening" aria-label="Arcane supertransformation">' +
     '<div class="sandbox-awakening-title"><strong>✦ Arcane supertransformation</strong><span>' + status + '</span></div>' +
     '<div class="sandbox-awakening-grid"><div><small>Critical trigger</small><strong>' + condition + ' ' + threshold + '</strong></div>' +
-    '<div><small>Dominant magic</small><strong>' + (effect ? escape(effect) : 'None') + '</strong></div>' +
+    '<div><small>Awakened effects</small><strong>' + (expected || 'None') + '</strong></div>' +
     '<div><small>Magic decays above</small><strong>' + sandboxTemperature(properties.magicDecayTemperature) + '</strong></div></div>' +
     '<p>' + explanation + '</p></section>';
 }
