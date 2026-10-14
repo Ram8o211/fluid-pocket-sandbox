@@ -16,7 +16,32 @@ const errors=[],failedResponses=[];let browser,page;
 const readSave=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-save')));
 const readSandbox=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')));
 async function closePanel(){await page.locator('[data-action="close"]').first().click();}
-async function screenshot(name){await page.screenshot({path:`test-results/${name}.png`,animations:'disabled'});}
+async function screenshot(name) {
+  const path = `test-results/${name}.png`;
+  let session;
+  try {
+    // Playwright's page.screenshot waits for fonts and manipulates animations.
+    // A continuously animated rabbit colony can keep Chromium repainting during
+    // that wait, so capture the viewport directly from the DevTools compositor.
+    session = await page.context().newCDPSession(page);
+    const {data} = await session.send('Page.captureScreenshot', {
+      format: 'png', captureBeyondViewport: false
+    });
+    await writeFile(path, Buffer.from(data, 'base64'));
+  } catch (error) {
+    // Images are diagnostic artifacts, not part of gameplay acceptance.
+    // Keep executing functional assertions when a slow CI compositor cannot
+    // provide the optional screenshot.
+    console.warn(`Native screenshot failed for ${name}: ${error.message}`);
+    try {
+      await page.screenshot({path, animations: 'allow', timeout: 5000});
+    } catch (fallbackError) {
+      console.warn(`Optional screenshot omitted for ${name}: ${fallbackError.message}`);
+    }
+  } finally {
+    await session?.detach().catch(() => {});
+  }
+}
 async function room(id){await page.locator(id).click();}
 async function dose(amount){await page.locator(`[data-dose="${amount}"]`).click();}
 async function pourRecipe(recipe){
@@ -32,7 +57,13 @@ async function compileCurrent(name,sandbox=false){
     const input=page.locator(`[data-estimate="${key}"]`);
     await input.scrollIntoViewIfNeeded();
     const value=Math.round(report.sample[key]*100);
-    await input.press('Home'); for(let n=0;n<value;n++)await input.press('ArrowRight');
+    // Exercise real keyboard controls without sending up to 100 events for
+    // each of the eight sliders (which needlessly overloads mobile CI).
+    const high = value > 50;
+    await input.press(high ? 'End' : 'Home');
+    for(let n = 0; n < (high ? 100 - value : value); n++) {
+      await input.press(high ? 'ArrowLeft' : 'ArrowRight');
+    }
   }
   await screenshot('potion-id');await page.locator('[data-action="compile-id"]').click();
   assert.equal((await (sandbox?readSandbox():readSave())).potionIds[0].notes,'Adult rabbit; compare the body before this dose with the lasting change afterward.');
