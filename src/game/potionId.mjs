@@ -16,7 +16,21 @@ export function potionFingerprint(sample) {
 }
 export function findPotionId(state, sample) {
   const fingerprint = potionFingerprint(sample);
-  return fingerprint && (state.potionIds || []).find(id => id.fingerprint === fingerprint) || null;
+  return fingerprint && (state.potionIds || []).find(id => {
+    if (id.fingerprint === fingerprint) return true;
+    if (id.batchId !== sample.batchId || !id.sample) return false;
+    // A manual 1% estimate must survive sub-visible extraction/roundoff while
+    // the observed liquid settles. Seals still use the exact sealed fingerprint.
+    if (EFFECT_PROPERTIES.some(key => Math.abs((id.sample[key] || 0) - (sample[key] || 0)) > .0015)) return false;
+    const proportions = source => {
+      const values = new Map();
+      for (const p of source.portions || []) { const key = `${p.ingredientId}:${Boolean(p.crushed)}`; values.set(key,(values.get(key)||0)+p.ml); }
+      const total = [...values.values()].reduce((sum,value)=>sum+value,0) || 1;
+      return new Map([...values].map(([key,value])=>[key,value/total]));
+    };
+    const a=proportions(id.sample),b=proportions(sample);
+    return [...new Set([...a.keys(),...b.keys()])].every(key=>Math.abs((a.get(key)||0)-(b.get(key)||0))<=.002);
+  }) || null;
 }
 export function compilePotionId(state, sample, estimates, name = '') {
   if (!observedPotion(state, sample)) throw new Error('Observe a real dose from this batch first.');

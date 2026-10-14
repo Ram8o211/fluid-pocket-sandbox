@@ -127,7 +127,7 @@ function renderAll() {
 }
 function renderRack() {
   const rack = $('ingredientRack'), scroll = rack.scrollLeft, ingredients = availableIngredients(state.world, state.equipment);
-  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${escape(i.form || 'liquid')} · ${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)} ${ingredientUnit(i)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
+  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
   rack.scrollLeft = scroll;
   const ingredient = ingredients.find(i => i.id === selected) || ingredients[0]; selected = ingredient.id;
   $('selectedName').textContent = ingredient.name + (ingredient.form && ingredient.form !== 'liquid' ? ` · ${ingredient.form}` : '');

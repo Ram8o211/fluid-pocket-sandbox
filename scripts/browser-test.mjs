@@ -68,7 +68,7 @@ try{
   const initial=await readSave();assert.equal(initial.coins,80);assert.equal(initial.world.ingredients.filter(i=>i.form==='liquid').length,4);assert.equal(initial.inventory[2],20);
   for(const viewport of [{width:320,height:568},{width:360,height:640},{width:393,height:852},{width:1280,height:900}]){
     await page.setViewportSize(viewport);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'viewport must not overflow horizontally');
-    for(const id of ['#heatBtn','#stirBtn','#pourBtn','#bottleBtn','#natureBtn'])assert.ok(await page.locator(id).evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;}),`${id} must fit on the phone`);
+    for(const id of ['#heatBtn','#stirBtn','#pourBtn','#bottleBtn','#natureBtn'])assert.ok(await page.locator(id).evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;}),`${id} must fit on ${viewport.width}×${viewport.height}`);
     assert.ok(await page.locator('#labCanvas').evaluate(e=>e.getBoundingClientRect().height>60));
   }
   await page.setViewportSize({width:393,height:852});await screenshot('mobile-workshop');

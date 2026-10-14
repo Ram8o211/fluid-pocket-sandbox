@@ -24,6 +24,22 @@ export class LaboratoryRenderer extends PlanarRenderer {
     if (this.canvas.width !== 384 * scale) { this.canvas.width = 384 * scale; this.canvas.height = 232 * scale; }
   }
   transform() { const factor = this.canvas.width / 384; return { w: this.canvas.width, h: this.canvas.height, scale: 40 * factor, cx: 192 * factor, cy: 158 * factor }; }
+  fittedCanvas() {
+    const rect = this.canvas.getBoundingClientRect();
+    const scale = Math.max(.0001, Math.min(rect.width / this.canvas.width, rect.height / this.canvas.height));
+    return { scale, left: rect.left + (rect.width - this.canvas.width * scale) / 2,
+      top: rect.top + (rect.height - this.canvas.height * scale) / 2 };
+  }
+  screenToWorld(clientX, clientY) {
+    const fit = this.fittedCanvas(), t = this.transform();
+    return { x: ((clientX - fit.left) / fit.scale - t.cx) / t.scale,
+      y: -((clientY - fit.top) / fit.scale - t.cy) / t.scale, z: 0 };
+  }
+  projectWorldToScreen(x, y) {
+    const fit = this.fittedCanvas(), t = this.transform();
+    return { x: fit.left + (t.cx + x * t.scale) * fit.scale,
+      y: fit.top + (t.cy - y * t.scale) * fit.scale };
+  }
   setQuality(quality) { this.quality = quality; this.resize(); }
   render() {
     this.resize(); const ctx = this.ctx, factor = this.canvas.width / 384, t = this.transform();

@@ -30,7 +30,9 @@ values into the player’s ID.
   Visual channels animate together in one fixed-size enclosure. The ID form
   always starts from the player’s prior estimates or zero. Estimates are
   explicitly supplied and bounded. Feed shortfalls become guild debt so a refund cannot block research. Fingerprints include batch UUID, enchantment
-  concentrations and relative preparation portions; a smaller dose retains
+  concentrations and relative preparation portions. IDs tolerate only sub-visible
+  settling (.15 percentage points of magic and .2 points of source proportions);
+  seals use the exact sealed fingerprint. A smaller dose retains
   identity, while new batches or altered effects invalidate IDs and seals.
 - **Trading:** an initial offer and a four-round negotiation use the ID’s claims,
   budget and quantity. The actual sample does not secretly set the counter offer.
@@ -54,6 +56,7 @@ color buffers, then adds bounded surface highlights and rounded grains. The
 spoon’s oval bowl matches its local influence. Particle packing and collisions
 are independent of display resolution. The mixture solver caches integer field
 views; fluid contacts use scalar weights instead of per-pair temporary arrays.
+Touch mapping accounts for the canvas's centered letterboxing on small screens.
 Brewing rendering pauses behind rooms; a single enclosure provides trial motion.
 
 `tests/magical-shop.test.mjs` covers manual estimates, negotiated receipts,

@@ -33,6 +33,7 @@ test('the potion ID stores the player’s guesses and exact batch, never an auto
   assert.throws(()=>compilePotionId(state,vial,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,0]))),/Observe/);
   const document=identify(state,vial,{strength:.61});assert.equal(document.estimates.strength,.61);assert.notEqual(document.estimates.strength,vial.strength);
   assert.equal(findPotionId(state,{...vial,volume:40}).id,document.id);
+  assert.equal(findPotionId(state,{...vial,strength:vial.strength+.00005}).id,document.id,'sub-visible settling must not erase a written estimate');
   assert.equal(findPotionId(state,{...vial,batchId:crypto.randomUUID()}),null);
   assert.equal(findPotionId(state,{...vial,strength:vial.strength+.02}),null);
 });
