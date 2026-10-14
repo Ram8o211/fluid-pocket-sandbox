@@ -203,12 +203,53 @@ try {
     }
     await screenshot(`rabbit-colony-${viewport.width}`);
   }
+  const visuals = await page.evaluate(async () => {
+    const { createRabbitColony, assessRabbitEffects } = await import('./src/game/rabbits.mjs');
+    const { EFFECT_PROPERTIES } = await import('./src/game/effects.mjs');
+    const { TestingRenderer } = await import('./src/game/TestingRenderer.mjs');
+    const levels = [0, .2, .8, 1.7, 3], cellWidth = 320, cellHeight = 195;
+    const sheet = document.createElement('canvas'); sheet.width = levels.length * cellWidth; sheet.height = EFFECT_PROPERTIES.length * cellHeight;
+    const sheetContext = sheet.getContext('2d'); sheetContext.fillStyle = '#101a21'; sheetContext.fillRect(0, 0, sheet.width, sheet.height);
+    const signatures = [], progression = [];
+    for (let row = 0; row < EFFECT_PROPERTIES.length; row++) {
+      const key = EFFECT_PROPERTIES[row], rowSignatures = [];
+      for (let col = 0; col < levels.length; col++) {
+        const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 350;
+        const renderer = new TestingRenderer(canvas), subject = createRabbitColony(1000).rabbits[0];
+        const sample = { stability: 100, color: '#90c6c8', ...Object.fromEntries(EFFECT_PROPERTIES.map(effect => [effect, effect === key ? 1 : 0])) };
+        const report = { ...assessRabbitEffects(sample, subject, levels[col] * 5, 1000), at: 1000, id: `${key}-${col}`, sample };
+        Object.assign(subject, report.afterRabbit); renderer.render(subject, report, 1000); renderer.render(subject, report, 3000);
+        const pixels = canvas.getContext('2d').getImageData(0, 0, 640, 350).data;
+        let signature = 2166136261;
+        for (let i = 0; i < pixels.length; i += 4) signature = Math.imul(signature ^ pixels[i] ^ pixels[i + 1] ^ pixels[i + 2], 16777619) >>> 0;
+        rowSignatures.push(signature);
+        sheetContext.drawImage(canvas, col * cellWidth, row * cellHeight + 20, cellWidth, 175);
+        sheetContext.fillStyle = '#f1e1c2'; sheetContext.font = '13px monospace'; sheetContext.fillText(`${key} · exposure ${levels[col]}`, col * cellWidth + 8, row * cellHeight + 15);
+      }
+      progression.push({ key, distinct: new Set(rowSignatures).size }); signatures.push(rowSignatures);
+    }
+    const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 350;
+    const renderer = new TestingRenderer(canvas), subject = createRabbitColony(1000).rabbits[0];
+    const sample = { transformation: 1, stability: 100 };
+    const report = { ...assessRabbitEffects(sample, subject, 8, 1000), at: 1000, sample };
+    Object.assign(subject, report.afterRabbit); renderer.render(subject, report, 1000); renderer.render(subject, report, 3000);
+    const stable = canvas.toDataURL(); renderer.render(subject, report, 3000, true); renderer.render(subject, report, 3000, false);
+    return { png: sheet.toDataURL(), progression, proceduralStable: stable === canvas.toDataURL() };
+  });
+  assert.equal(visuals.proceduralStable, true, 'a procedural mutation has a stable appearance when revisited');
+  for (const item of visuals.progression) assert.ok(item.distinct >= 4, `${item.key} has visibly distinct dose stages`);
+  await writeFile('test-results/rabbit-effects-contact-sheet.png', Buffer.from(visuals.png.split(',')[1], 'base64'));
+  // Headless contexts can all remain visible at once. Finish and close the
+  // virtual-clock colony before opening phones so its animation and breeding
+  // cannot starve a new page's startup timers on a two-core CI runner.
+  await context.close(); page = null;
   // Real touch dosing starts from a new potion in each phone orientation. The
   // footer is reachable even while the player is reading lower down the room.
   for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }, { width: 852, height: 393 }]) {
     const phone = await browser.newContext({ viewport, hasTouch: true, isMobile: true, deviceScaleFactor: 1 });
-    const mobile = await phone.newPage();
+    const mobile = await phone.newPage(); page = mobile;
     mobile.on('pageerror', error => errors.push(error.message));
+    mobile.on('response', response => { if (response.status() >= 400) failedResponses.push(response.url()); });
     await mobile.goto(base); await mobile.waitForSelector('body[data-game-ready="true"]');
     await mobile.locator('#worldSeed').fill('mobile-rabbit-trials');
     await mobile.locator('#sandboxBtn').tap();
@@ -260,47 +301,12 @@ try {
     const session = await phone.newCDPSession(mobile);
     const capture = await session.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     await writeFile(`test-results/rabbit-touch-${viewport.width}x${viewport.height}.png`, Buffer.from(capture.data, 'base64'));
-    await session.detach(); await phone.close();
+    await session.detach(); await phone.close(); page = null;
   }
-  const visuals = await page.evaluate(async () => {
-    const { createRabbitColony, assessRabbitEffects } = await import('./src/game/rabbits.mjs');
-    const { EFFECT_PROPERTIES } = await import('./src/game/effects.mjs');
-    const { TestingRenderer } = await import('./src/game/TestingRenderer.mjs');
-    const levels = [0, .2, .8, 1.7, 3], cellWidth = 320, cellHeight = 195;
-    const sheet = document.createElement('canvas'); sheet.width = levels.length * cellWidth; sheet.height = EFFECT_PROPERTIES.length * cellHeight;
-    const sheetContext = sheet.getContext('2d'); sheetContext.fillStyle = '#101a21'; sheetContext.fillRect(0, 0, sheet.width, sheet.height);
-    const signatures = [], progression = [];
-    for (let row = 0; row < EFFECT_PROPERTIES.length; row++) {
-      const key = EFFECT_PROPERTIES[row], rowSignatures = [];
-      for (let col = 0; col < levels.length; col++) {
-        const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 350;
-        const renderer = new TestingRenderer(canvas), subject = createRabbitColony(1000).rabbits[0];
-        const sample = { stability: 100, color: '#90c6c8', ...Object.fromEntries(EFFECT_PROPERTIES.map(effect => [effect, effect === key ? 1 : 0])) };
-        const report = { ...assessRabbitEffects(sample, subject, levels[col] * 5, 1000), at: 1000, id: `${key}-${col}`, sample };
-        Object.assign(subject, report.afterRabbit); renderer.render(subject, report, 1000); renderer.render(subject, report, 3000);
-        const pixels = canvas.getContext('2d').getImageData(0, 0, 640, 350).data;
-        let signature = 2166136261;
-        for (let i = 0; i < pixels.length; i += 4) signature = Math.imul(signature ^ pixels[i] ^ pixels[i + 1] ^ pixels[i + 2], 16777619) >>> 0;
-        rowSignatures.push(signature);
-        sheetContext.drawImage(canvas, col * cellWidth, row * cellHeight + 20, cellWidth, 175);
-        sheetContext.fillStyle = '#f1e1c2'; sheetContext.font = '13px monospace'; sheetContext.fillText(`${key} · exposure ${levels[col]}`, col * cellWidth + 8, row * cellHeight + 15);
-      }
-      progression.push({ key, distinct: new Set(rowSignatures).size }); signatures.push(rowSignatures);
-    }
-    const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 350;
-    const renderer = new TestingRenderer(canvas), subject = createRabbitColony(1000).rabbits[0];
-    const sample = { transformation: 1, stability: 100 };
-    const report = { ...assessRabbitEffects(sample, subject, 8, 1000), at: 1000, sample };
-    Object.assign(subject, report.afterRabbit); renderer.render(subject, report, 1000); renderer.render(subject, report, 3000);
-    const stable = canvas.toDataURL(); renderer.render(subject, report, 3000, true); renderer.render(subject, report, 3000, false);
-    return { png: sheet.toDataURL(), progression, proceduralStable: stable === canvas.toDataURL() };
-  });
-  assert.equal(visuals.proceduralStable, true, 'a procedural mutation has a stable appearance when revisited');
-  for (const item of visuals.progression) assert.ok(item.distinct >= 4, `${item.key} has visibly distinct dose stages`);
-  await writeFile('test-results/rabbit-effects-contact-sheet.png', Buffer.from(visuals.png.split(',')[1], 'base64'));
   assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
   console.log(`Rabbit browser acceptance OK: finite colony, persistent repeat doses, equivalent volumes, isolation/return, culling, purchases/capacity, love births, fragile babies/maturation, save reload, mobile controls, ${visuals.progression.map(item => `${item.key}:${item.distinct}`).join(' ')} graphic stages, no page errors.`);
 } catch (error) {
+  if (page) console.error('Rabbit page state:', await page.evaluate(() => ({ state: document.body.dataset.gameState, ready: document.body.dataset.gameReady, notice: document.getElementById('toast')?.textContent })).catch(() => null));
   if (page) console.error('Rabbit trial failure context:', await page.locator('#sheetContent').innerText().catch(() => 'Panel unavailable'), 'Page errors:', errors);
   if (page) { await screenshot('rabbit-browser-failure').catch(() => {}); await writeFile('test-results/rabbit-browser-failure-save.json', JSON.stringify(await readState(), null, 2)).catch(() => {}); }
   if (serverOutput.length) console.error(serverOutput.join(''));
