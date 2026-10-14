@@ -47,6 +47,17 @@ export function confineCauldronParticle(ps, i) {
     let contact = false;
     for (const p of PLANES) {
       const distance = (ps.x[i] - p.x) * p.nx + (ps.y[i] - p.y) * p.ny;
+      // Small normal fluctuations at the supported bottom layer must decay
+      // rather than become a repeated upward launch. Leave actual stirring,
+      // large splashes, free streams and the gas layer untouched.
+      if (ps.phase[i] === Phase.LIQUID && p.ny > .8 &&
+          distance - padding < .035 && ps.stirActivity[i] < .025) {
+        const outward = ps.vx[i] * p.nx + ps.vy[i] * p.ny;
+        if (outward > 0 && outward < .5) {
+          ps.vx[i] -= p.nx * outward * .45;
+          ps.vy[i] -= p.ny * outward * .45;
+        }
+      }
       if (distance >= padding) continue;
       ps.x[i] += p.nx * (padding - distance);
       ps.y[i] += p.ny * (padding - distance);
