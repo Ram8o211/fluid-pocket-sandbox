@@ -45,7 +45,7 @@ export function stepArcana(ps, dt, events = null, mixtures = null) {
     const threshold = blended ? recipe.threshold : ps.arcaneThreshold[i];
     if (blended) ps.arcaneThreshold[i] = threshold;
     if (ps.arcaneConverted[i] < .5) {
-      const crossed = threshold >= .33 ? temperature > threshold + .015 : temperature < threshold - .015;
+      const crossed = threshold >= 0 ? temperature > threshold + .015 : temperature < threshold - .015;
       ps.arcaneCharge[i] = crossed ? Math.min(1, ps.arcaneCharge[i] + dt * 2.5) : Math.max(0, ps.arcaneCharge[i] - dt * 4);
       if (ps.arcaneCharge[i] >= .999) {
         let dominant = null, maximum = .003;
