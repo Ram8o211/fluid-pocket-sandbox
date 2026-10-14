@@ -53,7 +53,10 @@ export class LiquidFunFluid {
     if (!changed) return;
     this.world.DestroyParticleSystem(this.system);
     this.system = this.world.CreateParticleSystem(this.definition);
-    this.system.SetMaxParticleCount(ps.capacity);
+    // The upstream self-contained testbed API omits SetMaxParticleCount;
+    // allocation still grows dynamically when this helper is absent.
+    if (typeof this.system.SetMaxParticleCount === 'function')
+      this.system.SetMaxParticleCount(ps.capacity);
     const def = new this.r.b2ParticleDef();
     // Upstream b2ParticleDef initializes color as b2Vec2; replace it with
     // its actual b2ParticleColor to avoid undefined channel values in C++.
