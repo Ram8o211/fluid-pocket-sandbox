@@ -32,6 +32,8 @@ export function performanceProfileFor(count,dimensionMode='3D'){
 }
 
 export class SimulationEngine{
+  /** @type {import('../game/LiquidFunFluid.mjs').LiquidFunFluid | null} */
+  liquidFun = null;
   /** @type {(() => void) | null} Optional vessel boundary, absent in the sandbox. */
   boundaryCollider = null;
   /** @type {Record<string,{width:number,height:number,depth:number}>} */
