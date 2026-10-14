@@ -1,7 +1,7 @@
 import { isCoherentSolid, isPowder, wetPowderPair } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
-import { warmedMiscibility } from '../simulation/ArcaneSolver.mjs';
+import { warmedMiscibility, arcaneRecipe } from '../simulation/ArcaneSolver.mjs';
 import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 
 export const MIX_PROPERTIES = Object.freeze([
@@ -18,7 +18,7 @@ const FIELD_MASK=MIX_PROPERTIES.map(key=>key==='solidSubdivision'?1:['meltingTem
 // Double-buffered, conservative edge fluxes advance only one contact per tick.
 export class MixtureSolver {
   constructor() {
-    this.reset(); this.previous = this.signal = new Float32Array(0);
+    this.reset(); this.materials = null; this.previous = this.signal = new Float32Array(0);
     this.channels = []; this.before = []; this.delta = []; this.weight = new Float64Array(0);
     this.left = this.right = new Uint32Array(0); this.fraction = new Float32Array(0); this.edgeCount = 0;
     this.rightFraction=new Float32Array(0);this.edgeMask=new Uint8Array(0);this.signature=new Int32Array(0);this.activeFields=[];this.bits=[];this.cachedPs=null;
@@ -48,20 +48,31 @@ export class MixtureSolver {
       if(varied)this.activeFields.push(k);
     }
     this.previous.set(ps.mixtureProgress.subarray(0, ps.count)); this.signal.fill(0, 0, ps.count);
-    for (const group of this.groups.values()) group.amount = 0;
+    for (const group of this.groups.values()) { group.previousAmount = group.amount; group.amount = 0; }
     // Count remaining parcels before adding fresh stock; partial bottling and
     // combustion must affect the next mixture's proportions immediately.
     for (let i = 0; i < ps.count; i++) { const group = this.root(ps.mixtureGroup[i]); if (group) { ps.mixtureGroup[i] = group.id; group.amount += ps.mixtureAmount[i]; } }
+    // Preserve original ingredient shares as volume leaves the cauldron.
+    // A representative bottle draw reduces each contributor proportionally.
+    for (const group of this.groups.values()) {
+      if (group.parent !== group.id) continue;
+      if (!(group.sourceAmounts instanceof Map)) group.sourceAmounts = new Map();
+      if (group.previousAmount > 0) {
+        const fraction = group.amount / group.previousAmount;
+        for (const [id, amount] of group.sourceAmounts) group.sourceAmounts.set(id, amount * fraction);
+      } else group.sourceAmounts.clear();
+    }
     for (let i = 0; i < ps.count; i++) {
       if (this.root(ps.mixtureGroup[i])) continue;
       let group = this.root(this.materialGroups.get(ps.materialId[i]));
       if (!group || group.amount === 0) {
         const id = this.nextId++;
-        group = { id, parent: id, amount: 0, min: ps.miscibility[i], max: ps.miscibility[i], target: MIX_PROPERTIES.map(() => 0) };
+        group = { id, parent: id, amount: 0, min: ps.miscibility[i], max: ps.miscibility[i], target: MIX_PROPERTIES.map(() => 0), sourceAmounts: new Map() };
         this.groups.set(id, group); this.materialGroups.set(ps.materialId[i], id);
       }
       const amount = group.amount + ps.mixtureAmount[i];
       for (let k = 0; k < MIX_PROPERTIES.length; k++) group.target[k] = (group.target[k] * group.amount + ps[MIX_PROPERTIES[k]][i] * ps.mixtureAmount[i]) / amount;
+      group.sourceAmounts.set(ps.materialId[i], (group.sourceAmounts.get(ps.materialId[i]) || 0) + ps.mixtureAmount[i]);
       group.amount = amount; group.min = Math.min(group.min, ps.miscibility[i]); group.max = Math.max(group.max, ps.miscibility[i]);
       ps.mixtureGroup[i] = group.id; ps.mixtureProgress[i] = this.previous[i] = 0;
     }
@@ -83,6 +94,7 @@ export class MixtureSolver {
     if (joined) {
       const amount = a.amount + b.amount;
       for (let k = 0; k < MIX_PROPERTIES.length; k++) a.target[k] = (a.target[k] * a.amount + b.target[k] * b.amount) / amount;
+      for (const [id, quantity] of b.sourceAmounts || []) a.sourceAmounts.set(id, (a.sourceAmounts.get(id) || 0) + quantity);
       a.amount = amount; a.min = Math.min(a.min, b.min); a.max = Math.max(a.max, b.max); b.parent = a.id;
     }
     const distinct = joined || this.signature[i]!==this.signature[j];
@@ -119,6 +131,15 @@ export class MixtureSolver {
       }
       for(let i=0;i<ps.count;i++)values[i]+=delta[i];
     }
+    // The rune depends on distinct original sources and their recipe ratios,
+    // never on transient parcel averages or which phase they are in.
+    for (const group of this.groups.values()) {
+      if (group.id !== group.parent || !group.amount) continue;
+      group.arcaneRecipe = arcaneRecipe([...group.sourceAmounts].map(([id, amount]) => {
+        const material = this.materials?.get(id);
+        return { amount, threshold: material?.arcaneThreshold ?? 8, effects: material };
+      }));
+    }
     for (let i = 0; i < ps.count; i++) {
       const group = this.root(ps.mixtureGroup[i]);
       ps.mixtureGroup[i] = group.id;
@@ -128,7 +149,7 @@ export class MixtureSolver {
     }
   }
   snapshot() {
-    return { nextId: this.nextId, groups: [...this.groups.values()].map(g => ({ ...g, target: [...g.target] })), materialGroups: [...this.materialGroups] };
+    return { nextId: this.nextId, groups: [...this.groups.values()].map(g => ({ id:g.id,parent:g.parent,amount:g.amount,min:g.min,max:g.max,target:[...g.target], sourceAmounts:[...(g.sourceAmounts || [])] })), materialGroups: [...this.materialGroups] };
   }
   restore(saved, ps) {
     this.reset();
@@ -142,13 +163,30 @@ export class MixtureSolver {
       if (Array.isArray(target) && target.length === oldPhysical) target = [...target, ...EFFECT_PROPERTIES.map(() => 0)];
       if (Array.isArray(target) && target.length === MIX_PROPERTIES.length - 2) target = [...target, 8, 1.4];
       if (!Number.isInteger(g.id) || g.id < 1 || g.id >= saved.nextId || this.groups.has(g.id) || !Number.isInteger(g.parent) || !Number.isFinite(g.amount) || g.amount < 0 || !Number.isFinite(g.min) || !Number.isFinite(g.max) || g.min < 0 || g.max > 1 || g.max < g.min || !Array.isArray(target) || target.length !== MIX_PROPERTIES.length || target.some(v => !Number.isFinite(v))) throw new Error('Invalid saved mixture target.');
-      this.groups.set(g.id, { ...g, target: [...target] });
+      const sourceAmounts = Array.isArray(g.sourceAmounts) ? g.sourceAmounts : [];
+      if (sourceAmounts.some(pair => !Array.isArray(pair) || pair.length !== 2 || !Number.isInteger(pair[0]) || pair[0] < 1 || !Number.isFinite(pair[1]) || pair[1] < 0)) throw new Error('Invalid saved mixture ingredient shares.');
+      this.groups.set(g.id, { id:g.id,parent:g.parent,amount:g.amount,min:g.min,max:g.max,target:[...target],sourceAmounts:new Map(sourceAmounts) });
     }
     for (const [material, id] of saved.materialGroups) {
       if (!Number.isInteger(material) || material < 1 || !this.root(id)) throw new Error('Invalid saved mixture source.');
       this.materialGroups.set(material, id);
     }
     for (let i = 0; i < ps.count; i++) if ((ps.mixtureGroup[i] !== 0 && !this.root(ps.mixtureGroup[i])) || ps.mixtureProgress[i] < 0 || ps.mixtureProgress[i] > 1) throw new Error('Invalid saved mixture parcel.');
+    // Older saves had no provenance: rebuild their available contributor shares
+    // from their living parcels rather than losing the entire brew.
+    if (saved.groups.some(group => !Array.isArray(group.sourceAmounts))) {
+      for (const group of this.groups.values()) group.sourceAmounts.clear();
+      for (let i = 0; i < ps.count; i++) {
+        const group = this.root(ps.mixtureGroup[i]);
+        if (group) group.sourceAmounts.set(ps.materialId[i], (group.sourceAmounts.get(ps.materialId[i]) || 0) + ps.mixtureAmount[i]);
+      }
+    }
+    for (const group of this.groups.values()) if (group.parent === group.id && group.sourceAmounts.size) {
+      group.arcaneRecipe = arcaneRecipe([...group.sourceAmounts].map(([id, amount]) => {
+        const material = this.materials?.get(id);
+        return { amount, threshold: material?.arcaneThreshold ?? 8, effects: material };
+      }));
+    }
     this.nextId = saved.nextId;
   }
 }
