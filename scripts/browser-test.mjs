@@ -136,8 +136,11 @@ try{
   assert.ok(await page.locator('#labCanvas').evaluate(e=>{const r=e.getBoundingClientRect();return r.height>85&&r.top>=-1&&r.bottom<=innerHeight+1;}),'cauldron can be scrolled fully into view');
   await page.locator('#sandboxInspectIngredient').selectOption('13');
   assert.ok((await page.locator('#selectedName').textContent()).length>0);
-  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Below -700.0°A/);
-  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Mix opposing runes/i);
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),
+    /Cool below 15\.5°A \(rune -700°A\)/,
+    'negative rune shows a physically reachable cold trigger while preserving its signed value');
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Sustain the trigger temperature/i,
+    'reachable runes prompt the player to maintain the real awakening temperature');
   await page.locator('#sandboxMixtureTab').click();
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/cauldron is empty/i);
   await page.locator('#sandboxPropertiesBtn').click();

@@ -1,0 +1,29 @@
+name: Browser Arcane Inspector Regression
+on:
+  pull_request:
+    paths:
+      - 'src/game/main.mjs'
+      - 'src/game/sandboxProperties.mjs'
+      - 'scripts/browser-test.mjs'
+      - '.github/workflows/browser-arcane-inspector.yml'
+  push:
+    paths:
+      - 'src/game/main.mjs'
+      - 'src/game/sandboxProperties.mjs'
+      - 'scripts/browser-test.mjs'
+      - '.github/workflows/browser-arcane-inspector.yml'
+permissions:
+  contents: read
+jobs:
+  mobile-inspector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium --only-shell
+      - run: npm run test:browser
