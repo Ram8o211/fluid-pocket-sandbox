@@ -1,0 +1,26 @@
+name: LiquidFun Browser Smoke
+on:
+  push:
+    branches:
+      - feature/liquidfun-fluid-physics-20261014
+  pull_request:
+    paths:
+      - 'public/vendor/liquidfun.js'
+      - 'src/game/LiquidFunFluid.mjs'
+      - 'src/game/brewing.mjs'
+      - 'src/simulation/FluidSolver.mjs'
+      - 'src/simulation/SimulationEngine.mjs'
+      - 'index.html'
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium --only-shell
+      - run: node scripts/liquidfun-smoke.mjs
