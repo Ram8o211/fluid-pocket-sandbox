@@ -10,6 +10,11 @@ export function seedNumber(seed) {
 
 const PREFIXES = ['Moon', 'Ember', 'Witch', 'Frost', 'Star', 'Dusk', 'Moss', 'Sun', 'Dragon', 'Silver', 'Dream', 'Thorn'];
 const NEUTRAL_EFFECTS = Object.freeze(Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, 0])));
+// Raw garden ingredients carry a recognizable but weak magical signature.
+// Near-maximum effects are earned only by a successful arcane transition.
+export const INNATE_MAGIC_SCALE = .12;
+const innateEffects = spec => Object.fromEntries(EFFECT_PROPERTIES.map(key =>
+  [key, (spec.effects?.[key] || 0) * INNATE_MAGIC_SCALE]));
 
 // IDs are permanent: the first six starter ingredients, guild unlocks 7–9,
 // and the two later starter minerals keep their inventory and recipe identity.
@@ -49,7 +54,7 @@ function makeIngredient(worldSeed, spec) {
   const awakening = { 1: 4, 2: -8, 3: 9, 4: 1.04, 5: -9, 6: 10, 7: -11, 8: 11, 9: -10, 10: 8, 11: -8, 12: -7, 13: -7, 14: 9 };
   const liquid = spec.form === 'liquid', powder = spec.form === 'powder';
   const material = sanitizeMaterial({
-    ...raw, ...NEUTRAL_EFFECTS, ...spec.effects, name, arcaneThreshold: awakening[spec.id], magicDecayTemperature: .79,
+    ...raw, ...NEUTRAL_EFFECTS, ...innateEffects(spec), name, arcaneThreshold: awakening[spec.id], magicDecayTemperature: .79,
     color: liquid ? spec.color : rgbToHex(...base.map((v, k) => v * .92 + original[k] * .08)),
     density: spec.density + (liquid ? 0 : local() * .035),
     viscosity: spec.viscosity + (liquid ? 0 : local() * .025),
@@ -84,7 +89,7 @@ export function generateWorld(seed) {
   const ingredients = INGREDIENTS.map(spec => makeIngredient(worldSeed, spec));
   const validation = validateWorld(ingredients);
   if (!validation.valid) throw new Error('Unplayable world: ' + validation.reason);
-  return { seed: worldSeed, ingredientVersion: 3, ingredients, validation };
+  return { seed: worldSeed, ingredientVersion: 4, ingredients, validation };
 }
 
 export function validateWorld(ingredients) {
@@ -111,12 +116,18 @@ export function validateWorld(ingredients) {
 export function migrateIngredients(world) {
   if (!world?.ingredients) return world;
   const additions = generateWorld(world.seed).ingredients.filter(i => !world.ingredients.some(old => old.id === i.id));
-  return { ...world, ingredientVersion: 3, ingredients: [...world.ingredients.map(ingredient => {
+  const rebalance = (world.ingredientVersion || 0) < 4;
+  return { ...world, ingredientVersion: 4, ingredients: [...world.ingredients.map(ingredient => { 
     const spec = INGREDIENTS.find(i => i.id === ingredient.id);
     const form = ingredient.form || 'liquid', liquid = form === 'liquid', powder = form === 'powder';
     const reference = makeIngredient(world.seed, spec || INGREDIENTS[0]);
     const material = { ...ingredient.material, arcaneThreshold: ingredient.material.arcaneThreshold ?? reference.material.arcaneThreshold, magicDecayTemperature: ingredient.material.magicDecayTemperature ?? .79 };
-    for (const key of EFFECT_PROPERTIES) if (material[key] === undefined) material[key] = 0;
+    for (const key of EFFECT_PROPERTIES) {
+      if (material[key] === undefined) material[key] = 0;
+      // Rebalance inventory/base materials from pre-awakening saves, without
+      // resetting the thermal or magical state of a potion already brewing.
+      if (rebalance && spec) material[key] = reference.material[key];
+    }
     return { ...ingredient, form, material,
       unit: ingredient.unit || (liquid ? 'ml' : 'measures'),
       solvent: ingredient.solvent ?? (ingredient.id === 1 || !ingredient.form),
