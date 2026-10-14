@@ -9,6 +9,8 @@ function mockLiquidFun() {
   runtime.b2BodyDef = class {};
   runtime.b2EdgeShape = class { Set(a,b){this.a=a;this.b=b;} };
   runtime.b2ParticleSystemDef = class {};
+  runtime.b2PolygonShape = class {};
+  runtime.b2ParticleGroupDef = class {};
   runtime.b2ParticleDef = class { constructor(){this.position=new runtime.b2Vec2();this.velocity=new runtime.b2Vec2();this.color={r:0,g:0,b:0,a:0};} };
   runtime.b2_waterParticle = 0;
   runtime.b2World = class {
@@ -19,6 +21,11 @@ function mockLiquidFun() {
         SetMaxParticleCount(n){this.positions=new Float32Array(n*2);this.velocities=new Float32Array(n*2);this.count=0;},
         CreateParticle(def){const i=this.count++;this.positions[2*i]=def.position.x;this.positions[2*i+1]=def.position.y;
           this.velocities[2*i]=def.velocity.x;this.velocities[2*i+1]=def.velocity.y;return i;},
+        CreateParticleGroup(def){
+          const width=Math.round(def.shape.vertices[1].x+.75),height=Math.round(def.shape.vertices[2].y+.75);
+          const count=width*height;this.count+=count;
+          return {GetParticleCount:()=>count};
+        },
         GetPositionBuffer(){return this.positions.subarray(0,this.count*2);},
         GetVelocityBuffer(){return this.velocities.subarray(0,this.count*2);}};
       this.particleSystems.push(system);return system;

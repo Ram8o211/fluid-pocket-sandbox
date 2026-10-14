@@ -74,11 +74,13 @@ function closeSheet() { clearInterval(roomTimer); roomTimer = 0; currentRoom = n
 async function openWorld(seed, saved = null, mode = 'shop') {
   $('newWorldBtn').disabled = true; $('continueBtn').disabled = true;
   await new Promise(resolve => setTimeout(resolve, 0));
+  let session;
   try {
     const world = saved?.world || generateWorld(seed);
     const candidate = saved || newShop(world, { sandbox: mode === 'sandbox' });
-    const session = new BrewingSession(world.ingredients, candidate.equipment);
+    session = new BrewingSession(world.ingredients, candidate.equipment);
     if (saved?.brew) session.restore(saved.brew);
+    brew?.dispose();
     state = candidate; advanceComplaints(state); brew = session; selected = availableIngredients(world, state.equipment)[0].id; experimentReport = null;
     renderer = new LaboratoryRenderer($('labCanvas'), brew); renderer.setQuality(state.settings.graphics);
     audio.enabled = state.settings.sound;
@@ -89,7 +91,7 @@ async function openWorld(seed, saved = null, mode = 'shop') {
     if (state.stage === 'sale' && state.lastSale) showSale();
     else if (state.pendingBottle) showVial();
     else notify(isSandbox() ? 'Infinite ingredients, every instrument, and room to experiment.' : saved ? 'Welcome back to your shop.' : 'Your first customer is here. Gather, grind, and brew.');
-  } catch (err) { notify(err.message); $('saveMessage').textContent = 'This save has been preserved. You can open a new shop with another seed.'; }
+  } catch (err) { if (session && session !== brew) session.dispose(); notify(err.message); $('saveMessage').textContent = 'This save has been preserved. You can open a new shop with another seed.'; }
   finally { $('newWorldBtn').disabled = false; $('continueBtn').disabled = !loaded?.state; }
 }
 function menu() {
