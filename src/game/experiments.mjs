@@ -3,8 +3,8 @@ import { assessEffects } from './effects.mjs';
 export const EXPERIMENT_SUBJECTS = Object.freeze([
   { id: 'rabbit', name: 'Moon Rabbit', kind: 'animal', icon: 'rabbit', description: 'Observe vitality, affection and changing strength.' },
   { id: 'beetle', name: 'Copper Beetle', kind: 'animal', icon: 'beetle', description: 'A hardy subject for heat, frost and transformation.' },
-  { id: 'seedling', name: 'Bean Seedling', kind: 'plant', icon: 'plant', description: 'Watch growth, wilting and elemental changes.' },
-  { id: 'stone', name: 'Limestone', kind: 'mineral', icon: 'stone', description: 'Reveal corrosion and magical changes in an inert subject.' }
+  { id: 'seedling', name: 'Sproutling', kind: 'plant', icon: 'plant', description: 'Watch growth, wilting and elemental changes.' },
+  { id: 'stone', name: 'Stone Familiar', kind: 'mineral', icon: 'stone', description: 'Reveal corrosion and magical changes in an inert subject.' }
 ]);
 export const EXPERIMENT_RECORD_LIMIT = 80;
 
@@ -44,6 +44,7 @@ export function runExperiment(state, sample, subjectId, volume = 5, now = Date.n
   const experiments = state.experiments || createExperimentState();
   const subject = experiments.subjects[subjectId];
   if (!subject) throw new Error('Choose an experiment subject.');
+  if (subject.readyAt > now) throw new Error('Let this familiar recover before another trial.');
   if (!subject.stats.alive) throw new Error('Reset this subject before another experiment.');
   const { dose } = splitPotionSample(sample, volume);
   const assessment = assessEffects(dose, subject, dose.volume);
@@ -51,6 +52,7 @@ export function runExperiment(state, sample, subjectId, volume = 5, now = Date.n
   const report = { ...assessment, id: `trial-${serial}`, serial, subjectName: subject.name, at: now,
     sample: dose, sampleId: sample.id || null, volume: dose.volume, subjectId: subject.id, kind: subject.kind,
     preparation: structuredClone(preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history || {} }) };
+  subject.readyAt = now + (state.equipment?.analyzer ? 3000 : 6000);
   subject.stats = { ...assessment.after }; subject.trials++; subject.lastTestAt = now;
   experiments.serial = serial; experiments.records.unshift(structuredClone(report));
   experiments.records.length = Math.min(experiments.records.length, EXPERIMENT_RECORD_LIMIT);
@@ -62,6 +64,11 @@ export function resetExperimentSubject(state, subjectId) {
   const definition = EXPERIMENT_SUBJECTS.find(subject => subject.id === subjectId);
   if (!definition) throw new Error('Choose an experiment subject.');
   state.experiments ||= createExperimentState();
+  const price = state.equipment?.densimeter ? 1 : 3;
+  if (state.mode === 'shop') {
+    const paid = Math.min(state.coins, price); state.coins -= paid;
+    state.debt = (state.debt || 0) + price - paid;
+  }
   state.experiments.subjects[subjectId] = freshSubject(definition);
   return state.experiments.subjects[subjectId];
 }

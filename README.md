@@ -1,57 +1,45 @@
 # The Alchemist’s Shop
 
-A playable medieval fantasy potion shop built on Fluid Pocket Sandbox’s real
-particle engine. The game is entirely **2D**, mobile first, and statically hosted.
+A mobile fantasy potion shop running entirely in the browser, built on the
+existing 2D particle engine.
 
 **Play:** https://ram8o211.github.io/fluid-pocket-sandbox/
 
-Open a seeded world, gather plants and minerals, grind ingredients, and stir
-them into plain water. Heat or cool the brew, test a small dose in the experiment
-room, then inspect, bottle and sell it. Physical, magical and chemical effects
-come from the resulting particles. Use profits for supplies, instruments,
-larger cauldrons and rare ingredients. Progress, resource patches, experiment
-records, recipes and the active cauldron save locally.
+Customers describe problems that require magical effects. Start with plain
+water, garden plants, crushable enchanted stones and three magical liquids.
+The known ingredient enchantments contribute according to their proportions;
+grinding, stirring, extraction and preparation determine the liquid you bottle.
+Physical parameters stay inside the simulation, outside the shop’s descriptions.
 
-The fitted lid retains steam and ingredients. Turn off Flame or use Frost, then
-wait for steam to condense before bottling. Flame and Frost enter through the
-bottom; temperature and phase changes spread through neighbouring particles.
-The lid warms with the pot, so a uniformly hot brew stays vapour until cooled.
-Vapour always rises against a fixed reference atmosphere, retaining the different
-reagents' densities. Trapped vapour concentrates under the lid; cool, concentrated
-patches recondense first. With both sources off, hot or cold contents and copper
-gradually return to room temperature (33 °A), including tiny residual droplets.
-Compatible colours and properties diffuse through touching neighbours, with
-visible fronts that spread faster under stirring and warmth. Disconnected regions
-keep their own colour. Local exchange conserves measured ingredient proportions;
-incompatible substances stay separate.
-Four fine particles represent each ml, and the visible walls and lid share their
-collision geometry, including clearance for each particle's full drawn radius.
+The personal garden provides small timed harvests, limited stamina and bounded
+regrowth while you are away. Tending costs water. Village parcels are expensive
+and have shipment cooldowns. Sandbox mode provides infinite ingredients and
+saves separately.
 
-The first commission teaches metered pouring and stirring. Whole plants and
-stones enter as solids; **Grind & add** turns them into powder. A small amount
-of compatible ground ingredient slowly dissolves in plenty of water. Lesser
-dilution makes paste or dough. Loose mica dust is ready to add. Drag the spoon
-or hold Stir, and tap Flame/Frost to cycle power. Local particle glows preview
-strength, love, death, transformation, fire and frost. Acidity and poison travel
-through the same mixing and sampling mechanism.
+Creature trials consume real 2, 5 or 10 ml doses. Watch the animated familiar,
+compare with its untreated appearance, and **write your own potion ID** with
+eight estimated enchantment values. Neither trials nor the recipe book reveal
+an automatic assay. Feed restores a familiar for another comparison.
 
-The nature room contains a spring, meadow, woodland and mineral banks. Gathering
-uses real stock: emptied patches recover with elapsed time, including while the
-game is closed. The experiment room has animals, a seedling and limestone;
-each test consumes a measured 5 ml dose and records the observed changes.
-**Ingredient sandbox** offers all ingredients and instruments with infinite
-supplies, keeping its cauldron and experiment history separate from the shop.
-Older saves preserve their pinned materials and customer targets.
+Bottle and bargain with the customer through offers and counteroffers. Payment
+follows the agreement, while effectiveness is discovered after delivery.
+Disappointed customers may return later for mandatory refunds, including when
+you have insufficient cash (the balance becomes guild debt). Some buyers bluff.
+An expensive expert seal for that exact batch defeats a false claim; real faults
+still require refunds. Receipts, appointments, claims and IDs survive reloads.
 
-Fine grains settle into compact, independent piles. Recent spoon work kneads
-compatible powder and water into thick liquid dough; extra stirred solvent thins
-it. Matter uses one-pixel texels at up to 768×464 in Crisp mode, following screen
-density, or 384×232 in battery saver.
+Gentle warmth allows otherwise separate essences to mix. Overheating permanently
+weakens magic. Every ingredient has an independent awakening threshold, usually
+beyond the apparatus’s range. Opposed thresholds mix in proportion and can move
+into reach. Sustained exposure awakens one dominant enchantment, suppressing the
+others. This threshold is independent of melting and boiling.
 
-**Original sandbox:** https://ram8o211.github.io/fluid-pocket-sandbox/sandbox.html?mode=2D
-
-The original 2D/3D simulation, material editor and experimental controls remain
-available independently. The shop imports only the planar rendering path.
+The fitted lid retains vapour until it recondenses. Loose powders settle as
+independent grains; stirring can turn wet powder into dough, then a thinner
+infusion with more solvent. A wooden spoon, softly shaded continuous liquid
+surfaces and rounded material footprints make local motion visible. Navigation,
+beds, ingredients, receipts and ID forms use horizontal collections inside the
+phone viewport. Saved shops migrate without replacing an active cauldron.
 
 ## Development and verification
 
@@ -68,20 +56,20 @@ npm run test:browser
 npm run benchmark:game
 ```
 
-`test:browser` plays two orders through visible controls, grinds raw ingredients,
-checks thermal physics and save conservation, tests subjects, gathers and
-depletes a resource patch, and verifies the separate infinite ingredient sandbox.
-It also checks portrait/desktop layouts and opens the original sandbox. QA
-screenshots go to the ignored `test-results/` directory. Set `SITE_URL` to run
-against a deployed site; `BROWSER_PATH` selects an installed Chromium.
-TypeScript and Playwright are development-only dependencies; the game has no
-runtime dependency downloads or server requirements.
+Browser acceptance drives visible controls for two negotiated commissions,
+creature trials, manually entered IDs, a timed harvest, reload persistence,
+magical liquids and both sandbox modes. It checks 320×568, 360×640, 393×852 and
+desktop layouts. `SITE_URL` runs the same acceptance against a live deployment;
+`BROWSER_PATH` selects an installed Chromium. Screenshots stay in ignored
+`test-results/`. Unit regressions cover phases, transport, powder/dough, quantity
+conservation, awakening, heat damage, bargaining, seals and offline refunds.
 
-See [game architecture](docs/GAME_ARCHITECTURE.md) for contracts, quantity
-conservation, fantasy measurements, scoring, progression and save migrations.
-Physics is deliberately normalized and inspired by chemistry rather than a
-calibrated model of real potion substances. Android hardware benchmarking remains
-future validation. There is no cloud sync or native APK in this static MVP.
+See [magical gameplay](docs/MAGICAL_GAMEPLAY.md) for the new contracts and
+[simulation model](docs/SIMULATION_MODEL.md) for the underlying engine. The game
+has no runtime package downloads, server, cloud sync or native APK. Benchmarks
+measure the current runner; physical phone profiling is still separate work.
+
+**Original sandbox:** https://ram8o211.github.io/fluid-pocket-sandbox/sandbox.html?mode=2D
 
 ## Original Fluid Pocket Sandbox documentation
 

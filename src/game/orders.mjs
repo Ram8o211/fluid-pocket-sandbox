@@ -72,9 +72,9 @@ function generatePhysicalOrder(world, completed = 0, equipment = {}) {
 
 const EFFECT_PURPOSES = Object.freeze({
   strength: 'build strength for a long journey', love: 'bring affection and calm to a restless companion',
-  transformation: 'transform an enchanted garden', fire: 'carry a gentle fire enchantment',
-  freeze: 'bring frost to the summer storeroom', acidity: 'etch an old stone carving',
-  poison: 'control pests in a sealed garden', death: 'perform a carefully measured shadow ritual'
+  transformation: 'change the shape of a stubborn familiar', fire: 'keep my lantern burning through a cold night',
+  freeze: 'bring frost to the summer storeroom', acidity: 'break a creeping enchantment on my orchard',
+  poison: 'banish magical pests from a sealed garden', death: 'banish an undead curse from my cellar'
 });
 const EFFECT_SEQUENCE = ['strength', 'love', 'freeze', 'transformation', 'fire', 'acidity', 'poison', 'death'];
 
@@ -117,16 +117,16 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   /** @type {import('./contracts.mjs').Requirement[]} */
   const requirements = wanted.map(property => ({ property, target: sample[property], tolerance: Math.max(.002, Math.min(PROPERTIES[property].tolerance, sample[property] * .35)),
     weight: 3, hard: false, minimum: sample[property] * .3, comparison: 'target' }));
-  for (const property of ['poison', 'death', 'acidity', 'fire', 'freeze']) {
+  for (const property of EFFECT_PROPERTIES) {
     if (wanted.includes(property)) continue;
     const ceiling = Math.max(property === 'acidity' ? .035 : .015, sample[property] * 1.3 + .005);
     requirements.push({ property, target: Math.min(1, ceiling), tolerance: .008, weight: .4, hard: true, comparison: 'maximum' });
   }
   const purpose = wanted.map(key => EFFECT_PURPOSES[key]).join(' and ');
   const customer = { id: `customer-${completed}`, name: NAMES[Math.floor(rng() * NAMES.length)], role: ROLES[Math.floor(rng() * ROLES.length)],
-    portraitSeed: Math.floor(rng() * 0xffffffff), dialogue: `I need a potion to ${purpose}. Match these effects as closely as you can, and keep unwanted effects below my limits.` };
-  const clue = 'Read the known effects of your plain ingredients, choose your own mixture, then grind and stir with water. Reserve a little extra for a test in the Experiments room. Adjust your brew from what you observe.';
-  return { id: `${world.seed}-${completed}`, conceptVersion: 1, customer, requirements, volume, difficulty,
+    portraitSeed: Math.floor(rng() * 0xffffffff), dialogue: `I need a potion to ${purpose}. I need the enchantment in this range, with no unwanted surprises.` };
+  const clue = 'Use the known garden essences. Test a spare dose on your familiars, then write your own potion ID from their response.';
+  return { id: `${world.seed}-${completed}`, conceptVersion: 2, customer, requirements, volume, difficulty,
     budget: Math.round(43 + difficulty * 14 + wanted.length * 6 + rng() * 8), witness: recipe, clue,
     targetDescriptions: Object.fromEntries(requirements.map(r => [r.property, r.comparison === 'maximum' ? `At most ${Math.round(Number(r.target) * 100)}% ${EFFECT_DEFINITIONS[r.property].label.toLowerCase()}` : propertyDescription(r.property, r.target)])) };
 }

@@ -1,6 +1,7 @@
 import { isCoherentSolid, isPowder, wetPowderPair } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
+import { warmedMiscibility } from '../simulation/ArcaneSolver.mjs';
 import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 
 export const MIX_PROPERTIES = Object.freeze([
@@ -8,7 +9,7 @@ export const MIX_PROPERTIES = Object.freeze([
   'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity',
   'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility',
   'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity',
-  'solidSubdivision', 'electricalConductivity', 'combustionTemperature', ...EFFECT_PROPERTIES
+  'solidSubdivision', 'electricalConductivity', 'combustionTemperature', ...EFFECT_PROPERTIES, 'arcaneThreshold', 'magicDecayTemperature'
 ]);
 const FIELD_MASK=MIX_PROPERTIES.map(key=>key==='solidSubdivision'?1:['meltingTemperature','boilingTemperature','phaseHysteresis'].includes(key)?2:0);
 
@@ -20,7 +21,7 @@ export class MixtureSolver {
     this.reset(); this.previous = this.signal = new Float32Array(0);
     this.channels = []; this.before = []; this.delta = []; this.weight = new Float64Array(0);
     this.left = this.right = new Uint32Array(0); this.fraction = new Float32Array(0); this.edgeCount = 0;
-    this.rightFraction=new Float32Array(0);this.edgeMask=new Uint8Array(0);this.signature=new Int32Array(0);this.activeFields=[];
+    this.rightFraction=new Float32Array(0);this.edgeMask=new Uint8Array(0);this.signature=new Int32Array(0);this.activeFields=[];this.bits=[];this.cachedPs=null;
   }
   reset() { this.groups = new Map(); this.materialGroups = new Map(); this.nextId = 1; }
   root(id) {
@@ -33,15 +34,16 @@ export class MixtureSolver {
     if (this.previous.length < ps.capacity) {
       this.previous = new Float32Array(ps.capacity); this.signal = new Float32Array(ps.capacity); this.weight = new Float64Array(ps.capacity);
       this.before = MIX_PROPERTIES.map(() => new Float32Array(ps.capacity));
+      this.bits = this.before.map(values => new Int32Array(values.buffer));
       this.delta = MIX_PROPERTIES.map(() => new Float64Array(ps.capacity));
       this.left = new Uint32Array(ps.capacity * 12); this.right = new Uint32Array(ps.capacity * 12); this.fraction = new Float32Array(ps.capacity * 12);
       this.rightFraction=new Float32Array(ps.capacity*12);this.edgeMask=new Uint8Array(ps.capacity*12);this.signature=new Int32Array(ps.capacity);
     }
-    this.channels = MIX_PROPERTIES.map(key => ps[key]); this.weight.fill(0, 0, ps.count); this.edgeCount = 0;
+    if(this.cachedPs!==ps){this.channels=MIX_PROPERTIES.map(key=>ps[key]);this.cachedPs=ps;} this.weight.fill(0, 0, ps.count); this.edgeCount = 0;
     this.signature.fill(2166136261,0,ps.count);this.activeFields.length=0;
     for (let k = 0; k < MIX_PROPERTIES.length; k++) {
       const values=this.before[k];values.set(this.channels[k].subarray(0, ps.count));this.delta[k].fill(0,0,ps.count);
-      const bits=new Int32Array(values.buffer);let first=values[0],varied=false;
+      const bits=this.bits[k];let first=values[0],varied=false;
       for(let i=0;i<ps.count;i++){this.signature[i]=Math.imul(this.signature[i]^bits[i],16777619);varied=varied||values[i]!==first;}
       if(varied)this.activeFields.push(k);
     }
@@ -70,6 +72,7 @@ export class MixtureSolver {
     const delta = Math.max(a.max, b.max) - Math.min(a.min, b.min);
     // Preserve the original affinity envelope. A bridging third ingredient or
     // an averaged affinity cannot quietly admit incompatible source fluids.
+    threshold = warmedMiscibility(ps, i, j, threshold, rules);
     if (delta >= threshold || threshold <= 0) return 0;
     const compatibility=clamp(1-delta/threshold,0,1),work=Math.max(ps.stirActivity[i],ps.stirActivity[j]);
     // Resting solvent cannot convert sand into a suspension. Its grains keep
@@ -134,7 +137,10 @@ export class MixtureSolver {
     for (const g of saved.groups) {
       // Old mixtures contain physical channels only. Their absent magical and
       // chemical concentrations remain inert when Continue upgrades the save.
-      const target = Array.isArray(g.target) && g.target.length === MIX_PROPERTIES.length - EFFECT_PROPERTIES.length ? [...g.target, ...EFFECT_PROPERTIES.map(() => 0)] : g.target;
+      let target = g.target;
+      const oldPhysical = MIX_PROPERTIES.length - EFFECT_PROPERTIES.length - 2;
+      if (Array.isArray(target) && target.length === oldPhysical) target = [...target, ...EFFECT_PROPERTIES.map(() => 0)];
+      if (Array.isArray(target) && target.length === MIX_PROPERTIES.length - 2) target = [...target, 8, 1.4];
       if (!Number.isInteger(g.id) || g.id < 1 || g.id >= saved.nextId || this.groups.has(g.id) || !Number.isInteger(g.parent) || !Number.isFinite(g.amount) || g.amount < 0 || !Number.isFinite(g.min) || !Number.isFinite(g.max) || g.min < 0 || g.max > 1 || g.max < g.min || !Array.isArray(target) || target.length !== MIX_PROPERTIES.length || target.some(v => !Number.isFinite(v))) throw new Error('Invalid saved mixture target.');
       this.groups.set(g.id, { ...g, target: [...target] });
     }

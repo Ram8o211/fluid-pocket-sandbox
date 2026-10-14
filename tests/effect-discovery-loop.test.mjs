@@ -1,3 +1,5 @@
+import { compilePotionId } from '../src/game/potionId.mjs';
+import { startNegotiation, acceptCustomerOffer } from '../src/game/commerce.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld, availableIngredients } from '../src/game/world.mjs';
@@ -53,6 +55,9 @@ test('serving a modern commission requires an actual test of the current batch',
   assert.deepEqual(state, before, 'an untested sale changes neither stock nor progression');
   const split = splitPotionSample(state.pendingBottle, 5);
   runExperiment(state, split.dose, 'rabbit'); state.pendingBottle = split.remaining;
+  assert.throws(()=>completeSale(state),/Compile a potion ID/);
+  compilePotionId(state,state.pendingBottle,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,state.pendingBottle[k]])));
+  startNegotiation(state);acceptCustomerOffer(state);
   assert.ok(completeSale(state).payment > 0);
 });
 
@@ -65,8 +70,9 @@ test('inspection and recording an untested formula grant no mixture knowledge; a
   const report = runExperiment(state, dose, 'rabbit', dose.volume, 100, source);
   assert.ok(Math.abs(before - brew.liquidVolume - 5) < .001);
   assert.equal(observedPotion(state, brew.inspectLiquid()).id, report.id);
+  compilePotionId(state,source,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,source[k]])));
   const discovered = recordDiscovery(state, source, 'Observed tonic');
-  assert.ok(discoveryKnowledge(discovered)); assert.ok(discovered.observations.length);
+  assert.ok(discoveryKnowledge(discovered)); assert.equal(discovered.observations.length,0); assert.ok(discovered.potionId);
   assert.deepEqual(discovered.preparation.portions, source.portions);
   const vial = brew.bottle(state.order.volume);
   assert.equal(observedPotion(state, vial).id, report.id, 'bottling preserves tested batch concentrations');
@@ -79,7 +85,7 @@ test('dilution, further extraction, heat, and a new batch invalidate a current m
   const state = newShop(generateWorld('retest-loop')), brew = prepare(state), dose = brew.takeSample(5);
   runExperiment(state, dose, 'seedling', 5, 100);
   const measured = brew.inspectLiquid(); assert.ok(observedPotion(state, measured));
-  assert.equal(observedPotion(state, { ...measured, temperature: measured.temperature + .08 }), null);
+  assert.ok(observedPotion(state, { ...measured, temperature: measured.temperature + .08 }), 'Temperature alone does not reveal or erase magical estimates');
   assert.equal(observedPotion(state, { ...measured, strength: measured.strength + .01 }), null);
   brew.pour(1, 40, state.inventory);
   assert.equal(observedPotion(state, brew.inspectLiquid()), null);
@@ -90,6 +96,7 @@ test('dilution, further extraction, heat, and a new batch invalidate a current m
 test('tested results, full preparation, and batch knowledge survive saving and restoring', () => {
   const state = newShop(generateWorld('persist-loop')), brew = prepare(state), source = brew.inspectLiquid();
   const dose = brew.takeSample(5); runExperiment(state, dose, 'rabbit', 5, 100, source);
+  compilePotionId(state,source,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,source[k]])));
   recordDiscovery(state, source, 'Tested recipe');
   const saved = decodeSave(encodeSave(state, brew)), resumed = new BrewingSession(saved.world.ingredients, saved.equipment);
   resumed.restore(saved.brew);
@@ -104,7 +111,7 @@ test('old untouched commissions migrate, while an in-progress brew and bottle re
   delete state.order.conceptVersion;
   state.order.requirements = [{ property: 'color', target: '#a8dfe8', tolerance: .15, weight: 1, hard: false }];
   const upgraded = decodeSave(encodeSave(state, brew));
-  assert.equal(upgraded.order.conceptVersion, 1);
+  assert.equal(upgraded.order.conceptVersion, 2);
   brew.pour(1, 80, state.inventory);
   assert.deepEqual(decodeSave(encodeSave(state, brew)).order, state.order);
   state.pendingBottle = brew.bottle(60); state.stage = 'inspection';

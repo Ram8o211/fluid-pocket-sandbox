@@ -109,10 +109,10 @@ test('partly mixed scalar channels and targets survive a cauldron snapshot', () 
 
 test('old physical-only mixture targets upgrade to neutral effect channels', () => {
   const ps = new ParticleSystem(1), solver = new MixtureSolver(); ps.add({ x: 0, y: 0, z: 0 }, material({})); solver.beginFrame(ps);
-  const old = solver.snapshot(); old.groups[0].target.length = MIX_PROPERTIES.length - EFFECT_PROPERTIES.length;
+  const old = solver.snapshot(); old.groups[0].target.length = MIX_PROPERTIES.length - EFFECT_PROPERTIES.length - 2;
   const input = structuredClone(old), restored = new MixtureSolver(); restored.restore(old, ps);
   assert.deepEqual(old, input); assert.equal(restored.snapshot().groups[0].target.length, MIX_PROPERTIES.length);
-  assert.deepEqual(restored.snapshot().groups[0].target.slice(-EFFECT_PROPERTIES.length), EFFECT_PROPERTIES.map(() => 0));
+  assert.deepEqual(restored.snapshot().groups[0].target.slice(-EFFECT_PROPERTIES.length-2,-2), EFFECT_PROPERTIES.map(() => 0));
 });
 
 test('animal, plant and stone trials resolve magic and chemistry without changing the vial', () => {

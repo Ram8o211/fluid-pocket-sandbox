@@ -11,7 +11,7 @@ export function observedPotion(state, sample) {
     if (!tested || (sample.batchId || tested.batchId) && sample.batchId !== tested.batchId) return false;
     const known = readEffects(tested);
     if (EFFECT_PROPERTIES.some(key => Math.abs(effects[key] - known[key]) > .0015)) return false;
-    if (Math.abs(sample.temperature - tested.temperature) > .02 || Math.abs(sample.stability - tested.stability) > 2) return false;
+    // Settling and cooling without a change of magic do not erase observations.
     const amounts = source => {
       if (!source.portions?.length) return source.composition || {};
       const result = {};
@@ -32,5 +32,5 @@ export function observedPotion(state, sample) {
 }
 
 export function discoveryKnowledge(discovery) {
-  return discovery?.tested === true ? { sample: discovery.sample, observations: discovery.observations || [] } : null;
+  return discovery?.potionId ? { sample: { ...discovery.sample, ...discovery.potionId.estimates }, estimates: discovery.potionId.estimates } : null;
 }

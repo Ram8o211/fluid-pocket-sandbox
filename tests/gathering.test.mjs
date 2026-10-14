@@ -26,7 +26,7 @@ test('fresh worlds provide neutral water and raw ingredients covering every effe
       assert.equal(ingredient.material.solidSubdivision, 0); assert.ok(ingredient.crushable);
     }
     assert.equal(world.ingredients.find(i => i.id === 11).material.solidSubdivision, 1);
-    assert.deepEqual(availableIngredients(world, { reagents: 0 }).map(i => i.id), [1, 2, 3, 4, 5, 6, 10, 11]);
+    assert.deepEqual(availableIngredients(world, { reagents: 0 }).map(i => i.id), [1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 14]);
   }
 });
 
@@ -47,38 +47,45 @@ test('gathering exhausts a finite patch and credits exactly the actual stock wit
   const state = setup(); state.coins = 5;
   const node = state.foraging.nodes.find(n => n.ingredientId === 2);
   const result = gatherIngredient(state, node.id, 10000, NOW);
-  assert.equal(result.quantity, node.capacity); assert.equal(result.remaining, 0);
+  assert.equal(result.quantity,10);
+  gatherIngredient(state,node.id,10,NOW);
+  assert.equal(state.inventory[2],node.capacity);
+  assert.equal(result.remaining,10);
+  // Two baskets exhaust the small bed.
+  const final = resourceStatus(state,node.id,NOW);
+  assert.equal(final.available,0);
+  assert.equal(result.quantity*2, node.capacity); assert.equal(final.available, 0);
   assert.equal(state.inventory[2], node.capacity); assert.equal(state.coins, 5);
   assert.equal(state.foraging.collectedTotal, node.capacity);
   assert.ok(resourceStatus(state, node.id, NOW).depleted);
-  assert.throws(() => gatherIngredient(state, node.id, 20, NOW), /regrow/);
+  assert.throws(() => gatherIngredient(state, node.id, 20, NOW), /ripen/);
   assert.equal(state.inventory[2], node.capacity);
 });
 
 test('depleted patches regrow gradually while untouched, cap at capacity and survive serialization', () => {
   const state = setup(), node = state.foraging.nodes.find(n => n.ingredientId === 3);
-  gatherIngredient(state, node.id, node.capacity, NOW);
+  node.stock=0;node.updatedAt=NOW;
   const depletedSnapshot = structuredClone(state.foraging);
   const halfway = NOW + node.regrowMs / 2;
   assert.equal(resourceStatus(state, node.id, halfway).available, node.capacity / 2);
   assert.deepEqual(state.foraging, depletedSnapshot, 'Reading regrowth must not write a timer or timestamp');
   const resumed = JSON.parse(JSON.stringify(state));
-  assert.equal(gatherIngredient(resumed, node.id, 20, halfway).quantity, 20);
-  assert.equal(resourceStatus(resumed, node.id, halfway).available, node.capacity / 2 - 20);
+  assert.equal(gatherIngredient(resumed, node.id, 5, halfway).quantity, 5);
+  assert.equal(resourceStatus(resumed, node.id, halfway).available, node.capacity / 2 - 5);
   assert.equal(resourceStatus(resumed, node.id, NOW + node.regrowMs * 20).available, node.capacity);
   assert.ok(Number.isFinite(resourceStatus(resumed, node.id, halfway).fullAt));
 });
 
 test('fractional regrowth is preserved across repeated gathering and clocks do not run backwards', () => {
   const state = setup(), node = state.foraging.nodes.find(n => n.ingredientId === 4);
-  gatherIngredient(state, node.id, node.capacity, NOW);
-  const time = NOW + node.regrowMs * 2.5 / node.capacity;
-  assert.equal(resourceStatus(state, node.id, time).available, 2);
-  assert.equal(gatherIngredient(state, node.id, 2, time).quantity, 2);
+  node.stock=0;node.updatedAt=NOW;
+  const time = NOW + node.regrowMs * 5.5 / node.capacity;
+  assert.equal(resourceStatus(state, node.id, time).available, 5);
+  assert.equal(gatherIngredient(state, node.id, 5, time).quantity, 5);
   const after = resourceStatus(state, node.id, time);
   assert.ok(Math.abs(after.stock - .5) < 1e-9); assert.equal(after.available, 0);
   assert.equal(resourceStatus(state, node.id, NOW - 1000).available, 0);
-  assert.equal(resourceStatus(state, node.id, after.nextReadyAt + 1).available, 1);
+  assert.equal(resourceStatus(state, node.id, after.nextReadyAt + 1).available, 5);
 });
 
 test('the spring provides renewable water freely and guild patches enforce ingredient unlocks', () => {
@@ -91,7 +98,7 @@ test('the spring provides renewable water freely and guild patches enforce ingre
   assert.throws(() => gatherIngredient(state, rare.id, 20, NOW), /guild/);
   state.equipment.reagents = 1;
   assert.equal(resourceStatus(state, rare.id, NOW).locked, false);
-  assert.equal(gatherIngredient(state, rare.id, 20, NOW).quantity, 20);
+  assert.equal(gatherIngredient(state, rare.id, 20, NOW).quantity, 10);
 });
 
 test('sandbox gathering is unlimited, grants locked ingredients and preserves every resource patch', () => {

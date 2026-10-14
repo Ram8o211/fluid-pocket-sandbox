@@ -58,8 +58,8 @@ test('animals, plants and minerals reveal different chemical and magical respons
 });
 
 test('experiment history is bounded and dead subjects need a reset', () => {
-  const state = { experiments: createExperimentState() };
-  for (let index = 0; index < 90; index++) runExperiment(state, potion(), 'stone', 1, index);
+  const state = { mode: 'sandbox', experiments: createExperimentState() };
+  for (let index = 0; index < 90; index++) runExperiment(state, potion(), 'stone', 1, index * 7000);
   assert.equal(state.experiments.records.length, 80); assert.equal(state.experiments.records[0].serial, 90);
   state.experiments.subjects.rabbit.stats.alive = false;
   assert.throws(() => runExperiment(state, potion(), 'rabbit', 5, 100));

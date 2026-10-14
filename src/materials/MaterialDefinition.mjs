@@ -7,6 +7,7 @@ export const CHEMICAL_PROPERTIES = Object.freeze(['acidity', 'poison']);
 export const EFFECT_PROPERTIES = Object.freeze([...MAGIC_PROPERTIES, ...CHEMICAL_PROPERTIES]);
 
 export const MATERIAL_RANGES = Object.freeze({
+  arcaneThreshold: [-12, 12], magicDecayTemperature: [.5, 1.4],
   density: [0.35, 1.65], viscosity: [0.02, 1], cohesion: [0, 1], miscibility: [0, 1],
   particleRadius: [0.065, 0.20],
   heatCapacity: [0.15, 1], thermalConductivity: [0.02, 1],
@@ -20,6 +21,8 @@ export const MATERIAL_RANGES = Object.freeze({
 
 export function sanitizeMaterial(input) {
   const m = {...input};
+  if (!Number.isFinite(m.arcaneThreshold)) m.arcaneThreshold = 8;
+  if (!Number.isFinite(m.magicDecayTemperature)) m.magicDecayTemperature = 1.4;
   if (!Number.isFinite(m.combustionTemperature)) m.combustionTemperature = 1.15;
   if (!Number.isFinite(m.particleRadius)) m.particleRadius = 0.13;
   for (const key of EFFECT_PROPERTIES) if (!Number.isFinite(m[key])) m[key] = 0;
@@ -57,6 +60,7 @@ export function weightedMaterialMean(a, b, massA, massB, id) {
   return sanitizeMaterial({
     ...a, id, name: `${a.name} × ${b.name}`, seed: (a.seed ^ b.seed) >>> 0,
     color: rgbToHex(ar[0]*wA+br[0]*wB, ar[1]*wA+br[1]*wB, ar[2]*wA+br[2]*wB),
+    arcaneThreshold: mean('arcaneThreshold'), magicDecayTemperature: mean('magicDecayTemperature'),
     opacity: mean('opacity'), density: mean('density'), viscosity: mean('viscosity'),
     cohesion: mean('cohesion'), miscibility: mean('miscibility'), particleRadius: mean('particleRadius'),
     incompressible: ((a.incompressible?1:0)*wA + (b.incompressible?1:0)*wB) >= 0.5,

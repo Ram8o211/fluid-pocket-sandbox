@@ -2,11 +2,12 @@ import { Phase } from './Phase.mjs';
 import { clamp, hexToRgb } from './math.mjs';
 import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 
-const PARTICLE_ARRAYS=['x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
+const PARTICLE_ARRAYS=['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted','x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
 
 export class ParticleSystem {
   constructor(capacity=1800){
     this.capacity=capacity; this.count=0;this.packingScale=1;this.volumePacking=false;
+    this.arcaneThreshold=new Float32Array(capacity);this.magicDecayTemperature=new Float32Array(capacity);this.arcaneCharge=new Float32Array(capacity);this.arcaneConverted=new Float32Array(capacity);
     this.x=new Float32Array(capacity);this.y=new Float32Array(capacity);this.z=new Float32Array(capacity);
     this.px=new Float32Array(capacity);this.py=new Float32Array(capacity);this.pz=new Float32Array(capacity);
     this.vx=new Float32Array(capacity);this.vy=new Float32Array(capacity);this.vz=new Float32Array(capacity);
@@ -34,6 +35,7 @@ export class ParticleSystem {
     this.viscosity[i]=material.viscosity;this.cohesion[i]=material.cohesion;this.miscibility[i]=material.miscibility;this.particleRadius[i]=material.particleRadius;this.incompressible[i]=material.incompressible?1:0;this.heatCapacity[i]=material.heatCapacity;this.thermalConductivity[i]=material.thermalConductivity;
     this.meltingTemperature[i]=material.meltingTemperature;this.boilingTemperature[i]=material.boilingTemperature;this.phaseHysteresis[i]=material.phaseTransitionHysteresis;this.volatility[i]=material.volatility;this.reactionPotential[i]=material.reactionPotential;this.reactionHeat[i]=material.reactionHeat;this.compressibility[i]=material.compressibility;
     this.crystallinity[i]=material.crystallinity;this.solidSubdivision[i]=material.solidSubdivision;this.electricalConductivity[i]=material.electricalConductivity;this.electricPotential[i]=p.electricPotential??material.electricPotential;this.combustionTemperature[i]=material.combustionTemperature;this.combustionProgress[i]=0;
+    this.arcaneThreshold[i]=material.arcaneThreshold??8;this.magicDecayTemperature[i]=material.magicDecayTemperature??1.4;this.arcaneCharge[i]=this.arcaneConverted[i]=0;
     for(const key of EFFECT_PROPERTIES)this[key][i]=clamp(Number.isFinite(material[key])?material[key]:0,0,1);
     this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;this.savedDepth[i]=0;this.savedVz[i]=0;this.hasSavedDepth[i]=0;
     return i;
@@ -48,6 +50,7 @@ export class ParticleSystem {
     this.viscosity[i]=material.viscosity;this.cohesion[i]=material.cohesion;this.miscibility[i]=material.miscibility;this.particleRadius[i]=material.particleRadius;this.incompressible[i]=material.incompressible?1:0;this.heatCapacity[i]=material.heatCapacity;this.thermalConductivity[i]=material.thermalConductivity;
     this.meltingTemperature[i]=material.meltingTemperature;this.boilingTemperature[i]=material.boilingTemperature;this.phaseHysteresis[i]=material.phaseTransitionHysteresis;this.volatility[i]=material.volatility;this.reactionPotential[i]=material.reactionPotential;this.reactionHeat[i]=material.reactionHeat;this.compressibility[i]=material.compressibility;
     this.crystallinity[i]=material.crystallinity;this.solidSubdivision[i]=material.solidSubdivision;this.electricalConductivity[i]=material.electricalConductivity;this.electricPotential[i]=material.electricPotential;this.combustionTemperature[i]=material.combustionTemperature;
+    this.arcaneThreshold[i]=material.arcaneThreshold??8;this.magicDecayTemperature[i]=material.magicDecayTemperature??1.4;this.arcaneCharge[i]=this.arcaneConverted[i]=0;
     for(const key of EFFECT_PROPERTIES)this[key][i]=clamp(Number.isFinite(material[key])?material[key]:0,0,1);
     this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;return true;
   }

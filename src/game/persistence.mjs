@@ -32,16 +32,23 @@ export function migrateSave(raw) {
   }
   if (raw.version === 3) {
     const world = migrateIngredients(raw.world);
-    raw = { ...raw, version: SAVE_VERSION, world, mode: raw.mode === 'sandbox' ? 'sandbox' : 'shop',
+    raw = { ...raw, version: 4, world, mode: raw.mode === 'sandbox' ? 'sandbox' : 'shop',
       foraging: raw.foraging || createForaging(world), experiments: raw.experiments || createExperimentState(),
       pendingBottle: migrateSample(raw.pendingBottle),
       discoveries: (raw.discoveries || []).map(discovery => ({ ...discovery, sample: migrateSample(discovery.sample) })),
       lastSale: raw.lastSale ? { ...raw.lastSale, sample: migrateSample(raw.lastSale.sample) } : null };
   }
+  if (raw.version === 4) {
+    const world = migrateIngredients(raw.world);
+    const garden = createForaging(world);
+    const nodes = garden.nodes.map(node => { const old = raw.foraging?.nodes?.find(n => n.id === node.id); return old ? { ...node, stock: Math.min(node.capacity, old.stock), updatedAt: old.updatedAt } : node; });
+    raw = { ...raw, version: 5, world, gameplayVersion: 2, inventory: { ...Object.fromEntries(world.ingredients.map(i => [i.id,0])), ...raw.inventory },
+      foraging: { ...garden, ...raw.foraging, nodes }, potionIds: [], certificates: [], deliveries: [], complaints: [], negotiation: null, purchases: {} };
+  }
   if (raw.version !== SAVE_VERSION) throw new Error('Unsupported shop save. It has been preserved.');
   // Switch an untouched commission to the effects concept without replacing an
   // in-progress brew, bottled potion, inventory, or completed customer sale.
-  if (raw.mode === 'shop' && raw.order?.conceptVersion !== 1 && raw.stage === 'brewing' && !raw.pendingBottle && !raw.brew?.count && raw.world?.ingredients?.length)
+  if (raw.mode === 'shop' && raw.order?.conceptVersion !== 2 && raw.stage === 'brewing' && !raw.pendingBottle && !raw.brew?.count && raw.world?.ingredients?.length)
     raw = { ...raw, order: generateOrder(raw.world, raw.completed, raw.equipment) };
   raw.discoveries = (raw.discoveries || []).map(discovery => discovery.tested === undefined ? { ...discovery,
     tested: Boolean(observedPotion(raw, discovery.sample)), observations: observedPotion(raw, discovery.sample)?.observations || [] } : discovery);
@@ -103,6 +110,14 @@ export function validateSave(state) {
     recordIds.add(record.id);
     if (record.preparation?.mass && (!validSample(record.preparation) || !Array.isArray(record.preparation.portions) || record.preparation.portions.some(portion => !ids.has(portion.ingredientId) || !nonnegative(portion.ml)))) throw new Error('Invalid tested formula.');
   }
+  if (!Array.isArray(state.potionIds) || state.potionIds.length > 80 || !Array.isArray(state.certificates) || state.certificates.length > 80 || !Array.isArray(state.deliveries) || state.deliveries.length > 100 || !Array.isArray(state.complaints) || state.complaints.length > 100 || !state.purchases) throw new Error('Missing magical shop records.');
+  const validFingerprint = text => typeof text === 'string' && text.length > 0 && text.length < 4000;
+  for (const document of state.potionIds) if (!document || !validFingerprint(document.fingerprint) || !validSample(document.sample) || !validEffects(document.estimates) || typeof document.name !== 'string' || typeof document.id !== 'string' || !nonnegative(document.at) || !Array.isArray(document.trials)) throw new Error('Invalid potion ID.');
+  for (const seal of state.certificates) if (!validFingerprint(seal.fingerprint) || !nonnegative(seal.cost) || !nonnegative(seal.at)) throw new Error('Invalid expert seal.');
+  for (const receipt of [...state.deliveries,...state.complaints]) if (!validFingerprint(receipt.fingerprint) || !nonnegative(receipt.payment) || !nonnegative(receipt.dueAt) || !Number.isInteger(receipt.dueCompleted) || receipt.dueCompleted < 0 || !['delivered','reviewed','pending','dismissed','refunded'].includes(receipt.status) || typeof receipt.certified !== 'boolean' || typeof receipt.met !== 'boolean' || typeof receipt.bluff !== 'boolean' || typeof receipt.genuine !== 'boolean') throw new Error('Invalid customer receipt.');
+  const negotiation = state.negotiation;
+  if (negotiation && (!state.pendingBottle || !validFingerprint(negotiation.fingerprint) || !Number.isInteger(negotiation.offer) || negotiation.offer < 1 || !Number.isInteger(negotiation.ceiling) || negotiation.ceiling < negotiation.offer || !Number.isInteger(negotiation.round) || negotiation.round < 0 || negotiation.round > 4 || typeof negotiation.agreed !== 'boolean' || negotiation.orderId !== state.order.id || !Array.isArray(negotiation.history))) throw new Error('Invalid negotiation.');
+  if (Object.values(state.purchases).some(value => !nonnegative(value)) || !nonnegative(state.debt) || !nonnegative(state.foraging.stamina ?? 100) || (state.foraging.stamina ?? 100) > 100) throw new Error('Invalid garden or shop balances.');
   return state;
 }
 

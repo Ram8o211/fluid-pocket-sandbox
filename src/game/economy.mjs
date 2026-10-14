@@ -1,3 +1,5 @@
+import { recordDelivery } from './commerce.mjs';
+import { findPotionId } from './potionId.mjs';
 import { availableIngredients } from './world.mjs';
 import { generateOrder } from './orders.mjs';
 import { priceSale } from './evaluation.mjs';
@@ -10,15 +12,15 @@ import { observedPotion } from './knowledge.mjs';
 export const SANDBOX_STOCK = 240;
 
 export const UPGRADES = Object.freeze([
-  { id: 'densimeter', name: 'Density stone', cost: 35, sales: 1, description: 'Weigh each brew and reveal its density.' },
-  { id: 'viscometer', name: 'Flow glass', cost: 55, sales: 2, description: 'Measure texture and volatility.' },
-  { id: 'analyzer', name: 'Arcane prism', cost: 85, sales: 3, description: 'Measure physical stability and arcane glow. Potion effects are learned through experiments.' },
+  { id: 'densimeter', name: 'Familiar feed', cost: 35, sales: 1, description: 'Restore familiars for comparative trials at a lower cost.' },
+  { id: 'viscometer', name: 'Garden toolkit', cost: 55, sales: 2, description: 'Larger jars (96 measures) and harvests costing 9 stamina.' },
+  { id: 'analyzer', name: 'Familiar sanctuary', cost: 85, sales: 3, description: 'Your familiars recover twice as quickly between doses.' },
   { id: 'furnace', name: 'Copper furnace', cost: 110, sales: 4, description: 'A stronger flame and finer thermal controls.' },
   { id: 'cauldron', name: 'Deep cauldron', cost: 140, sales: 5, description: 'Increase capacity to 320 ml.', level: 1 },
-  { id: 'reagents', name: 'Guild reagents I', cost: 95, sales: 4, description: 'Discover a rare extract; includes 120 ml.', level: 1 },
-  { id: 'reagents', name: 'Guild reagents II', cost: 160, sales: 7, description: 'Another rare reagent, with 120 ml.', level: 2 },
+  { id: 'reagents', name: 'Guild reagents I', cost: 95, sales: 4, description: 'Discover a rare extract; includes a small starter harvest.', level: 1 },
+  { id: 'reagents', name: 'Guild reagents II', cost: 160, sales: 7, description: 'Another rare reagent, with a small starter harvest.', level: 2 },
   { id: 'cauldron', name: 'Master cauldron', cost: 240, sales: 9, description: 'Increase capacity to 440 ml.', level: 2 },
-  { id: 'reagents', name: 'Guild reagents III', cost: 220, sales: 10, description: 'Unlock the final guild reagent, with 120 ml.', level: 3 }
+  { id: 'reagents', name: 'Guild reagents III', cost: 220, sales: 10, description: 'Unlock the final guild reagent, with a small starter harvest.', level: 3 }
 ]);
 
 export function newShop(world, options = {}) {
@@ -26,7 +28,8 @@ export function newShop(world, options = {}) {
   const equipment = { thermometer: true, densimeter: false, viscometer: false, analyzer: false, furnace: 0, cauldron: 0, reagents: 0 };
   if (sandbox) Object.assign(equipment, { densimeter: true, viscometer: true, analyzer: true, furnace: 1, cauldron: 2, reagents: 3 });
   return { version: SAVE_VERSION, seed: world.seed, world, mode: sandbox ? 'sandbox' : 'shop', coins: sandbox ? 0 : 80, debt: 0, reputation: 0, completed: 0,
-    inventory: Object.fromEntries(world.ingredients.map(i => [i.id, sandbox ? SANDBOX_STOCK : i.starter ? (i.solvent || i.form === 'liquid' || !i.form ? 240 : 60) : 0])), equipment,
+    inventory: Object.fromEntries(world.ingredients.map(i => [i.id, sandbox ? SANDBOX_STOCK : i.starter ? (world.ingredientVersion >= 3 ? (i.solvent ? 160 : i.form === 'liquid' ? 24 : 20) : 240) : 0])), equipment,
+    potionIds: [], certificates: [], deliveries: [], complaints: [], negotiation: null, purchases: {}, gameplayVersion: 2,
     foraging: createForaging(world, options.now), experiments: createExperimentState(),
     discoveries: [], order: generateOrder(world, 0, equipment), pendingBottle: null, lastSale: null,
     tutorial: 0, settings: { sound: true, graphics: 'balanced' }, brew: null, stage: 'brewing', soldOrderIds: [] };
@@ -35,15 +38,17 @@ export function newShop(world, options = {}) {
 export function restock(state, ingredientId, ml = 60) {
   const ingredient = availableIngredients(state.world, state.equipment).find(i => i.id === ingredientId);
   if (!ingredient || !Number.isFinite(ml) || ml <= 0) throw new Error('Choose an available reagent.');
-  const quantity = Math.floor(ml), cost = Math.ceil(quantity * ingredient.price);
+  const quantity = state.mode === 'sandbox' || ingredient.solvent || state.world.ingredientVersion !== 3 ? Math.floor(ml) : Math.min(20, Math.floor(ml)), cost = state.world.ingredientVersion !== 3 ? Math.ceil(quantity * ingredient.price) : ingredient.solvent ? 0 : Math.ceil(quantity * ingredient.price * 5 + 8);
   if (!quantity) throw new Error('Choose at least one measure of stock.');
   if (state.mode === 'sandbox') {
     state.inventory[ingredientId] = Math.max(SANDBOX_STOCK, (state.inventory[ingredientId] || 0) + quantity);
     return { quantity, cost: 0 };
   }
+  if (!ingredient.solvent && (state.purchases?.[ingredientId] || 0) > Date.now()) throw new Error('The next village shipment arrives in two minutes.');
   if (state.coins < cost) throw new Error(`You need ${cost} coins for this refill.`);
   state.coins = Math.round((state.coins - cost) * 100) / 100;
   state.inventory[ingredientId] = (state.inventory[ingredientId] || 0) + quantity;
+  if (!ingredient.solvent) { state.purchases ||= {}; state.purchases[ingredientId] = Date.now() + 120000; }
   return { quantity, cost };
 }
 
@@ -74,15 +79,20 @@ export function buyUpgrade(state, index) {
   const status = upgradeStatus(state, upgrade);
   if (!status.available || !status.affordable) throw new Error('This upgrade is not available yet.');
   state.coins -= upgrade.cost; state.equipment[upgrade.id] = upgrade.level || 1;
-  if (upgrade.id === 'reagents') state.inventory[6 + upgrade.level] = 120;
+  if (upgrade.id === 'reagents') state.inventory[6 + upgrade.level] = 15;
   return upgrade;
 }
 
 export function completeSale(state) {
   if (state.mode === 'sandbox') throw new Error('Sandbox experiments do not advance shop commissions.');
   if (!state.pendingBottle || !state.order || state.soldOrderIds.includes(state.order.id)) throw new Error('This vial has already been sold.');
-  if (state.order.conceptVersion === 1 && !observedPotion(state, state.pendingBottle)) throw new Error('Test this batch in the Experiments room before serving it.');
+  if (state.order.conceptVersion >= 1 && !observedPotion(state, state.pendingBottle)) throw new Error('Test this batch in the Experiments room before serving it.');
+  const modern = state.order.conceptVersion >= 2;
+  if (modern && !findPotionId(state,state.pendingBottle)) throw new Error('Compile a potion ID from your observations first.');
+  if (modern && state.complaints?.some(c=>c.status==='pending')) throw new Error('Resolve the returning customer first.');
+  if (modern && (!state.negotiation?.agreed || state.negotiation.orderId!==state.order.id)) throw new Error('Agree on a price with the customer first.');
   const sale = priceSale(state.pendingBottle, state.order, state.reputation);
+  if (modern) { sale.payment = state.negotiation.offer; sale.profit = Math.round((sale.payment-sale.expenses-state.pendingBottle.cost.ingredients)*100)/100; }
   if (state.coins + sale.payment < sale.expenses) throw new Error('You need one coin for a fresh vial.');
   const repayment = Math.min(state.debt || 0, Math.floor(sale.payment * .35));
   state.coins = Math.round((state.coins + sale.payment - sale.expenses - repayment) * 100) / 100;
@@ -90,6 +100,7 @@ export function completeSale(state) {
   state.reputation = clamp(state.reputation + sale.reputationDelta, 0, 100);
   state.completed++; state.soldOrderIds.push(state.order.id); state.soldOrderIds = state.soldOrderIds.slice(-100);
   state.lastSale = { ...sale, customer: state.order.customer, sample: state.pendingBottle, repayment };
+  if (modern) recordDelivery(state,sale,state.pendingBottle,state.order);
   state.pendingBottle = null; state.stage = 'sale';
   return state.lastSale;
 }
@@ -105,7 +116,7 @@ export function recordDiscovery(state, sample, name = '') {
   if (!sample || sample.volume < 1) throw new Error('Measure or bottle a potion first.');
   const observation = observedPotion(state, sample);
   const discovery = { id: crypto.randomUUID(), name: String(name || `Experiment ${state.discoveries.length + 1}`).trim().slice(0, 40), sample: structuredClone(sample), orderId: state.order?.id,
-    tested: Boolean(observation), observations: structuredClone(observation?.observations || []), trialId: observation?.id || null,
+    tested: Boolean(observation), observations: [], potionId: structuredClone(findPotionId(state,sample)), trialId: observation?.id || null,
     preparation: structuredClone(observation?.preparation || { portions: sample.portions || [], volume: sample.volume, history: sample.history }) };
   state.discoveries.unshift(discovery); state.discoveries = state.discoveries.slice(0, 80);
   return discovery;

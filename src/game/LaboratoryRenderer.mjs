@@ -85,11 +85,18 @@ export class LaboratoryRenderer extends PlanarRenderer {
     }
     if (this.spoon) {
       const x = 192 + this.spoon.x * 40, y = 158 - this.spoon.y * 40;
-      ctx.strokeStyle = '#312237'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + 35, y - 47); ctx.lineTo(x, y); ctx.stroke();
-      ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#cea478'; ctx.lineWidth = 5; ctx.stroke();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#302330'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(x + 34, y - 49); ctx.lineTo(x, y); ctx.stroke();
+      ctx.strokeStyle = this.tool === 'pestle' ? '#a8b4b6' : '#a96e40'; ctx.lineWidth = 6; ctx.stroke();
+      ctx.strokeStyle = '#dfb47c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 32, y - 49); ctx.lineTo(x - 1, y - 4); ctx.stroke();
       if (this.tool === 'pestle') { rect(x - 6, y - 5, 12, 13, '#75858d'); rect(x - 4, y - 5, 8, 3, '#ced6ce'); rect(x - 7, y + 5, 14, 3, '#4c5a65'); }
-      // A broad spoon bowl visually matches the expanded stirring footprint.
-      else { rect(x - 16, y - 6, 33, 15, '#e3b784'); rect(x - 12, y + 4, 25, 5, '#ae724d'); }
+      else {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(.55);
+        ctx.fillStyle = '#74472e'; ctx.beginPath(); ctx.ellipse(0,0,12,17,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#c3945c'; ctx.beginPath(); ctx.ellipse(-1,-2,10,14,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#8b5939'; ctx.beginPath(); ctx.ellipse(-1,-3,7,10,0,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#e3bd85'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(-1,-3,8,11,0,Math.PI,Math.PI*1.7);ctx.stroke();ctx.restore();
+      }
     }
     ctx.restore(); this.frame++;
   }

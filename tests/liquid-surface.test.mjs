@@ -44,8 +44,12 @@ test('surface reconstruction keeps remote splashes and unmixed ingredient colour
   for (const scale of [40, 80]) {
     const t = transform(scale), pixels = paint(ps, t);
     assert.equal(pixel(pixels, t, 0, 0)[3], 0, 'separated droplets must not grow a connecting skin');
-    assert.deepEqual(pixel(pixels, t, -.413, .007), [64, 160, 192, 255]);
-    assert.deepEqual(pixel(pixels, t, .417, -.009), [192, 64, 64, 255]);
+    const blue = pixel(pixels, t, -.413, .007), red = pixel(pixels, t, .417, -.009);
+    assert.equal(blue[3],255); assert.equal(red[3],255);
+    // Surface lighting may change brightness, but must preserve each isolated
+    // ingredient's hue rather than mix it with the remote splash.
+    assert.ok(Math.abs(blue[0]/blue[2] - 1/3) < .02 && Math.abs(blue[1]/blue[2] - 5/6) < .02);
+    assert.ok(Math.abs(red[1]/red[0] - 1/3) < .02 && Math.abs(red[2]/red[0] - 1/3) < .02);
     assert.ok(pixels.some((value, i) => i % 4 === 3 && value > 0 && value < 255), 'droplets have a narrow softened contour');
   }
 });
