@@ -68,6 +68,8 @@ try{
   assert.equal(await page.evaluate(()=>typeof b2World),'function','official LiquidFun must be loaded by the browser');
   for(const viewport of [{width:320,height:568},{width:393,height:852}]){await page.setViewportSize(viewport);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));assert.ok(await page.locator('#sandboxBtn').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight));}
   await page.setViewportSize({width:393,height:852});await page.locator('#worldSeed').fill('mobile-magical-garden');await page.locator('#newWorldBtn').click();await page.waitForSelector('body[data-game-state="brewing"]');
+  assert.equal(await page.locator('body').getAttribute('data-physics-engine'),'liquidfun',
+    'real LiquidFun must drive the potion cauldron, not the legacy fluid solver');
   const initial=await readSave();assert.equal(initial.coins,80);assert.equal(initial.world.ingredients.filter(i=>i.form==='liquid').length,4);assert.equal(initial.inventory[2],20);
   for(const viewport of [{width:320,height:568},{width:360,height:640},{width:393,height:852},{width:1280,height:900}]){
     await page.setViewportSize(viewport);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'viewport must not overflow horizontally');
