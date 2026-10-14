@@ -26,7 +26,8 @@ export class LiquidFunFluid {
       pot.CreateFixtureFromShape(edge, 0);
     }
     this.definition = new runtime.b2ParticleSystemDef();
-    this.definition.radius = .065;
+    // Fine 2D parcels fit a full 440ml cauldron without artificial packing.
+    this.definition.radius = .039;
     this.definition.destroyByAge = false;
     this.definition.dampingStrength = .17;
     this.definition.pressureStrength = .12;
