@@ -1,8 +1,7 @@
 import { EFFECT_PROPERTIES, readEffects } from './effects.mjs';
-import { arcaneRecipe } from '../simulation/ArcaneSolver.mjs';
+import { arcaneRecipe, arcaneTriggerTemperature, ARCANE_MARGIN } from '../simulation/ArcaneSolver.mjs';
 
-// The ArcaneSolver uses this temperature margin and a 0.4-second charge.
-const ARCANE_MARGIN = .015;
+// Share the exact rune-to-physical-temperature mapping with the solver.
 const MIN_TEMPERATURE = .01;
 const MAX_TEMPERATURE = 1.2;
 
@@ -11,16 +10,18 @@ function dominantEffect(effects) {
 }
 function awakeningDetails(threshold, effects, charged = 0, converted = 0) {
   const direction = threshold >= 0 ? 'above' : 'below';
-  const reachable = Number.isFinite(threshold) && (direction === 'above'
-    ? threshold + ARCANE_MARGIN < MAX_TEMPERATURE
-    : threshold - ARCANE_MARGIN > MIN_TEMPERATURE);
-  return { arcaneThreshold: threshold, awakeningDirection: direction,
+  const temperature = arcaneTriggerTemperature(threshold);
+  const reachable = Number.isFinite(temperature) && (direction === 'above'
+    ? temperature + ARCANE_MARGIN < MAX_TEMPERATURE
+    : temperature - ARCANE_MARGIN > MIN_TEMPERATURE);
+  return { arcaneThreshold: threshold, awakeningTemperature: temperature, awakeningDirection: direction,
     awakeningReachable: reachable, dominantEffect: dominantEffect(effects),
     awakeningCharge: charged, awakenedFraction: converted, awakeningEffects: effects };
 }
 
 
-// Arcane temperatures use the game's native scale (0.50 = 50 °A).
+// Physical temperatures are normalized (0.50 = 50 °A); signed runes
+// have a distinct ±1200°A scale centred on room temperature.
 // Read live parcel values: recipe proportions alone cannot represent local
 // mixing, thermal decay, or the properties of a partially mixed cauldron.
 export function sandboxIngredientProperties(ingredient) {

@@ -47,6 +47,8 @@ export function migrateSave(raw) {
       foraging: { ...garden, ...raw.foraging, nodes }, potionIds: [], certificates: [], deliveries: [], complaints: [], negotiation: null, purchases: {} };
   }
   if (raw.version !== SAVE_VERSION) throw new Error('Unsupported shop save. It has been preserved.');
+  if ((raw.world?.ingredientVersion || 0) < 4)
+    raw = { ...raw, world: migrateIngredients(raw.world) };
   // Switch an untouched commission to the effects concept without replacing an
   // in-progress brew, bottled potion, inventory, or completed customer sale.
   if (raw.mode === 'shop' && raw.order?.conceptVersion !== 2 && raw.stage === 'brewing' && !raw.pendingBottle && !raw.brew?.count && raw.world?.ingredients?.length)

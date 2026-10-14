@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-liquidfun-32';
+const CACHE = 'alchemist-shop-arcane-33';
 const CORE = [
   './',
   './index.html',

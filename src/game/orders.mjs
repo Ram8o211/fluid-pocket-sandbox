@@ -91,12 +91,12 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const solvent = ingredients.find(i => i.solvent) || ingredients.find(i => !i.form || i.form === 'liquid');
   if (!solvent) throw new Error('A customer potion needs an available liquid solvent.');
   const candidates = ingredients.filter(i => i.id !== solvent.id && Math.abs(i.material.miscibility - solvent.material.miscibility) < .06);
-  const possible = EFFECT_SEQUENCE.filter(key => candidates.some(i => i.material[key] >= .15));
+  const possible = EFFECT_SEQUENCE.filter(key => candidates.some(i => i.material[key] >= .025));
   if (!possible.length) return generatePhysicalOrder(world, completed, equipment);
   const desired = possible[completed % possible.length];
   const strongest = key => candidates.slice().sort((a, b) => b.material[key] - a.material[key])[0];
   const primary = strongest(desired), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
-  const opposes = ingredient => primary.material.fire > .1 && ingredient.material.freeze > .1 || primary.material.freeze > .1 && ingredient.material.fire > .1;
+  const opposes = ingredient => primary.material.fire > .02 && ingredient.material.freeze > .02 || primary.material.freeze > .02 && ingredient.material.fire > .02;
   const complements = possible.filter(key => key !== desired && strongest(key).id !== primary.id && !opposes(strongest(key)));
   const secondaryEffect = completed >= 2 && complements.length ? complements[Math.floor(rng() * complements.length)] : null;
   const secondary = secondaryEffect ? strongest(secondaryEffect) : null;
@@ -106,14 +106,14 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const recipe = { portions: [{ ingredientId: solvent.id, ml: water }, portion(primary), ...(secondary ? [portion(secondary)] : [])], volume,
     ticks: secondary ? 320 : 280, thermalTicks: 0, heat: 0, cool: 0, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
   let sample = simulateWitness(world, recipe, equipment);
-  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] >= .01);
+  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] >= .001);
   if (sample.volume < volume - .001 || !wanted.includes(desired)) {
     // Some pinned legacy raw materials may not extract reliably. Try a known
     // compatible strength infusion rather than request an unattainable effect.
     const fallback = strongest(possible[0]);
     recipe.portions = [{ ingredientId: solvent.id, ml: volume + 20 }, portion(fallback)];
     recipe.ticks = 280; sample = simulateWitness(world, recipe, equipment);
-    wanted = possible.filter(key => sample[key] >= .01).slice(0, 1);
+    wanted = possible.filter(key => sample[key] >= .001).slice(0, 1);
   }
   if (!wanted.length || sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
   /** @type {import('./contracts.mjs').Requirement[]} */

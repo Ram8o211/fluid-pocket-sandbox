@@ -22,16 +22,22 @@ values into the player’s ID.
   particle, sampling and conservative contact-transport paths. `heatSolubility`
   widens the affinity envelope in warm contacts; it is opted in by the game.
   `stepArcana` uses local temperature independently of phase changes. Crossing
-  an awakening threshold by .015 for .4 seconds activates magic independently
-  of whether the parcel is solid powder, liquid, or gas. A blended rune uses
-  the original ingredient portions (e.g. 1:2) and the specified recipe rule:
-  sum(threshold_i * portion_i / minimum_portion) / distinct_component_count;
-  -1000 and +800 at 1:2 yield +300 in the UI scale; signed negative and
-  zero results are equally valid. Its awakened channels
+  the mapped threshold by .015 physical temperature units for .4 seconds
+  activates magic independently of whether the parcel is solid powder,
+  liquid, or gas. Rune thresholds are *signed* relative to room temperature,
+  with physical trigger T = 0.33 + rune/40: cooling a -800°A rune to 13°A
+  or heating a +1100°A rune to 60.5°A is possible with the current tools.
+  A blended rune uses original portion weights:
+  sum(threshold_i * portion_i) / sum(portion_i);
+  -1000°A and +800°A in a 1:2 ratio yield +200°A, and negative/zero
+  results remain valid. Its awakened channels
   reflect the same input shares (Strength 33%, Venom 66% for 1:2); unrelated
   magic becomes zero. A solitary ingredient awakens its strongest channel.
   Each particle glows using the actual homogeneous mixture's eight magic
-  channels and its strength (including gas and powder). Excess heat attenuates
+  channels and its strength (including gas and powder). Base ingredient
+  enchantments are weak (max 12%) until a genuine threshold transition;
+  older worlds migrate innate effects without overwriting in-progress brews.
+  Excess heat attenuates
   live fields; irreversible awakening and heat damage are saved per particle.
 - **Knowledge:** trials consume real potion and update bounded creature state.
   A six-second recovery (three with the sanctuary) limits repeated exposure.

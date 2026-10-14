@@ -47,6 +47,17 @@ export function confineCauldronParticle(ps, i) {
     let contact = false;
     for (const p of PLANES) {
       const distance = (ps.x[i] - p.x) * p.nx + (ps.y[i] - p.y) * p.ny;
+      // Small normal fluctuations at the supported bottom layer must decay
+      // rather than become a repeated upward launch. Leave actual stirring,
+      // large splashes, free streams and the gas layer untouched.
+      if (ps.phase[i] === Phase.LIQUID && p.ny > .8 &&
+          distance - padding < .035 && ps.stirActivity[i] < .025) {
+        const outward = ps.vx[i] * p.nx + ps.vy[i] * p.ny;
+        if (outward > 0 && outward < .5) {
+          ps.vx[i] -= p.nx * outward * .45;
+          ps.vy[i] -= p.ny * outward * .45;
+        }
+      }
       if (distance >= padding) continue;
       ps.x[i] += p.nx * (padding - distance);
       ps.y[i] += p.ny * (padding - distance);
@@ -61,11 +72,14 @@ export function confineCauldronParticle(ps, i) {
          const rebound = granular || ps.phase[i] === Phase.LIQUID ? 1 : 1.03;
         ps.vx[i] -= p.nx * normalSpeed * rebound;
         ps.vy[i] -= p.ny * normalSpeed * rebound;
-        if (granular) {
+        if (granular || ps.phase[i] === Phase.LIQUID) {
+          // Mild inelastic wall friction dissipates the last contact jitter
+          // in supported liquid layers, without damping free flowing streams.
           const tangentX = -p.ny, tangentY = p.nx;
           const slip = ps.vx[i]*tangentX + ps.vy[i]*tangentY;
-          ps.vx[i] -= tangentX*slip*.36;
-          ps.vy[i] -= tangentY*slip*.36;
+          const friction = granular ? .36 : .16;
+          ps.vx[i] -= tangentX*slip*friction;
+          ps.vy[i] -= tangentY*slip*friction;
         }
       }
       contact = true;

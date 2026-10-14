@@ -44,7 +44,8 @@ test('ingredient inspection reads magical effects and phase threshold temperatur
   assert.equal(read.combustionTemperature, 1.2);
   assert.equal(read.arcaneThreshold, -8);
   assert.equal(read.awakeningDirection, 'below');
-  assert.equal(read.awakeningReachable, false);
+  assert.equal(read.awakeningReachable, true);
+  assert.ok(Math.abs(read.awakeningTemperature - .13) < 1e-8);
   assert.equal(read.dominantEffect, 'strength');
   assert.equal(read.awakenedFraction, 0);
 });

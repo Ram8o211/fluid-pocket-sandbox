@@ -1,4 +1,21 @@
 import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
+import { ROOM_TEMPERATURE } from '../game/contracts.mjs';
+
+// Arcane runes are signed degrees relative to the room-temperature reference.
+// Unlike the normalized physical temperature (0.01–1.2), runes span -12..+12.
+// Forty rune units per physical degree keeps both +1100°A and -1100°A
+// reachable with the existing heater and frost tool, without changing
+// the exact signed, portion-weighted mixing rule.
+export const ARCANE_UNITS_PER_TEMPERATURE = 40;
+export const ARCANE_MARGIN = .015;
+export function arcaneTriggerTemperature(threshold) {
+  return ROOM_TEMPERATURE + threshold / ARCANE_UNITS_PER_TEMPERATURE;
+}
+export function arcaneThresholdCrossed(temperature, threshold) {
+  const trigger = arcaneTriggerTemperature(threshold);
+  return threshold >= 0 ? temperature > trigger + ARCANE_MARGIN : temperature < trigger - ARCANE_MARGIN;
+}
+
 
 /** Warm contacts can blend without needing a phase transition. */
 export function warmedMiscibility(ps, i, j, base, rules) {
@@ -47,7 +64,7 @@ export function stepArcana(ps, dt, events = null, mixtures = null) {
     const awaitingBlend = recipe?.sourceCount > 1 && !blended;
     if (awaitingBlend) ps.arcaneCharge[i] = 0;
     if (!awaitingBlend && ps.arcaneConverted[i] < .5) {
-      const crossed = threshold >= 0 ? temperature > threshold + .015 : temperature < threshold - .015;
+      const crossed = arcaneThresholdCrossed(temperature, threshold);
       ps.arcaneCharge[i] = crossed ? Math.min(1, ps.arcaneCharge[i] + dt * 2.5) : Math.max(0, ps.arcaneCharge[i] - dt * 4);
       if (ps.arcaneCharge[i] >= .999) {
         let dominant = null, maximum = .003;

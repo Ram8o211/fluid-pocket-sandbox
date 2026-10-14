@@ -65,9 +65,12 @@ test('the physical mixing solver retains initial ingredients across fluid contac
   assert.equal(restored.root(ps.mixtureGroup[0]).sourceAmounts.size,2);
   const update=restored.root(ps.mixtureGroup[0]);
   ps.mixtureProgress.fill(1);
-  ps.temperature.fill(1.15);
+  ps.temperature.fill(.35);
   stepArcana(ps,.5,null,restored);
-  assert.equal(ps.arcaneConverted[0],0,'the +200 degree threshold is not reachable in a 115 degree pot');
+  assert.equal(ps.arcaneConverted[0],0,'a +200°A rune cannot awaken below its mapped heating trigger');
+  ps.temperature.fill(.55);
+  stepArcana(ps,.5,null,restored);
+  assert.equal(ps.arcaneConverted[0],1,'the signed weighted-average rune is reachable by heating');
 });
 
 test('hot evaporated gas and dry unmelted powder can still transform independently of phase', () => {
@@ -176,13 +179,13 @@ test('weighted rune thresholds remain bounded and are independent of recipe scal
   assert.ok(Math.abs(mixed.effects.poison - .792) < 1e-10);
 });
 
-test('a positive threshold below room temperature requires HEATING, not cooling', () => {
+test('positive runes require heat above room, rather than cooling', () => {
   const m = material(1, .2, { strength: .9 });
   const ps = new ParticleSystem(1);
   ps.add({ x:0,y:0,z:0,temperature:.1 },m,Phase.LIQUID);
   for (let j=0;j<20;j++) stepArcana(ps,.025);
   assert.equal(ps.arcaneConverted[0],0);
-  ps.temperature[0]=.3;
+  ps.temperature[0]=.4;
   for (let j=0;j<20;j++) stepArcana(ps,.025);
   assert.equal(ps.arcaneConverted[0],1);
 });
