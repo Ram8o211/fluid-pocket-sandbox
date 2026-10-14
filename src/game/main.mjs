@@ -17,6 +17,7 @@ import { EFFECT_DEFINITIONS, EFFECT_PROPERTIES, describeEffects } from './effect
 import { observedPotion, discoveryKnowledge } from './knowledge.mjs';
 import { ShopAudio } from './audio.mjs';
 import { AdaptiveQuality } from '../performance/AdaptiveQuality.mjs';
+import { sandboxIngredientProperties, sandboxMixtureProperties } from './sandboxProperties.mjs';
 
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -29,6 +30,7 @@ let toastTimer = 0, holdTimer = 0, holdInterval = 0, lastAutosave = 0, saveFaile
 let latestInspection = null, selectedRecipe = null;
 let testingRenderer = null, selectedSubject = 'rabbit', testDose = 5, showUntreated = false, harvest = null, lastClaims = 0;
 let sandboxLoaded = null, roomTimer = 0, currentRoom = null, experimentReport = null;
+let sandboxInspectorOpen = false, sandboxInspectorTab = 'ingredient', lastSandboxInspection = 0;
 const isSandbox = () => state?.mode === 'sandbox';
 const rawIngredient = i => Boolean(i.form && !['liquid', 'powder'].includes(i.form));
 const ingredientUnit = i => i.form && i.form !== 'liquid' ? 'measures' : 'ml';
@@ -126,6 +128,61 @@ function renderAll() {
   renderRack(); renderTools(); updateHUD(); updateTutorial();
   document.body.dataset.gameState = state.stage;
 }
+function sandboxTemperature(value) {
+  return Number.isFinite(value) ? (value * 100).toFixed(1) + '°A' : '—';
+}
+function sandboxReadings(properties) {
+  return '<div class="sandbox-effect-grid">' + EFFECT_PROPERTIES.map(key =>
+    '<div class="sandbox-effect"><span style="color:' + EFFECT_DEFINITIONS[key].color + '">' +
+    escape(EFFECT_DEFINITIONS[key].label) + '</span><strong>' +
+    Math.round(Math.max(0, Math.min(1, properties.effects[key] || 0)) * 100) + '%</strong></div>'
+  ).join('') + '</div><div class="sandbox-transition-row">' +
+    '<span>Melt <strong>' + sandboxTemperature(properties.meltingTemperature) + '</strong></span>' +
+    '<span>Boil <strong>' + sandboxTemperature(properties.boilingTemperature) + '</strong></span>' +
+    '<span>Ignite <strong>' + sandboxTemperature(properties.combustionTemperature) + '</strong></span>' +
+    '</div>';
+}
+function renderSandboxInspector() {
+  if (!sandboxInspectorOpen || !isSandbox()) return;
+  const body = $('sandboxInspectorBody');
+  let markup;
+  if (sandboxInspectorTab === 'ingredient') {
+    const ingredients = availableIngredients(state.world, state.equipment);
+    const ingredient = ingredients.find(item => item.id === selected) || ingredients[0];
+    const properties = sandboxIngredientProperties(ingredient);
+    markup = '<label class="sandbox-source-picker">Ingredient <select id="sandboxInspectIngredient" aria-label="Choose ingredient to inspect">' +
+      ingredients.map(item => '<option value="' + item.id + '"' + (item.id === selected ? ' selected' : '') + '>' + escape(item.name) + '</option>').join('') +
+      '</select></label>' + (properties ? sandboxReadings(properties) : '<p>No ingredient selected.</p>');
+  } else {
+    const groups = sandboxMixtureProperties(brew);
+    markup = groups.length ? groups.map(group => {
+      const sources = group.sources.map(source => escape(source.name) + ' ' + Math.round(source.fraction * 100) + '%').join(' · ');
+      return '<article class="sandbox-mixture-card"><div class="sandbox-mixture-heading"><strong>' + group.label +
+        '</strong><span>' + (group.homogeneous ? 'Homogeneous' : 'Not yet homogeneous') + '</span></div>' +
+        '<div class="sandbox-mixture-sources">' + sources + ' · Current ' + sandboxTemperature(group.temperature) + '</div>' +
+        (group.homogeneous ? sandboxReadings(group) : '<p class="sandbox-mix-warning">Properties still vary between parcels. Stir to blend before reading one set of values.</p>') +
+        '</article>';
+    }).join('') : '<p class="sandbox-empty-mix">The cauldron is empty. Add ingredients to inspect its mixtures.</p>';
+  }
+  const oldScroll = body.scrollTop;
+  if (body.innerHTML !== markup) {
+    body.innerHTML = markup;
+    body.scrollTop = oldScroll;
+  }
+  lastSandboxInspection = performance.now();
+}
+function syncSandboxInspector() {
+  if (!isSandbox()) sandboxInspectorOpen = false;
+  const open = isSandbox() && sandboxInspectorOpen;
+  $('sandboxInspector').hidden = !open;
+  $('ingredientRack').hidden = open;
+  $('sandboxPropertiesBtn').setAttribute('aria-expanded', String(open));
+  $('sandboxPropertiesBtn').textContent = open ? '✕ Close properties' : '✦ Show properties';
+  $('sandboxIngredientTab').setAttribute('aria-pressed', String(sandboxInspectorTab === 'ingredient'));
+  $('sandboxMixtureTab').setAttribute('aria-pressed', String(sandboxInspectorTab === 'mixture'));
+  if (open) renderSandboxInspector();
+}
+
 function renderRack() {
   const rack = $('ingredientRack'), scroll = rack.scrollLeft, ingredients = availableIngredients(state.world, state.equipment);
   rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
@@ -141,6 +198,7 @@ function renderRack() {
   $('grindBtn').hidden = !rawIngredient(ingredient);
   $('grindBtn').textContent = `Grind & add ${dose} measures`;
   $('grindBtn').disabled = $('pourBtn').disabled;
+  syncSandboxInspector();
 }
 function renderTools() {
   $('heatBtn').innerHTML = `${icon('flame')}<span>Flame <small>${brew.heat ? `${Math.round(brew.heat * 100)}%` : 'OFF'}</small></span>`;
@@ -166,6 +224,7 @@ function updateHUD() {
   $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle')); $('crushBtn').classList.toggle('active', tool === 'pestle');
   if (tool === 'pestle' && !state.pendingBottle && !condensing) $('labHint').textContent = 'Tap or drag the pestle on raw or frozen matter';
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
+  if (sandboxInspectorOpen && sandboxInspectorTab === 'mixture' && performance.now() - lastSandboxInspection > 750) renderSandboxInspector();
 }
 const TUTORIAL = [
   'Tap the customer for the request. Ingredient magic is known; mixture magic is yours to discover.',
@@ -376,6 +435,10 @@ function bindUI() {
   $('sandboxBtn').onclick = () => openWorld(sandboxLoaded?.state?.seed || $('worldSeed').value.trim() || randomSeed(), sandboxLoaded?.state || null, 'sandbox');
   $('shuffleSeed').onclick = () => { $('worldSeed').value = randomSeed(); audio.play(); };
   $('menuBtn').onclick = menu; $('settingsBtn').onclick = showSettings;
+  $('sandboxPropertiesBtn').onclick = () => { sandboxInspectorOpen = !sandboxInspectorOpen; syncSandboxInspector(); };
+  $('sandboxIngredientTab').onclick = () => { sandboxInspectorTab = 'ingredient'; syncSandboxInspector(); };
+  $('sandboxMixtureTab').onclick = () => { sandboxInspectorTab = 'mixture'; syncSandboxInspector(); };
+  $('sandboxInspectorBody').onchange = event => { if (event.target.id !== 'sandboxInspectIngredient') return; selected = Number(event.target.value); audio.play(); renderRack(); };
   $('clueBtn').onclick = showOrder; $('customerDetailsBtn').onclick = showOrder; $('complaintsBtn').onclick = showReturns;
   $('skipTutorial').onclick = () => { state.tutorial = 7; updateTutorial(); persist(); };
   $('measureBtn').onclick = guard(showInstruments); $('inventoryBtn').onclick = showInventory; $('bookBtn').onclick = showBook; $('upgradesBtn').onclick = showGuild;
