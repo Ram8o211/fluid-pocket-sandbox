@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-creature-trials-26';
+const CACHE = 'alchemist-shop-sandbox-arcane-28';
 const CORE = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const CORE = [
   './src/game/contracts.mjs',
   './src/game/world.mjs',
   './src/game/effects.mjs',
+  './src/game/sandboxProperties.mjs',
   './src/game/gathering.mjs',
   './src/game/experiments.mjs',
   './src/game/potionTransfer.mjs',

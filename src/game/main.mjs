@@ -131,6 +131,26 @@ function renderAll() {
 function sandboxTemperature(value) {
   return Number.isFinite(value) ? (value * 100).toFixed(1) + '°A' : '—';
 }
+function sandboxAwakening(properties) {
+  const fraction = Math.round(Math.max(0, Math.min(1, properties.awakenedFraction || 0)) * 100);
+  const charge = Math.round(Math.max(0, Math.min(1, properties.awakeningCharge || 0)) * 100);
+  const effect = properties.dominantEffect ? EFFECT_DEFINITIONS[properties.dominantEffect]?.label : null;
+  const threshold = sandboxTemperature(properties.arcaneThreshold);
+  const condition = properties.awakeningDirection === 'below' ? 'Below' : 'Above';
+  const status = fraction === 100 ? 'Awakened' : fraction > 0 ? fraction + '% awakened'
+    : charge > 0 ? 'Charging ' + charge + '%' : 'Dormant';
+  const explanation = !effect
+    ? 'No active enchantment to amplify. Adding magical ingredients can create a new rune.'
+    : !properties.awakeningReachable && fraction === 0
+      ? 'This rune cannot awaken alone at usable temperatures. Mix opposing runes to shift its critical temperature.'
+      : 'Sustain the trigger temperature for about 0.4 s: the strongest effect becomes 98%, all others 0.2%.';
+  return '<section class="sandbox-awakening" aria-label="Arcane supertransformation">' +
+    '<div class="sandbox-awakening-title"><strong>✦ Arcane supertransformation</strong><span>' + status + '</span></div>' +
+    '<div class="sandbox-awakening-grid"><div><small>Critical trigger</small><strong>' + condition + ' ' + threshold + '</strong></div>' +
+    '<div><small>Dominant magic</small><strong>' + (effect ? escape(effect) : 'None') + '</strong></div>' +
+    '<div><small>Magic decays above</small><strong>' + sandboxTemperature(properties.magicDecayTemperature) + '</strong></div></div>' +
+    '<p>' + explanation + '</p></section>';
+}
 function sandboxReadings(properties) {
   return '<div class="sandbox-effect-grid">' + EFFECT_PROPERTIES.map(key =>
     '<div class="sandbox-effect"><span style="color:' + EFFECT_DEFINITIONS[key].color + '">' +
@@ -140,7 +160,7 @@ function sandboxReadings(properties) {
     '<span>Melt <strong>' + sandboxTemperature(properties.meltingTemperature) + '</strong></span>' +
     '<span>Boil <strong>' + sandboxTemperature(properties.boilingTemperature) + '</strong></span>' +
     '<span>Ignite <strong>' + sandboxTemperature(properties.combustionTemperature) + '</strong></span>' +
-    '</div>';
+    '</div>' + sandboxAwakening(properties);
 }
 function renderSandboxInspector() {
   if (!sandboxInspectorOpen || !isSandbox()) return;
@@ -435,7 +455,7 @@ function bindUI() {
   $('sandboxBtn').onclick = () => openWorld(sandboxLoaded?.state?.seed || $('worldSeed').value.trim() || randomSeed(), sandboxLoaded?.state || null, 'sandbox');
   $('shuffleSeed').onclick = () => { $('worldSeed').value = randomSeed(); audio.play(); };
   $('menuBtn').onclick = menu; $('settingsBtn').onclick = showSettings;
-  $('sandboxPropertiesBtn').onclick = () => { sandboxInspectorOpen = !sandboxInspectorOpen; syncSandboxInspector(); };
+  $('sandboxPropertiesBtn').onclick = () => { sandboxInspectorOpen = !sandboxInspectorOpen; syncSandboxInspector(); if (sandboxInspectorOpen) requestAnimationFrame(() => $('sandboxInspector').scrollIntoView({ block: 'nearest', behavior: 'smooth' })); };
   $('sandboxIngredientTab').onclick = () => { sandboxInspectorTab = 'ingredient'; syncSandboxInspector(); };
   $('sandboxMixtureTab').onclick = () => { sandboxInspectorTab = 'mixture'; syncSandboxInspector(); };
   $('sandboxInspectorBody').onchange = event => { if (event.target.id !== 'sandboxInspectIngredient') return; selected = Number(event.target.value); audio.play(); renderRack(); };

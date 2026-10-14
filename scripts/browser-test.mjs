@@ -98,15 +98,43 @@ try{
   assert.equal(await page.locator('#ingredientRack').isVisible(),false);
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Strength.*Love.*Death.*Transformation/s);
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Melt.*Boil.*Ignite/s);
+  // The expanded ledger is in normal document flow. The contained workshop
+  // scrolls to it on phones without covering or shrinking the cauldron to a sliver.
   const cauldronAfter=await page.locator('#labCanvas').boundingBox();
-  // Playwright boundingBox() provides x/y/width/height (no `bottom` field).
-  // Validate the actual viewport bounds without silently comparing undefined.
-  const viewportHeight=await page.evaluate(()=>innerHeight);
-  assert.ok(cauldronAfter.height>60&&cauldronAfter.y>=-1&&cauldronAfter.y+cauldronAfter.height<=viewportHeight+1,
-    `Opening the inspector must leave the cauldron visible: ${JSON.stringify(cauldronAfter)} in ${viewportHeight}px viewport`);
-  assert.ok(Math.abs(cauldronBefore.height-cauldronAfter.height)<80,'opening inspector must keep cauldron usable');
+  assert.ok(cauldronBefore.height>60&&cauldronAfter.height>85,'the cauldron remains usable with the expanded inspector');
+  const layout=await page.evaluate(()=>{
+    const lab=document.querySelector('.laboratory').getBoundingClientRect();
+    const inspector=document.querySelector('#sandboxInspector').getBoundingClientRect();
+    const body=document.querySelector('#sandboxInspectorBody');
+    return {labBottom:lab.bottom,inspectorTop:inspector.top,inspectorHeight:inspector.height,
+      bodyHeight:body.clientHeight,workbenchOverflow:getComputedStyle(document.querySelector('#shop')).overflowY};
+  });
+  assert.ok(layout.inspectorTop>=layout.labBottom-1,'inspector must follow, not overlay, the cauldron');
+  assert.ok(layout.inspectorHeight>=290&&layout.bodyHeight>=190,'inspector must have enough reading space on mobile');
+  assert.equal(layout.workbenchOverflow,'auto','expanded workshop must scroll rather than clip the inspector');
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Arcane supertransformation.*Critical trigger.*Dominant magic.*Magic decays above/s);
+  // The entire ledger must remain readable on short and normal mobile screens.
+  for(const viewport of [{width:320,height:568},{width:393,height:852}]){
+    await page.setViewportSize(viewport);
+    await page.locator('#sandboxInspector').scrollIntoViewIfNeeded();
+    const readable=await page.evaluate(()=>{
+      const pane=document.querySelector('#sandboxInspector'),body=document.querySelector('#sandboxInspectorBody');
+      const effectGrid=document.querySelector('.sandbox-effect-grid');
+      return {height:pane.getBoundingClientRect().height,bodyHeight:body.clientHeight,
+        columns:getComputedStyle(effectGrid).gridTemplateColumns.trim().split(/\s+/).length,
+        horizontalOverflow:document.documentElement.scrollWidth>innerWidth+1};
+    });
+    assert.ok(readable.height>=310&&readable.bodyHeight>=230,`inspector fits reading at ${viewport.width}×${viewport.height}: ${JSON.stringify(readable)}`);
+    assert.equal(readable.columns,2,'mobile property values need two readable columns');
+    assert.equal(readable.horizontalOverflow,false,'inspector must not overflow mobile width');
+  }
+  await page.setViewportSize({width:393,height:852});
+  await page.locator('#labCanvas').scrollIntoViewIfNeeded();
+  assert.ok(await page.locator('#labCanvas').evaluate(e=>{const r=e.getBoundingClientRect();return r.height>85&&r.top>=-1&&r.bottom<=innerHeight+1;}),'cauldron can be scrolled fully into view');
   await page.locator('#sandboxInspectIngredient').selectOption('13');
   assert.ok((await page.locator('#selectedName').textContent()).length>0);
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Below -700.0°A/);
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Mix opposing runes/i);
   await page.locator('#sandboxMixtureTab').click();
   assert.match(await page.locator('#sandboxInspectorBody').textContent(),/cauldron is empty/i);
   await page.locator('#sandboxPropertiesBtn').click();
