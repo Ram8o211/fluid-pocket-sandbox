@@ -115,7 +115,9 @@ try{
   assert.ok(layout.inspectorTop>=layout.labBottom-1,'inspector must follow, not overlay, the cauldron');
   assert.ok(layout.inspectorHeight>=290&&layout.bodyHeight>=190,'inspector must have enough reading space on mobile');
   assert.equal(layout.workbenchOverflow,'auto','expanded workshop must scroll rather than clip the inspector');
-  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Arcane supertransformation.*Critical trigger.*Awakened effects.*Magic decays above/s);
+  assert.match(await page.locator('#sandboxInspectorBody').textContent(),/Arcane supertransformation.*Critical trigger.*Awakened effects/s);
+  assert.doesNotMatch(await page.locator('#sandboxInspectorBody').textContent(),/Magic decays above/i,
+    'magical potency must no longer have a heat-decay limit');
   // The entire ledger must remain readable on short and normal mobile screens.
   for(const viewport of [{width:320,height:568},{width:393,height:852}]){
     await page.setViewportSize(viewport);
