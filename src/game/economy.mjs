@@ -39,7 +39,7 @@ export function newShop(world, options = {}) {
 export function restock(state, ingredientId, ml = 60) {
   const ingredient = availableIngredients(state.world, state.equipment).find(i => i.id === ingredientId);
   if (!ingredient || !Number.isFinite(ml) || ml <= 0) throw new Error('Choose an available reagent.');
-  const quantity = state.mode === 'sandbox' || ingredient.solvent || state.world.ingredientVersion !== 3 ? Math.floor(ml) : Math.min(20, Math.floor(ml)), cost = state.world.ingredientVersion !== 3 ? Math.ceil(quantity * ingredient.price) : ingredient.solvent ? 0 : Math.ceil(quantity * ingredient.price * 5 + 8);
+  const quantity = state.mode === 'sandbox' || ingredient.solvent || state.world.ingredientVersion < 3 || !Number.isFinite(state.world.ingredientVersion) ? Math.floor(ml) : Math.min(20, Math.floor(ml)), cost = !(state.world.ingredientVersion >= 3) ? Math.ceil(quantity * ingredient.price) : ingredient.solvent ? 0 : Math.ceil(quantity * ingredient.price * 5 + 8);
   if (!quantity) throw new Error('Choose at least one measure of stock.');
   if (state.mode === 'sandbox') {
     state.inventory[ingredientId] = Math.max(SANDBOX_STOCK, (state.inventory[ingredientId] || 0) + quantity);
