@@ -1,0 +1,27 @@
+name: Arcane and Liquid Regression
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/arcane-liquid-regression.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/arcane-liquid-regression.yml'
+permissions:
+  contents: read
+jobs:
+  focused-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: node --test tests/arcane-playability.test.mjs tests/arcane-recipe.test.mjs tests/sandbox-properties.test.mjs tests/magical-shop.test.mjs tests/liquidfun-native.test.mjs
