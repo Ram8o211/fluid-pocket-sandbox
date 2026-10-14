@@ -18,6 +18,8 @@ export function arcaneRecipe(ingredients) {
   if (!sources.length) return null;
   const smallest = Math.min(...sources.map(source => source.amount));
   const total = sources.reduce((sum, source) => sum + source.amount, 0);
+  // Keep the SIGN of the proportion-weighted result: a mixture can require
+  // cooling (negative), cancel exactly to zero, or require heating (positive).
   const threshold = sources.reduce((sum, source) =>
     sum + source.threshold * (source.amount / smallest), 0) / sources.length;
   const effects = Object.fromEntries(EFFECT_PROPERTIES.map(key => [key, 0]));

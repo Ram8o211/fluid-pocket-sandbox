@@ -24,7 +24,8 @@ test('the exact 1:2 example uses the requested component-count divisor and prese
   assert.equal(recipe.effects.fire, 0);
   assert.equal(arcaneRecipe([{ ...a, amount: 100 }, { ...b, amount: 200 }]).threshold, 3,
     'enlarging a batch must not change its critical temperature');
-  assert.equal(arcaneRecipe([{...a,amount:2},{...b,amount:1}]).threshold,-6);
+  assert.equal(arcaneRecipe([{...a,amount:2},{...b,amount:1}]).threshold,-6,
+    'negative component-weighted totals preserve their sign');
 });
 
 test('three ingredients distribute magical results according to source shares, not a winner-take-all channel', () => {
@@ -127,4 +128,38 @@ test('a previously awakened ingredient resets its rune when a new recipe is form
   assert.equal(ps.arcaneConverted[0],1);
   assert.ok(Math.abs(ps.strength[0]-.495)<1e-6);
   assert.ok(Math.abs(ps.poison[0]-.495)<1e-6);
+});
+
+
+test('mixture threshold preserves negative, zero and positive signed weighted results', () => {
+  const strength = { amount: 1, threshold: -1, effects: { strength: .8 } };
+  const venom = { amount: 1, threshold: 1, effects: { poison: .8 } };
+  assert.equal(arcaneRecipe([strength, venom]).threshold, 0, 'opposed runes can cancel exactly');
+  const negative = arcaneRecipe([strength, { ...venom, threshold: -.5 }]);
+  assert.equal(negative.threshold, -.75, 'the final threshold must remain negative');
+  assert.ok(Math.abs(negative.effects.strength - .495) < 1e-10);
+  assert.ok(Math.abs(negative.effects.poison - .495) < 1e-10);
+  assert.equal(arcaneRecipe([strength]).threshold, -1, 'single ingredient keeps its signed threshold');
+  assert.equal(arcaneRecipe([{ ...strength, amount: 1, threshold: -10 }, { ...venom, amount: 2, threshold: 8 }]).threshold, 3);
+});
+
+test('live mixed parcels and save/restore retain a negative final threshold', () => {
+  const a = material(1, -1.2, { strength: .9 });
+  const b = material(2, .4, { poison: .9 });
+  const ps = new ParticleSystem(2), mix = new MixtureSolver();
+  mix.materials = new Map([[1, a],[2, b]]);
+  ps.add({x:0,y:0,z:0,temperature:.5},a,Phase.LIQUID);
+  ps.add({x:.03,y:0,z:0,temperature:.5},b,Phase.GAS);
+  mix.beginFrame(ps);
+  mix.contact(ps,0,1,1,.2,.1,{baseMixingRate:10,mixingExponent:1});
+  mix.finishFrame(ps,{},.1);
+  const group = mix.root(ps.mixtureGroup[0]);
+  assert.ok(Math.abs(group.arcaneRecipe.threshold + .4) < 1e-5);
+  ps.mixtureProgress.fill(1);
+  stepArcana(ps,.025,null,mix);
+  assert.ok(ps.arcaneThreshold[0] < 0 && ps.arcaneThreshold[1] < 0);
+  const restored = new MixtureSolver();
+  restored.materials = mix.materials;
+  restored.restore(mix.snapshot(),ps);
+  assert.ok(Math.abs(restored.root(ps.mixtureGroup[0]).arcaneRecipe.threshold + .4) < 1e-5);
 });

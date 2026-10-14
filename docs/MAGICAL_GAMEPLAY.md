@@ -26,12 +26,13 @@ values into the player’s ID.
   of whether the parcel is solid powder, liquid, or gas. A blended rune uses
   the original ingredient portions (e.g. 1:2) and the specified recipe rule:
   sum(threshold_i * portion_i / minimum_portion) / distinct_component_count;
-  -1000 and +800 at 1:2 yield +300 in the UI scale. Its awakened channels
+  -1000 and +800 at 1:2 yield +300 in the UI scale; signed negative and
+  zero results are equally valid. Its awakened channels
   reflect the same input shares (Strength 33%, Venom 66% for 1:2); unrelated
   magic becomes zero. A solitary ingredient awakens its strongest channel.
-  The particle renderer blends ALL eight magical colors by current strength,
-  including gas and dry granules. Excess heat attenuates live fields;
-  irreversible awakening and heat damage are saved per particle.
+  Each particle glows using the actual homogeneous mixture's eight magic
+  channels and its strength (including gas and powder). Excess heat attenuates
+  live fields; irreversible awakening and heat damage are saved per particle.
 - **Knowledge:** trials consume real potion and update bounded creature state.
   A six-second recovery (three with the sanctuary) limits repeated exposure.
   All eight visual channels animate together in a large enclosure with a
