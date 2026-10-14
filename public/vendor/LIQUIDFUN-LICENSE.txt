@@ -1,5 +1,5 @@
 Google LiquidFun 1.1.0 – upstream JavaScript build
-Source: https://github.com/google/liquidfun/blob/master/liquidfun/Box2D/lfjs/liquidfun.js
+Source: https://github.com/google/liquidfun/blob/gh-pages/testbed/liquidfun.js
 The library is bundled unmodified for browser and offline use.
 
 Upstream Box2D / LiquidFun license:
