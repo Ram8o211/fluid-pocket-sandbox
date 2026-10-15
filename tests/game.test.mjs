@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { generateWorld, validateWorld } from '../src/game/world.mjs';
 import { generateLiquidWorld } from './helpers/liquid-world.mjs';
 import { BrewingSession } from '../src/game/brewing.mjs';
+import { PARTICLE_ML } from '../src/game/cauldron.mjs';
 import { generateOrder, simulateWitness } from '../src/game/orders.mjs';
 import { assessPotion, toleranceSimilarity, priceSale } from '../src/game/evaluation.mjs';
 import { newShop, completeSale, nextCustomer, restock, buyUpgrade, recordDiscovery, guildLoan } from '../src/game/economy.mjs';
@@ -90,9 +91,9 @@ test('bottling drains exact liquid quantity and conserves mass on repeated fract
 });
 test('bottle excludes solids and does not fabricate missing liquid quantity', () => {
   const { state, brew } = setup(); brew.pour(1, 60, state.inventory);
-  for (let i = 0; i < 80; i++) brew.engine.ps.setPhase(i, Phase.SOLID);
-  const sample = brew.bottle(60); close(sample.volume, 40); assert.equal(sample.liquidFraction, 1); assert.equal(brew.engine.ps.count, 80);
-  assert.deepEqual(sample.phases, [0, 160, 0]); close(sample.phaseMass[Phase.LIQUID], sample.mass);
+  for (let i = 0; i < 20 / PARTICLE_ML; i++) brew.engine.ps.setPhase(i, Phase.SOLID);
+  const sample = brew.bottle(60); close(sample.volume, 40); assert.equal(sample.liquidFraction, 1); assert.equal(brew.engine.ps.count, 20 / PARTICLE_ML);
+  assert.deepEqual(sample.phases, [0, 40 / PARTICLE_ML, 0]); close(sample.phaseMass[Phase.LIQUID], sample.mass);
 });
 test('experiment sampling leaves undrained raw solids and their preparation expenses in the cauldron', () => {
   const rawWorld = generateWorld('mixed-phase-dose'), state = newShop(rawWorld);
