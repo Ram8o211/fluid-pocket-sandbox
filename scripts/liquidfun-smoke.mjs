@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { PARTICLE_ML } from '../src/game/cauldron.mjs';
 
 const base=process.env.SITE_URL || 'http://127.0.0.1:4187/fluid-pocket-sandbox/';
 const server=process.env.SITE_URL ? null : spawn(process.execPath,['scripts/dev-server.mjs'],{stdio:'ignore',env:{...process.env,PORT:'4187',BASE_PATH:'/fluid-pocket-sandbox'}});
@@ -42,7 +43,7 @@ try {
     particleCount:window.Module._b2ParticleSystem_GetParticleCount(window.world.particleSystems[0].ptr),
     body:document.body.dataset,errors:document.querySelector('.startup')?.textContent
   }));
-  assert.equal(physical.particleCount,20,'a 5ml pour must retain all 20 native parcels');
+  assert.equal(physical.particleCount,5/PARTICLE_ML,'a 5ml pour must retain every compact native parcel');
   const stress=await page.evaluate(async()=>{
     const {BrewingSession}=await import('./src/game/brewing.mjs');
     const {generateWorld}=await import('./src/game/world.mjs');
@@ -77,8 +78,11 @@ try {
     return results;
   });
   for(const result of stress){
-    assert.equal(result.frozenCount,1173);assert.equal(result.meltedCount,1760);assert.equal(result.bottledCount,1760);
-    assert.ok(Math.abs(result.bottledVolume-340)<.01);assert.ok(result.bottledRadius<.035);
+    assert.equal(result.frozenCount,Math.floor((440/PARTICLE_ML)*2/3));
+    assert.equal(result.meltedCount,440/PARTICLE_ML);assert.equal(result.bottledCount,440/PARTICLE_ML);
+    assert.ok(Math.abs(result.bottledVolume-340)<.01);
+    // Radius grows with parcel area, then falls after the vial removes volume.
+    assert.ok(result.bottledRadius>.04 && result.bottledRadius<.05);
   }
   assert.deepEqual(errors,[],'no uncaught browser exceptions: '+errors.join('; '));
   console.log('LiquidFun native parcel integrity, full-pot stirring/freezing/melting/bottling/reload and repeated disposal OK',JSON.stringify({physical,stress}));
