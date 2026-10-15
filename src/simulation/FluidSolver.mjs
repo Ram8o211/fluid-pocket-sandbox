@@ -126,6 +126,29 @@ export class FluidSolver {
     ps.vx[i]+=cx*wi;ps.vy[i]+=cy*wi;if(!planar)ps.vz[i]+=cz*wi;
     ps.vx[j]-=cx*wj;ps.vy[j]-=cy*wj;if(!planar)ps.vz[j]-=cz*wj;
   }
+  solvePowderLiquidPair(ps,solid,liquid,nx,ny,nz,d,planar){
+    const rest=particlePairRestDistance(ps,solid,liquid,planar);
+    if(d>=rest)return;
+    // A loose grain displaces the local fluid instead of teletransporting the
+    // whole liquid layer back to a previous swept-contact position. The swept
+    // solver remains necessary for grain/grain tunnelling, but its historical
+    // trajectory rewind injected large impulses when one partner was LiquidFun.
+    const correction=(rest-d)*.96;
+    separatePair(ps,solid,liquid,nx,ny,nz,correction,planar);
+    // Inelastic contact: remove only the components moving INTO the contact.
+    // Neither phase receives a bounce impulse, and an at-rest water parcel
+    // stays at rest when a grain is dropped nearby.
+    const vnSolid=ps.vx[solid]*nx+ps.vy[solid]*ny+(planar?0:ps.vz[solid]*nz);
+    const vnLiquid=ps.vx[liquid]*nx+ps.vy[liquid]*ny+(planar?0:ps.vz[liquid]*nz);
+    if(vnSolid>vnLiquid){
+      const damp=.82;
+      const fallingGrain=Math.max(0,vnSolid)*damp;
+      const incomingLiquid=Math.max(0,-vnLiquid)*damp;
+      ps.vx[solid]-=nx*fallingGrain;ps.vy[solid]-=ny*fallingGrain;
+      ps.vx[liquid]+=nx*incomingLiquid;ps.vy[liquid]+=ny*incomingLiquid;
+      if(!planar){ps.vz[solid]-=nz*fallingGrain;ps.vz[liquid]+=nz*incomingLiquid;}
+    }
+  }
   solveSolidPair(ps,i,j,nx,ny,nz,d,dt,planar){
     const subI=ps.solidSubdivision[i],subJ=ps.solidSubdivision[j],coherent=subI<.55&&subJ<.55,sameRigidBody=coherent&&ps.solidBodyId[i]>0&&ps.solidBodyId[i]===ps.solidBodyId[j],sameCoherentMaterial=coherent&&ps.materialId[i]===ps.materialId[j];if(sameRigidBody||sameCoherentMaterial)return;
     const rest=particlePairRestDistance(ps,i,j,planar),granular=Math.max(subI,subJ)>=.55,target=granular?rest*.95:rest*.88;
@@ -227,7 +250,12 @@ export class FluidSolver {
           const gas=pi===Phase.GAS?i:j,sign=pi===Phase.GAS?-1:1,contact=particlePairRestDistance(ps,i,j,planar)*.7;
           if(d<contact){const q=1-d/contact,spread=q*q*.24*dt/Math.max(1,iterations);ps.x[gas]+=nx*spread*sign;ps.y[gas]+=ny*spread*sign;if(!planar)ps.z[gas]+=nz*spread*sign;}return;
         }
-        if((isPowder(ps,i)||isPowder(ps,j))&&!isCoherentSolid(ps,i)&&!isCoherentSolid(ps,j)){this.solvePowderPair(ps,i,j,nx,ny,nz,d,dt,planar,rules);return;}
+        // The swept, rigid-ish powder contact must only operate between
+        // grains: rewinding a native liquid parcel against a falling grain
+        // turns a minor impact into an artificial splash.
+        if(isPowder(ps,i)&&isPowder(ps,j)){this.solvePowderPair(ps,i,j,nx,ny,nz,d,dt,planar,rules);return;}
+        if(isPowder(ps,i)&&pj===Phase.LIQUID){this.solvePowderLiquidPair(ps,i,j,nx,ny,nz,d,planar);return;}
+        if(pi===Phase.LIQUID&&isPowder(ps,j)){this.solvePowderLiquidPair(ps,j,i,-nx,-ny,-nz,d,planar);return;}
         // LiquidFun owns pressure/packing. Live material viscosity, wet dough
         // and immiscible density ordering still need the game's parcel fields.
         if(pi===Phase.LIQUID&&pj===Phase.LIQUID){this.solveLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,dt,planar,interactionScale,externalLiquids);return;}

@@ -9,6 +9,7 @@ import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSup
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 import { LiquidFunFluid } from './LiquidFunFluid.mjs';
+import { positionPouredParcels } from './cauldronPour.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
 import { capturePotionContents, restorePotionContents } from './potionTransfer.mjs';
 
@@ -103,7 +104,7 @@ export class BrewingSession {
     for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.GAS) ml += ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
     return ml;
   }
-  pour(ingredientId, requestedMl, inventory, { crushed = false, infinite = false } = {}) {
+  pour(ingredientId, requestedMl, inventory, { crushed = false, infinite = false, point = null } = {}) {
     const ingredient = this.ingredients.find(i => i.id === ingredientId);
     if (!ingredient || !Number.isFinite(requestedMl) || requestedMl <= 0) return 0;
     // A recovered reagent can join this pinned world while a brew is already
@@ -115,11 +116,31 @@ export class BrewingSession {
     if (!quantity) return 0;
     if (!ps.count) this.batchId = crypto.randomUUID();
     const massBefore = ps.totalMass();
-    const start = ps.count, x = ingredientId % 2 ? -1.2 : 1.2;
-    const count = this.engine.emit(ingredientId, { x, y: .95, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
+    const start = ps.count, x = Number.isFinite(point?.x) ? clamp(point.x, -2.2, 2.2) : (ingredientId % 2 ? -.55 : .55);
+    const origin = { x, y: Number.isFinite(point?.y) ? point.y : .76 };
+    const count = this.engine.emit(ingredientId, { x, y: 1, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
+    // Never allow an entire dose to start inside the same tiny sphere.
+    // Space its parcels around the selected touch location, avoiding any
+    // existing fluid or solid mass and without introducing an artificial kick.
     for (let i = start; i < ps.count; i++) {
-      ps.mass[i] = ingredient.material.density * PARTICLE_ML; ps.mixtureAmount[i] = PARTICLE_ML; ps.vy[i] = -1.3;
-      if (ingredient.form === 'powder' || crushed && ingredient.form && ingredient.form !== 'liquid') { ps.setPhase(i, Phase.SOLID); ps.solidBodyId[i] = 0; ps.solidSubdivision[i] = 1; ps.powderContent[i] = 1; }
+      ps.mass[i] = ingredient.material.density * PARTICLE_ML;
+      ps.mixtureAmount[i] = PARTICLE_ML;
+    }
+    positionPouredParcels(ps, start, origin);
+    const solid = ingredient.form && ingredient.form !== 'liquid' && ingredient.form !== 'water';
+    const loose = ingredient.form === 'powder' || (crushed && solid);
+    for (let i = start; i < ps.count; i++) {
+      if (solid) ps.setPhase(i, Phase.SOLID);
+      if (loose) { ps.solidSubdivision[i] = 1; ps.powderContent[i] = 1; }
+      if (ps.phase[i] === Phase.SOLID) {
+        ps.solidBodyId[i] = 0;
+        ps.solidLocalX[i] = ps.solidLocalY[i] = ps.solidLocalZ[i] = 0;
+      }
+    }
+    if (solid && !loose) {
+      this.engine.grid.rebuild(ps, this.engine.env.box);
+      for (let i = start; i < ps.count; i++)
+        if (ps.solidSubdivision[i] < .55) this.engine.solid.initializeParticle(ps, i, true, this.engine.grid);
     }
     this.confineCauldron();
     const pouredMl = count * PARTICLE_ML;

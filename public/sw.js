@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-cauldron-focus-42';
+const CACHE = 'alchemist-shop-controlled-pour-43';
 const CORE = [
   './',
   './index.html',
@@ -149,6 +149,7 @@ const CORE = [
   './src/simulation/ArcaneSolver.mjs',
   './src/game/potion.mjs',
   './src/game/brewing.mjs',
+  './src/game/cauldronPour.mjs',
   './src/game/cauldron.mjs',
   './src/game/CauldronThermal.mjs',
   './src/simulation/GasDensitySolver.mjs',
