@@ -113,6 +113,19 @@ try {
   await page.locator('#pourBtn').click(); await tick(600); await page.locator('#bottleBtn').click();
   await page.locator('[data-action="experiments"]').first().click();
   assert.equal(await page.locator('#rabbitPenCanvas').isVisible(), true);
+  await page.evaluate(async () => { await (await import('./src/game/RabbitAssets.mjs')).loadRabbitArtwork(); });
+  const artwork = await page.evaluate(async () => {
+    const { rabbitArtwork, rabbitCoat, rabbitArtworkVersion } = await import('./src/game/RabbitAssets.mjs');
+    const rabbits = JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')).experiments.rabbits;
+    return { loaded: rabbitArtworkVersion(), coats: rabbits.map(rabbitCoat),
+      native: rabbitArtwork('moon').width, room: rabbitArtwork('room').width,
+      frame: getComputedStyle(document.querySelector('[data-subject].active')).borderImageSource };
+  });
+  assert.equal(artwork.loaded, 6, 'all shared sprites, the room and caption load under the Pages project path');
+  assert.deepEqual(artwork.coats, ['moon', 'clover', 'hazel', 'pepper'], 'each original rabbit has its supplied coat');
+  assert.equal(artwork.native, 114, 'sprites decode at native pixel scale rather than the enlarged export');
+  assert.equal(artwork.room, 858, 'the live comparison uses the supplied empty room');
+  assert.match(artwork.frame, /card_selected\.png/, 'the selected card uses the gold artwork');
   assert.equal(await page.locator('[data-subject]').count(), 4, 'only individual rabbits are selectable');
   const firstId = initial.experiments.rabbits[0].id, secondId = initial.experiments.rabbits[1].id;
   await selectRabbit(firstId); await page.locator('[data-action="move-rabbit"]').click();
@@ -211,6 +224,7 @@ try {
   for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }, { width: 1280, height: 950 }]) {
     await page.setViewportSize(viewport);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'the colony fits the viewport');
+    assert.ok(await page.locator('.rabbit-room .sheet-body').evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'the room has no clipped horizontal content');
     for (const selector of ['#rabbitPenCanvas', '#creatureCanvas', '[data-action="move-rabbit"]', '[data-action="cull-rabbit"]', '#trialDose']) {
       await page.locator(selector).scrollIntoViewIfNeeded();
       assert.ok(await page.locator(selector).evaluate(element => { const bounds = element.getBoundingClientRect(); return bounds.top >= 0 && bounds.bottom <= innerHeight + 1; }), `${selector} remains reachable at ${viewport.width}px`);
@@ -275,6 +289,7 @@ try {
     await mobile.clock.runFor(600); await mobile.clock.resume();
     await mobile.locator('#bottleBtn').tap();
     await mobile.locator('[data-action="experiments"]').first().tap();
+    await mobile.evaluate(async () => { await (await import('./src/game/RabbitAssets.mjs')).loadRabbitArtwork(); });
     assert.equal(await mobile.locator('#colonyOverview').evaluate(element => element.open), viewport.width >= 760, 'the pen folds away on narrow phones');
     assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'touch room has no horizontal page overflow');
     const mobileId = await mobile.locator('[data-test]').getAttribute('data-test');

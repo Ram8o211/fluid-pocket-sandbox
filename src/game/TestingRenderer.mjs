@@ -1,4 +1,5 @@
 import { drawRabbit } from './RabbitRenderer.mjs';
+import { rabbitArtwork, rabbitArtworkVersion } from './RabbitAssets.mjs';
 
 import { visualResponse } from './RabbitPixelArt.mjs';
 export { visualResponse } from './RabbitPixelArt.mjs';
@@ -48,6 +49,8 @@ export class TestingRenderer {
   }
   render(subject, report, time, before = false) {
     if (!this.ctx || !subject) return;
+    const artwork = rabbitArtworkVersion();
+    if (this.artwork !== artwork) { this.artwork = artwork; this.dirty = true; }
     // A current condition view follows colony updates to the same rabbit object.
     // Recorded dose snapshots remain immutable while their replay is displayed.
     const liveSignature = report ? null : JSON.stringify(subject);
@@ -75,6 +78,9 @@ export class TestingRenderer {
       current.activeFireUntil = (report.at ?? Date.now()) + 1600;
     }
     const ctx = this.ctx; ctx.save(); ctx.imageSmoothingEnabled = false; ctx.scale(this.canvas.width / 640, this.canvas.height / 350);
+    const room = rabbitArtwork('room');
+    if (room) ctx.drawImage(room, 0, 0, 640, 350);
+    else {
     ctx.fillStyle='#32485a';ctx.fillRect(0,0,640,350);
     for(let y=36;y<300;y+=44)for(let x=-40+(y%88?40:0);x<640;x+=80){
       ctx.fillStyle='#3d5362';ctx.fillRect(x+2,y+2,76,40);
@@ -85,17 +91,20 @@ export class TestingRenderer {
     for (let y = 25; y < 300; y += 35) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(640, y); ctx.stroke(); }
     ctx.globalAlpha = 1; ctx.fillStyle = '#788a62'; ctx.fillRect(0, 300, 640, 50);
     ctx.fillStyle='#b0bd82';ctx.fillRect(0,300,640,3);
-    ctx.fillStyle = '#998767'; ctx.fillRect(148, 0, 2, 350);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#d9bd8a'; ctx.font = '13px monospace'; ctx.fillText('BEFORE THIS DOSE', 75, 25);
-    ctx.fillStyle = '#b5d8bd'; ctx.fillText(report ? before ? 'BEFORE THIS DOSE' : 'OBSERVATION' : 'CURRENT CONDITION', 392, 25);
-    drawRabbit(ctx, this.untreated, 75, 276, 88, 0, { reference: true, now: report?.at ?? Date.now() });
-    drawRabbit(ctx, current, 388, 294, 202, elapsed, { now: report ? report.at + elapsed : Date.now() });
+    }
+    ctx.strokeStyle = '#d6ae64'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(192, 0); ctx.lineTo(192, 350); ctx.stroke(); ctx.setLineDash([]);
+    drawRabbit(ctx, this.untreated, 96, 297, 96, 0, { reference: true, now: report?.at ?? Date.now() });
+    drawRabbit(ctx, current, 414, 304, 192, elapsed, { now: report ? report.at + elapsed : Date.now() });
     if (report && !before && elapsed < 1200) {
       ctx.globalAlpha = Math.max(0, 1 - Math.max(0, (elapsed - 650) / 550));
       ctx.save(); ctx.translate(395, 64); ctx.rotate(-.65); ctx.fillStyle = '#c0d8dd'; ctx.fillRect(-8, -24, 16, 30); ctx.fillStyle = report.sample?.color || '#ac9bdc'; ctx.fillRect(-6, -11, 12, 14); ctx.fillStyle = '#9b7451'; ctx.fillRect(-7, -28, 14, 6); ctx.restore();
       ctx.globalAlpha = 1;
     }
-    ctx.fillStyle = '#d5c6a6'; ctx.font = '12px monospace'; ctx.fillText(`${subject.name} · ${subject.age === 'baby' ? 'baby' : 'adult'}`, 391, 330);
+    const plaque = rabbitArtwork('plaque');
+    if (plaque) ctx.drawImage(plaque, 278, 316, 272, 28);
+    else { ctx.fillStyle = '#132c3a'; ctx.fillRect(278, 316, 272, 28); }
+    ctx.textAlign = 'center'; ctx.fillStyle = '#e0d7c4'; ctx.font = '18px monospace'; ctx.fillText(`${subject.name} · ${subject.age === 'baby' ? 'baby' : 'adult'}`, 414, 336);
     ctx.restore();
   }
 }
