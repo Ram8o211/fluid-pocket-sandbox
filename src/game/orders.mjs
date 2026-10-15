@@ -22,6 +22,9 @@ export function simulateWitness(world, recipe, equipment = {}) {
       brew.step(FIXED_STEP);
     }
     brew.setThermal(0);
+    // Customer recipes are tested on a creature before the remaining vial is
+    // sealed. Sampling can change an incompletely homogenized brew.
+    if (recipe.reserveTrial) brew.takeSample(5);
     return brew.bottle(recipe.volume);
   } finally { brew.dispose(); }
 }
@@ -167,7 +170,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const recipe = { portions: [{ ingredientId: solvent.id, ml: volume + 15 }, portion(primary),
     ...(secondary ? [portion(secondary)] : [])], volume,
     ticks: secondary ? 480 : 440, thermalTicks: secondary ? 375 : 340,
-    heat: .52, cool: 0, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
+    heat: .52, cool: 0, reserveTrial: true, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
 
   let sample = simulateWitness(world, recipe, equipment);
   // Weak, partly extracted essences may need a longer real infusion. This is
