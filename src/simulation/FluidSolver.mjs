@@ -58,7 +58,10 @@ export class FluidSolver {
     else if(!externalLiquids&&d<supportRadius){const sameMaterial=ps.materialId[i]===ps.materialId[j],delta=Math.abs(ps.miscibility[i]-ps.miscibility[j]),threshold=Math.max(.01,warmedMiscibility(ps,i,j,rules.miscibilityThreshold,rules)),compatibility=sameMaterial?1:clamp(1-delta/threshold,0,1);if(compatibility>0){const cohesion=clamp((ps.cohesion[i]+ps.cohesion[j])*.5,0,1),span=Math.max(.001,supportRadius-rest),perParticle=(d-rest)/span*cohesion*compatibility*.0025*mobility,total=perParticle*2;ps.x[i]+=nx*total*wi;ps.y[i]+=ny*total*wi;if(!planar)ps.z[i]+=nz*total*wi;ps.x[j]-=nx*total*wj;ps.y[j]-=ny*total*wj;if(!planar)ps.z[j]-=nz*total*wj;}}
     // Native pressure opposes parcel exchange. Give the material-density
     // correction enough mobility to sort layers, scaled to elapsed time.
-    if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=warmedMiscibility(ps,i,j,rules.miscibilityThreshold,rules))this.sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility*(externalLiquids?4*dt/.025:1),planar,interactionScale);
+    // Each compact parcel now represents twice as much fluid, so restore the
+    // physical density-exchange impulse per millilitre while retaining the old
+    // behaviour for legacy 0.25 ml particles and partially drained parcels.
+    if(ps.materialId[i]!==ps.materialId[j]&&Math.abs(ps.miscibility[i]-ps.miscibility[j])>=warmedMiscibility(ps,i,j,rules.miscibilityThreshold,rules))this.sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility*(externalLiquids?4*dt/.025*clamp((ps.mixtureAmount[i]+ps.mixtureAmount[j])/(2*.25),.5,2):1),planar,interactionScale);
   }
   solvePowderPair(ps,i,j,nx,ny,nz,d,dt,planar,rules){
     const scale=ps.packingScale??1,rest=this.cachePs===ps?clamp(this.radii[i]+this.radii[j],.07*scale,.44*scale):particlePairRestDistance(ps,i,j,planar);
