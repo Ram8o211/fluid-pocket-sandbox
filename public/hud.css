@@ -184,3 +184,41 @@
   .laboratory { flex: 0 0 250px; }
 }
 @media (prefers-reduced-motion: reduce) { .shop-shell button { transition: none; } }
+
+
+/* Cauldron-first workbench. All existing buttons, rooms and sheets remain live. */
+.shop-shell { gap: 3px; }
+.laboratory { box-shadow: 0 0 0 1px #b88952, 0 2px 14px #010b17; }
+.laboratory canvas { min-height: 80px; }
+.rack-toggle { display: none; }
+
+@media (max-width: 699px) and (max-height: 720px) {
+  /* Short phones gain valuable cauldron space by tucking away just the
+     ingredient cards; quantity, pour, bottle and room menus remain visible. */
+  .shop-shell { gap: 2px; }
+  .shop-header { flex-basis: 48px; min-height: 48px; }
+  .order-panel .customer-dialogue { display: none; }
+  .lab-hint { display: none; }
+  .laboratory { min-height: 175px; }
+  .laboratory canvas { min-height: 100px; }
+  .brew-tools .tool-button { min-height: 46px; }
+  .shop-navigation button { height: 47px; min-height: 47px; }
+  .ingredient-panel:not(.rack-expanded) .ingredient-rack { display: none; }
+  .ingredient-panel .rack-toggle {
+    display: grid; place-items: center; position: absolute; z-index: 2;
+    left: 2px; top: 1px; width: 44px; height: 44px; min-height: 44px; padding: 4px;
+    --hud-frame: url('./hud/frame-tool.png');
+    border: 6px solid transparent;
+    border-image: var(--hud-frame) 12 fill / 6px / 0 stretch;
+    background: none; box-shadow: none; border-radius: 0;
+  }
+  .ingredient-panel .rack-toggle[aria-expanded="true"] { --hud-frame: url('./hud/frame-selected.png'); }
+  .ingredient-panel .rack-toggle img { display: block; width: 24px; height: 24px; image-rendering: pixelated; pointer-events: none; }
+  .ingredient-title { padding-left: 47px; }
+  .ingredient-panel:has(.grind-button:not([hidden])) .ingredient-title { padding-left: 47px; }
+  .ingredient-panel .dose-selector button { min-width: 27px; padding-left: 1px; padding-right: 1px; }
+}
+@media (max-width: 699px) and (max-height: 600px) {
+  .laboratory { min-height: 165px; }
+  .laboratory canvas { min-height: 93px; }
+}
