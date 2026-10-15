@@ -1,5 +1,5 @@
 import { Phase } from '../simulation/Phase.mjs';
-import { CAULDRON_INTERIOR } from './cauldron.mjs';
+import { CAULDRON_INTERIOR, PARTICLE_ML } from './cauldron.mjs';
 
 /**
  * Adapter for Google's actual LiquidFun 1.1.0 Emscripten-generated JavaScript.
@@ -29,8 +29,9 @@ export class LiquidFunFluid {
       pot.CreateFixtureFromShape(edge, 0);
     }
     this.definition = new runtime.b2ParticleSystemDef();
-    // Fine 2D parcels fit a full 440ml cauldron without artificial packing.
-    this.definition.radius = .039;
+    // Keep liquid area unchanged despite representing more ml per particle.
+    // Finer saved parcels recover their smaller radius from current volume.
+    this.definition.radius = .039 * Math.sqrt(PARTICLE_ML / .25);
     this.definition.destroyByAge = false;
     // Suppress residual energy in a settled pool without damping deliberate
     // spoon strokes or a newly poured stream at the game layer.
@@ -114,8 +115,8 @@ export class LiquidFunFluid {
     // Native systems have one radius: scale it by mean parcel area so the
     // remaining liquid shrinks physically as well as in the inventory/renderer.
     let volume = 0;
-    for (const i of indices) volume += ps.mixtureAmount?.[i] ?? .25;
-    const radius = this.definition.radius * Math.sqrt(Math.max(.0001, volume / count) / .25);
+    for (const i of indices) volume += ps.mixtureAmount?.[i] ?? PARTICLE_ML;
+    const radius = this.definition.radius * Math.sqrt(Math.max(.0001, volume / count) / PARTICLE_ML);
     if (typeof this.system.SetRadius === 'function' && Math.abs(radius - this.system.radius) > .000001)
       this.system.SetRadius(radius);
     let { position, velocity } = this.buffers(count);
