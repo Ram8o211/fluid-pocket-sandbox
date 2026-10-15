@@ -69,6 +69,19 @@ export async function verifyRabbitAnimation(page) {
       rc.drawImage(draw(r,time,options),col*240,row*200+10);
       rc.fillStyle='#f5d0a1';rc.font='13px monospace';rc.fillText(label,col*240+8,row*200+16);
     }
+    const growth=document.createElement('canvas');growth.width=480;growth.height=160;
+    const gc=growth.getContext('2d');gc.fillStyle='#102837';gc.fillRect(0,0,480,160);gc.imageSmoothingEnabled=false;
+    const growthSizes=[];
+    for(let i=0;i<3;i++){
+      const r=create();if(i<2){r.age='baby';r.stats.growth=i?80:0;}
+      const canvas=document.createElement('canvas');canvas.width=80;canvas.height=60;
+      drawRabbit(canvas.getContext('2d'),r,40,57,48,0,{reference:true,now:1000});
+      const data=canvas.getContext('2d').getImageData(0,0,80,60).data;
+      let left=80,right=0,top=60,bottom=0;
+      for(let y=0;y<57;y++)for(let x=0;x<80;x++)if(data[(y*80+x)*4+3]){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+      growthSizes.push({width:right-left+1,height:bottom-top+1,bottom});
+      gc.drawImage(canvas,i*160,30,160,120);gc.fillStyle='#f5d0a1';gc.font='13px monospace';gc.fillText(['newborn','growing','adult'][i],i*160+8,20);
+    }
     const colonyTimes=[];
     for(let t=0;t<6;t++){
       const started=performance.now();
@@ -83,7 +96,7 @@ export async function verifyRabbitAnimation(page) {
     return {headErrors,alphaErrors,blinkHoles,fumeFrames:new Set(fumes).size,idleFrames:new Set(idle).size,
       pieces:rabbitEffectPieces('poison_t01').length,blink:blinkTimes.length,ears:earTimes.length,
       historical,deadStill,pauseStable,resumed,unchanged:JSON.stringify(sample)===unchanged,cache:rabbitArtCacheSize(),
-      maximum:Math.max(...timings),colonyMaximum:Math.max(...colonyTimes),alignment:sheet.toDataURL(),animation:frames.toDataURL(),routine:routine.toDataURL()};
+      growthSizes,maximum:Math.max(...timings),colonyMaximum:Math.max(...colonyTimes),alignment:sheet.toDataURL(),animation:frames.toDataURL(),routine:routine.toDataURL(),growth:growth.toDataURL()};
   });
   assert.equal(result.headErrors,0,'mixed body effects must preserve the primary head/eye pixels for every tier');
   assert.equal(result.alphaErrors,0,'surface effects must never paste another silhouette');
@@ -93,7 +106,9 @@ export async function verifyRabbitAnimation(page) {
   assert.ok(result.pieces>2&&result.blink>0&&result.ears>0);
   assert.ok(result.historical&&result.deadStill&&result.pauseStable&&result.resumed&&result.unchanged);
   assert.ok(result.cache<=128,'animated native-frame storage stays bounded');
-  for(const key of ['alignment','animation','routine'])await writeFile(`test-results/rabbit-${key}.png`,Buffer.from(result[key].split(',')[1],'base64'));
+  for(const dimension of ['width','height'])assert.ok(result.growthSizes[0][dimension]<result.growthSizes[1][dimension]&&result.growthSizes[1][dimension]<result.growthSizes[2][dimension],`newborns stay smaller and grow progressively in 48px portraits and pen views (${dimension})`);
+  assert.ok(Math.max(...result.growthSizes.map(s=>s.bottom))-Math.min(...result.growthSizes.map(s=>s.bottom))<=1,'growth keeps all resting feet on the shared ground pivot');
+  for(const key of ['alignment','animation','routine','growth'])await writeFile(`test-results/rabbit-${key}.png`,Buffer.from(result[key].split(',')[1],'base64'));
   console.log(`Rabbit animation: intact heads/silhouettes, ${result.fumeFrames} independent fume frames, ${result.idleFrames} idle frames, blink/ears, pause/resume and static corpses; bounded cache ${result.cache}. Slowest cold frame ${result.maximum.toFixed(1)} ms; twelve-rabbit batch ${result.colonyMaximum.toFixed(1)} ms.`);
 }
 

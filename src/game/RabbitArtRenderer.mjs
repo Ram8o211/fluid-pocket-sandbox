@@ -70,13 +70,16 @@ export function drawRabbitArtwork(ctx,rabbit,x,floor,size,time=0,options={}) {
     frames.set(key,frame);
   }
   const baby=rabbit.age==='baby'||rabbit.age==='juvenile',growth=Math.max(0,Math.min(1,(rabbit.stats?.growth||0)/100));
-  const scale=Math.max(1,Math.round(size/48*(baby?.65+growth*.25:1))),collapse=alive?1:.55;
+  const scale=Math.max(1,Math.round(size/48))*(baby?.65+growth*.25:1),collapse=alive?1:.55;
   const hop=alive&&!reference?Number(options.hop)||0:0;
   ctx.save();ctx.imageSmoothingEnabled=false;ctx.translate(Math.round(x),Math.round(floor));ctx.scale(options.facing===-1?-1:1,1);
   ctx.fillStyle='#1c242d';
-  ctx.fillRect(-20*scale,0,40*scale,scale);ctx.fillRect(-22*scale,scale,44*scale,scale);ctx.fillRect(-20*scale,2*scale,40*scale,scale);
-  ctx.drawImage(frame,-48*scale,Math.round(-BASELINE*.375*scale*collapse-hop*scale),96*scale,Math.round(84*scale*collapse));
-  if(options.selected){ctx.fillStyle=options.cullMode?'#f19b8d':'#ffe0a0';ctx.fillRect(-28*scale,scale,5*scale,scale);ctx.fillRect(23*scale,scale,5*scale,scale);}
+  const unit=Math.max(1,Math.round(scale));
+  ctx.fillRect(-Math.round(20*scale),0,Math.round(40*scale),unit);
+  ctx.fillRect(-Math.round(22*scale),unit,Math.round(44*scale),unit);
+  ctx.fillRect(-Math.round(20*scale),2*unit,Math.round(40*scale),unit);
+  ctx.drawImage(frame,-Math.round(48*scale),Math.round(-BASELINE*.375*scale*collapse-hop*scale),Math.round(96*scale),Math.round(84*scale*collapse));
+  if(options.selected){ctx.fillStyle=options.cullMode?'#f19b8d':'#ffe0a0';ctx.fillRect(-Math.round(28*scale),unit,Math.round(5*scale),unit);ctx.fillRect(Math.round(23*scale),unit,Math.round(5*scale),unit);}
   ctx.restore();return true;
 }
 
