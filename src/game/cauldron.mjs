@@ -9,7 +9,10 @@ export const CAULDRON_INTERIOR = Object.freeze([
   [1.65, -.925], [1.275, -1.2], [-1.275, -1.2],
   [-1.65, -.925], [-2.05, -.4], [-2.35, .6]
 ].map(point => Object.freeze(point)));
-export const PARTICLE_ML = .25;
+// Half-millilitre simulation parcels halve new-brew particle counts while
+// their mass-scaled radius preserves the same 2D liquid footprint. Existing
+// .25 ml saves remain valid.
+export const PARTICLE_ML = .5;
 export const PARTICLE_CAPACITY = 2304;
 // Includes sprite rounding at both 384px and battery-mode 192px resolutions.
 export const WALL_CLEARANCE = .05;

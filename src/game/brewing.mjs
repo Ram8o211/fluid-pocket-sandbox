@@ -62,9 +62,14 @@ export class BrewingSession {
     this.engine.env.granularWallSupport = cauldronGranularWallSupport;
     this.engine.rules.mixingTemperatureCoefficient = 3.5;
     this.engine.rules.heatSolubility = .95;
-    // Contact ranges track the finer particle spacing. The sandbox defaults are
-    // untouched; local neighbours keep full cauldrons within the mobile budget.
-    this.engine.rules.interactionRadiusScale = .5;
+    // Keep the *relative* neighbour reach of the former fine-grained parcels.
+    // Larger particles need proportionally wider contact to exchange density,
+    // heat and colour; otherwise heavy liquids cannot pass light layers.
+    // Contact pairs per particle stay similar while the particle count halves.
+    this.engine.rules.interactionRadiusScale = .5 * Math.sqrt(PARTICLE_ML / .25);
+    // Vapour condensation depends on density per support area: a liquid-only
+    // resolution optimization must not change its saturation thresholds.
+    this.engine.rules.gasInteractionRadiusScale = .5;
     this.engine.grid.cellSize = .15;
     this.engine.grid.configure(this.engine.env.box);
     this.previousPhases = new Int32Array(PARTICLE_CAPACITY);
@@ -331,7 +336,9 @@ export class BrewingSession {
       if (ps.mixtureAmount[i] <= 0) throw new Error('Invalid saved mixture amount.');
     }
     if (saved.particles.powderContent === undefined) for (let i=0;i<ps.count;i++) ps.powderContent[i]=ps.phase[i]===Phase.SOLID&&ps.solidSubdivision[i]>=.55?1:0;
-    if (saved.particleMl !== PARTICLE_ML) this.refineLegacyParticles();
+    // Preserve heterogeneous .25 ml parcels from earlier versions as-is.
+    // Only truly coarse pre-parcel saves require splitting.
+    if (saved.particleMl == null || saved.particleMl > PARTICLE_ML) this.refineLegacyParticles();
     ps.px.set(ps.x); ps.py.set(ps.y);
     ps.stirActivity.fill(0); // Reload never supplies new spoon work.
     ps.grainRest.fill(0);

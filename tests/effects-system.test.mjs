@@ -94,6 +94,8 @@ test('bottles expose actual concentrations to commission assessment and preserve
   for (const key of EFFECT_PROPERTIES) { close(vial[key], ingredients[0].material[key]); close(remaining[key], vial[key]); close(vial.effects[key], vial[key]); }
   const order = { volume: 1, requirements: [{ property: 'strength', target: .9, tolerance: .05, weight: 1, hard: true }] };
   assert.equal(assessPotion(vial, order).quality, 100);
+  assert.equal(assessPotion({ ...vial, volume: 1 - 1e-7 }, order).quality, 100, 'rounding must not invalidate a 1 ml vial');
+  assert.equal(assessPotion({ ...vial, volume: .99 }, order).quality, 0, 'truly undersized vials remain invalid');
   assert.equal(assessPotion({ ...vial, strength: 0 }, order).acceptable, false);
 });
 

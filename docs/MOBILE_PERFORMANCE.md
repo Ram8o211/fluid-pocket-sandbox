@@ -1,7 +1,12 @@
 # Mobile performance
 
-The shop uses 2,304 fixed particle slots. Four parcels represent each ml, so a
-full upgraded 440 ml cauldron contains 1,760 particles. The original sandbox
+The shop retains 2,304 fixed particle slots for saved-game compatibility, but
+new batches use **two parcels per ml** (0.5 ml each): a full upgraded 440 ml
+cauldron now contains **880 particles instead of 1,760**. Native LiquidFun
+radii and game particle footprints scale with represented liquid mass. Thus
+liquid coverage, volume, motion and potion effects remain mass-conserving while
+pair contacts and per-particle rendering work decrease. Existing .25 ml saves
+load unchanged, and new pours in them use compact parcels. The original sandbox
 retains its separate defaults and graphics presets.
 
 Physics collisions, gravity, phase progress and spoon response run at 40 Hz.

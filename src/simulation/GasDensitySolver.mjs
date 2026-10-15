@@ -14,7 +14,9 @@ export function updateGasDensity(ps, grid, rules, env) {
   if (!mass || mass.length < ps.capacity) { mass = new Float64Array(ps.capacity); workspaces.set(ps, mass); }
   for (let i = 0; i < count; i++) { mass[i] = ps.phase[i] === Phase.GAS ? ps.mass[i] : 0; hasGas ||= mass[i] > 0; }
   if (!hasGas) return;
-  const radius = .48 * clamp(rules.interactionRadiusScale ?? 1, .4, 1), r2 = radius * radius;
+  // Gas concentration uses its own physical support radius, independent of
+  // the wider neighbour reach needed by the larger LiquidFun liquid parcels.
+  const radius = .48 * clamp(rules.gasInteractionRadiusScale ?? rules.interactionRadiusScale ?? 1, .4, 1), r2 = radius * radius;
   const planar = env.dimensionMode === '2D';
   grid.forEachPair(ps, radius, (i, j) => {
     if (ps.phase[i] !== Phase.GAS || ps.phase[j] !== Phase.GAS) return;

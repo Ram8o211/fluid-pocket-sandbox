@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld } from '../src/game/world.mjs';
 import { BrewingSession } from '../src/game/brewing.mjs';
+import { PARTICLE_ML } from '../src/game/cauldron.mjs';
 import { newShop, recordDiscovery } from '../src/game/economy.mjs';
 import { createExperimentState, runExperiment, splitPotionSample } from '../src/game/experiments.mjs';
 import { returnVialToCauldron, validatePotionContents } from '../src/game/potionTransfer.mjs';
@@ -122,11 +123,11 @@ test('returning a mixed vial preserves its original affinity envelope and emerge
   const brew = new BrewingSession(world.ingredients); brew.pour(1, 10, {}, { infinite: true }); brew.pour(13, 10, {}, { infinite: true });
   const ps = brew.engine.ps, mixtures = brew.engine.reactions.mixtures;
   mixtures.beginFrame(ps);
-  const a = mixtures.root(ps.mixtureGroup[0]), b = mixtures.root(ps.mixtureGroup[40]);
+  const a = mixtures.root(ps.mixtureGroup[0]), b = mixtures.root(ps.mixtureGroup[10/PARTICLE_ML]);
   a.min = .1; a.max = .9; b.parent = a.id;
   // A locally fused source is pruned from an empty pot, so its definition must
   // travel in the vial and register again without flattening the envelope.
-  const id = brew.engine.resolveFusion(ps, 0, 40, ps.materialId[0], ps.materialId[40]); ps.materialId[0] = id;
+  const id = brew.engine.resolveFusion(ps, 0, 10/PARTICLE_ML, ps.materialId[0], ps.materialId[10/PARTICLE_ML]); ps.materialId[0] = id;
   const vial = brew.bottle(20); assert.ok(!brew.engine.materials.has(id));
   brew.returnPotion(vial); assert.ok(brew.engine.materials.has(id));
   mixtures.beginFrame(ps);
@@ -139,7 +140,7 @@ test('the original arcane ratio and signed threshold survive fused materials, bo
   brew.pour(14, 20, {}, { infinite: true });
   const ps = brew.engine.ps, mixtures = brew.engine.reactions.mixtures;
   mixtures.beginFrame(ps);
-  const a = mixtures.root(ps.mixtureGroup[0]), b = mixtures.root(ps.mixtureGroup[40]);
+  const a = mixtures.root(ps.mixtureGroup[0]), b = mixtures.root(ps.mixtureGroup[10/PARTICLE_ML]);
   a.sourceAmounts.set(13, 10);
   a.sourceAmounts.set(14, 20);
   a.amount = 30;
@@ -149,7 +150,7 @@ test('the original arcane ratio and signed threshold survive fused materials, bo
     world.ingredients[13].material.arcaneThreshold * 20) / 30;
   for (let i = 0; i < ps.count; i++) ps.mixtureGroup[i] = a.id;
   // A fusion can replace the material IDs, but it must not erase the recipe.
-  const fused = brew.engine.resolveFusion(ps, 0, 40, ps.materialId[0], ps.materialId[40]);
+  const fused = brew.engine.resolveFusion(ps, 0, 10/PARTICLE_ML, ps.materialId[0], ps.materialId[10/PARTICLE_ML]);
   for (let i = 0; i < ps.count; i++) ps.materialId[i] = fused;
   const sealed = brew.bottle(20);
   near(mixtures.root(ps.mixtureGroup[0]).amount, 10);

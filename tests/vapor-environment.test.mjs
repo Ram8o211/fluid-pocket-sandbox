@@ -8,7 +8,7 @@ import { SpatialGrid } from '../src/simulation/SpatialGrid.mjs';
 import { updateGasDensity } from '../src/simulation/GasDensitySolver.mjs';
 import { applyBuoyancy } from '../src/simulation/BuoyancySolver.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
-import { insideCauldron, cauldronParticlePadding } from '../src/game/cauldron.mjs';
+import { insideCauldron, cauldronParticlePadding, PARTICLE_ML } from '../src/game/cauldron.mjs';
 
 const close = (a, b, tolerance = .0001) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 const material = overrides => sanitizeMaterial({ id: 1, density: 1, heatCapacity: .6, thermalConductivity: 1, viscosity: .2, miscibility: .4, meltingTemperature: .05, boilingTemperature: .65, phaseTransitionHysteresis: .01, combustionTemperature: 1.4, reactionPotential: 0, reactionHeat: 0, electricPotential: 0, ...overrides });
@@ -26,7 +26,7 @@ test('the empty-atmosphere reference stays fixed and crowding never removes dens
   brew.pour(1, 1, { 1: 10 }); brew.pour(2, 1, { 2: 10 });
   assert.equal(reference, ROOM_DENSITY); assert.equal(env.environmentDensity, reference);
   const gains = [];
-  for (const index of [0, 4]) {
+  for (const index of [0, 1 / PARTICLE_ML]) {
     ps.setPhase(index, Phase.GAS);
     for (const concentration of [.1, 100]) {
       ps.localGasDensity[index] = concentration; ps.vx[index] = ps.vy[index] = 0;
@@ -43,7 +43,7 @@ test('the empty-atmosphere reference stays fixed and crowding never removes dens
   ps.vy[1] = 0; applyBuoyancy(ps, 1, brew.engine.gravity, env, FIXED_STEP);
   assert.equal(ps.vy[1], 0); // Liquid gravity/stratification has a separate path.
   ticks(brew, 200);
-  for (let i = 0; i < ps.count; i++) close(ps.baseDensity[i], i < 4 ? .65 : 1.65);
+  for (let i = 0; i < ps.count; i++) close(ps.baseDensity[i], i < 1 / PARTICLE_ML ? .65 : 1.65);
   assert.equal(env.environmentDensity, reference); // Incompatible fluids do not homogenize.
 });
 
