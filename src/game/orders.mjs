@@ -213,7 +213,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
       weight: .4, hard: true, comparison: 'maximum' });
   }
   const storyKey = wanted.slice().sort().join('+');
-  const stories = STORIES[storyKey] || STORIES[wanted.join('+')] || STORIES[wanted.slice().reverse().join('+')] || STORIES[desired];
+  const stories = STORIES[storyKey] || STORIES[wanted.join('+')] || STORIES[wanted.slice().reverse().join('+')] || STORIES[wanted[0]];
   const narrative = stories[Math.floor(rng() * stories.length)];
   const customer = { id: 'customer-' + completed, name: NAMES[Math.floor(rng() * NAMES.length)],
     role: STORY_ROLES[Math.floor(rng() * STORY_ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff),
