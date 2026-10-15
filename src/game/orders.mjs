@@ -128,6 +128,7 @@ const STORIES = Object.freeze({
 });
 const STORY_ROLES = Object.freeze(['village healer', 'forest ranger', 'guild messenger', 'castle caretaker',
   'travelling trader', 'village elder', 'watch captain', 'wandering scholar', 'farm steward', 'mountain scout']);
+const ORDER_CACHE = new Map();
 const SIDE_EFFECT_TARGET = .009;
 const SIDE_EFFECT_TOLERANCE = .003; // Actual hard ceiling: 1.2%, never 2%+.
 
@@ -150,6 +151,12 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const possible = EFFECT_SEQUENCE.filter(key => specialists(key).length);
   if (!possible.length) return generatePhysicalOrder(world, completed, equipment);
 
+  // Scenario search runs full physics. Cache only identical catalogs and
+  // equipment; callers receive fresh objects so save edits never mutate the cache.
+  const cacheKey = JSON.stringify([world.seed, completed, equipment,
+    candidates.map(i => [i.id, i.material.miscibility, i.material.arcaneThreshold,
+      ...EFFECT_PROPERTIES.map(k => i.material[k])])]);
+  if (ORDER_CACHE.has(cacheKey)) return structuredClone(ORDER_CACHE.get(cacheKey));
   const desired = possible[completed % possible.length];
   const strongest = key => specialists(key).sort((a, b) => b.material[key] - a.material[key])[0];
   const primary = strongest(desired);
@@ -219,9 +226,12 @@ export function generateOrder(world, completed = 0, equipment = {}) {
     role: STORY_ROLES[Math.floor(rng() * STORY_ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff),
     dialogue: narrative + ' I need a reliable potion, with no dangerous side effects.' };
   const clue = 'Study the known garden essences and their activation temperatures. Test a spare dose on your familiars, then write your potion ID from their response.';
-  return { id: world.seed + '-' + completed, conceptVersion: 3, customer, requirements, volume, difficulty,
+  const order = { id: world.seed + '-' + completed, conceptVersion: 3, customer, requirements, volume, difficulty,
     budget: Math.round(43 + difficulty * 14 + wanted.length * 6 + rng() * 8), witness: recipe, clue,
     targetDescriptions: Object.fromEntries(requirements.map(r => [r.property,
       r.comparison === 'maximum' ? 'At most 1.2% ' + EFFECT_DEFINITIONS[r.property].label.toLowerCase()
         : propertyDescription(r.property, r.target)])) };
+  if (ORDER_CACHE.size >= 96) ORDER_CACHE.delete(ORDER_CACHE.keys().next().value);
+  ORDER_CACHE.set(cacheKey, order);
+  return structuredClone(order);
 }
