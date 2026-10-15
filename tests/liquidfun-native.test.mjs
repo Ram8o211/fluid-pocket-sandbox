@@ -7,7 +7,7 @@ import { generateWorld } from '../src/game/world.mjs';
 import { simulateWitness } from '../src/game/orders.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { generateLiquidWorld } from './helpers/liquid-world.mjs';
-import { insideCauldron, cauldronParticlePadding } from '../src/game/cauldron.mjs';
+import { insideCauldron, cauldronParticlePadding, PARTICLE_ML } from '../src/game/cauldron.mjs';
 import { particlePairRestDistance } from '../src/simulation/FluidSolver.mjs';
 
 const runtime = liquidFunRuntime();
@@ -114,7 +114,7 @@ test('partial bottling reduces native fluid area without losing recipe parcels',
   b.pour(1, 60, { 1: 100 }); b.step();
   const radius = backend.system.radius;
   b.bottle(30); b.step();
-  assert.equal(nativeCount(backend), 240);
+  assert.equal(nativeCount(backend), 60 / PARTICLE_ML);
   assert.ok(Math.abs(backend.system.radius - radius * Math.sqrt(.5)) < .00001);
   assert.ok(Math.abs(b.occupiedVolume - 30) < .001);
   b.dispose();
@@ -159,18 +159,18 @@ test('full cauldrons and repeated phase changes keep native buffers finite and c
   b.pour(1, 440, { 1: 500 });
   const ps = b.engine.ps, backend = b.engine.liquidFun, mass = ps.totalMass();
   for (let tick = 0; tick < 200; tick++) { b.assistStir(); b.step(); }
-  assert.equal(nativeCount(backend), 1760);
+  assert.equal(nativeCount(backend), 440 / PARTICLE_ML);
   for (let cycle = 0; cycle < 3; cycle++) {
     for (let i = 0; i < ps.count; i++) {
       ps.setPhase(i, i % 3 ? Phase.LIQUID : Phase.GAS);
       ps.temperature[i] = i % 3 ? .33 : .9;
       ps.boilingTemperature[i] = i % 3 ? 1.2 : .5;
     }
-    b.step(); assert.equal(nativeCount(backend), 1173);
+    b.step(); assert.equal(nativeCount(backend), Math.floor((440 / PARTICLE_ML) * 2 / 3));
     for (let i = 0; i < ps.count; i++) {
       ps.setPhase(i, Phase.LIQUID); ps.temperature[i] = .33; ps.boilingTemperature[i] = 1.2;
     }
-    b.step(); assert.equal(nativeCount(backend), 1760);
+    b.step(); assert.equal(nativeCount(backend), 440 / PARTICLE_ML);
   }
   for (let i = 0; i < ps.count; i++) {
     assert.ok(Number.isFinite(ps.x[i]) && Number.isFinite(ps.y[i]) && Number.isFinite(ps.vy[i]));
@@ -178,7 +178,7 @@ test('full cauldrons and repeated phase changes keep native buffers finite and c
   }
   assert.equal(ps.totalMass(), mass); assert.equal(b.occupiedVolume, 440);
   b.clean(); b.step(); assert.equal(nativeCount(backend), 0);
-  b.pour(1, 5, { 1: 10 }); b.step(); assert.equal(nativeCount(backend), 20);
+  b.pour(1, 5, { 1: 10 }); b.step(); assert.equal(nativeCount(backend), 5 / PARTICLE_ML);
   b.dispose();
 });
 
