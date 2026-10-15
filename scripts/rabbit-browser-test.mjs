@@ -41,6 +41,7 @@ async function administer(id, volume) {
   if (await button.isDisabled()) await tick(6500);
   assert.equal(await button.isDisabled(), false, `living ${id} can receive a dose`);
   const before = await readState();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
   await button.click();
   // Inspect the 1.3-second replay at a fixed virtual instant. A busy CI worker
   // must not use wall time to extinguish a short flame before this assertion.
