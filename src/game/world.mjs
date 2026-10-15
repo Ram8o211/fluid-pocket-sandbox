@@ -143,7 +143,12 @@ export function migrateIngredients(world) {
       // Rebalance inventory/base materials from pre-awakening saves, without
       // resetting the thermal or magical state of a potion already brewing.
       if (rebalance && spec) material[key] = reference.material[key];
+      // Migrate old unmodified garden catalogs without rewriting a brew in progress.
+      if (!rebalance && world.ingredientVersion >= 4 && ingredient.id === 10 && key === 'acidity' && material.acidity < .05)
+        material.acidity = reference.material.acidity;
     }
+    if (!rebalance && world.ingredientVersion >= 4 && ingredient.id === 6 && material.miscibility > .6)
+      material.miscibility = reference.material.miscibility;
     return { ...ingredient, form, material,
       unit: ingredient.unit || (liquid ? 'ml' : 'measures'),
       solvent: ingredient.solvent ?? (ingredient.id === 1 || !ingredient.form),
