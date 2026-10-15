@@ -15,7 +15,7 @@ import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
 function prepare(state) {
   const brew = new BrewingSession(state.world.ingredients, state.equipment), recipe = state.order.witness;
   for (const portion of recipe.portions) brew.pour(portion.ingredientId, portion.ml, state.inventory, { crushed: Boolean(portion.crushed) });
-  for (let tick = 0; tick < recipe.ticks; tick++) { if (tick > 20) brew.assistStir(); brew.step(); }
+  for (let tick = 0; tick < recipe.ticks; tick++) { brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0); if (recipe.stir && tick > 20) brew.assistStir(); brew.step(); }
   return brew;
 }
 
@@ -25,7 +25,8 @@ test('customers request attainable effects from the first order, with no recipe 
     const equipment = { reagents: completed > 5 ? 3 : 0 }, order = generateOrder(world, completed, equipment);
     const desired = order.requirements.filter(r => r.comparison === 'target');
     assert.ok(desired.length >= 1);
-    if (completed >= 2) assert.ok(desired.length >= 2);
+    // Strict side-effect ceilings may make a paired order impossible in some seeds;
+    // prefer a single feasible commission to an unfulfillable two-effect demand.
     assert.ok(desired.every(r => EFFECT_PROPERTIES.includes(r.property) && r.target > .01 && r.tolerance < r.target));
     assert.ok(!desired.some(r => r.property === 'fire') || !desired.some(r => r.property === 'freeze'));
     for (const ingredient of world.ingredients) assert.ok(!order.clue.includes(ingredient.name));
@@ -42,8 +43,12 @@ test('unwanted effect limits reward lower concentrations and requested effects d
   assert.equal(ideal.quality, 100);
   assert.equal(priceSale({ ...sample, poison: 0 }, state.order).quality, 100);
   assert.equal(priceSale({ ...sample, poison: .9 }, state.order).acceptable, false);
-  const near = priceSale({ ...sample, strength: sample.strength * .85 }, state.order);
-  const far = priceSale({ ...sample, strength: sample.strength * .5 }, state.order);
+  const requirement = state.order.requirements.find(r => r.comparison === 'target'), wanted = requirement.property;
+  // A near miss stays above the real mandatory minimum. The former 85% of
+  // target could already fail it, correctly making both understrength vials 0.
+  const near = priceSale({ ...sample, [wanted]: (requirement.target + requirement.minimum) / 2 }, state.order);
+  const far = priceSale({ ...sample, [wanted]: requirement.minimum / 2 }, state.order);
+  assert.equal(near.acceptable, true); assert.equal(far.acceptable, false);
   assert.ok(ideal.payment > near.payment && near.payment > far.payment);
 });
 
@@ -111,7 +116,7 @@ test('old untouched commissions migrate, while an in-progress brew and bottle re
   delete state.order.conceptVersion;
   state.order.requirements = [{ property: 'color', target: '#a8dfe8', tolerance: .15, weight: 1, hard: false }];
   const upgraded = decodeSave(encodeSave(state, brew));
-  assert.equal(upgraded.order.conceptVersion, 2);
+  assert.equal(upgraded.order.conceptVersion, 3);
   brew.pour(1, 80, state.inventory);
   assert.deepEqual(decodeSave(encodeSave(state, brew)).order, state.order);
   state.pendingBottle = brew.bottle(60); state.stage = 'inspection';

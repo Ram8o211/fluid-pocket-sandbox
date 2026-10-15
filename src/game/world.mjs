@@ -29,7 +29,7 @@ const INGREDIENTS = [
     lore: 'A warm mineral from the rocky bank. The pestle releases its fire; a little powder goes a long way.', effects: { fire: .9, strength: .16, acidity: .62 } },
   { id: 5, name: 'Frostcap', form: 'mushroom', shape: 'cap', icon: '🍄', color: '#91c9df', density: .95, viscosity: .17, volatility: .76, miscibility: .425, price: .073,
     lore: 'A cool mushroom growing beneath the trees. Crushing reveals a freezing essence with a trace of transformation.', effects: { freeze: .92, transformation: .28 } },
-  { id: 6, name: 'Nightshade', form: 'plant', shape: 'leaf', icon: '🍃', color: '#9981bd', density: 1.23, viscosity: .76, volatility: .52, miscibility: .79, price: .086,
+  { id: 6, name: 'Nightshade', form: 'plant', shape: 'leaf', icon: '🍃', color: '#9981bd', density: 1.23, viscosity: .76, volatility: .52, miscibility: .46, price: .086,
     lore: 'A shaded herb carrying venom and shadow magic. Gentle warmth brings its reluctant essence into water.', effects: { poison: .9, death: .62, acidity: .32 } },
   { id: 7, name: 'Mandrake', form: 'root', shape: 'root', icon: '🌱', color: '#d0ae78', density: 1.15, viscosity: .72, volatility: .34, miscibility: .43, price: .15,
     lore: 'A rare guild root carrying transformation and strength. Its gathering patch opens with the first guild reagent licence.', effects: { transformation: .95, strength: .5, poison: .16 } },
@@ -38,7 +38,7 @@ const INGREDIENTS = [
   { id: 9, name: 'Star Quartz', form: 'stone', shape: 'crystal', icon: '💎', color: '#ceb7e8', density: 1.48, viscosity: .44, volatility: .29, miscibility: .42, price: .2,
     lore: 'An unusual crystal carrying love and transformation. Grind it into a fine powder to prepare a luminous infusion.', effects: { transformation: .7, love: .64, fire: .22 } },
   { id: 10, name: 'River Chalk', form: 'stone', shape: 'stone', icon: '🪨', color: '#ded6b1', density: 1.32, viscosity: .56, volatility: .1, miscibility: .42, price: .065,
-    lore: 'A soft river stone. Crush and stir it with a little water for thick dough; abundant water and more stirring gradually thin the infusion.', effects: { strength: .12, freeze: .1 } },
+    lore: 'A caustic river stone carrying withering magic. Crush and stir into water for thick dough; abundant water and sustained stirring release its corrosive essence.', effects: { acidity: .9, strength: .12, freeze: .1 } },
   { id: 11, name: 'Mica Dust', form: 'powder', shape: 'powder', icon: '✦', color: '#c5b5d8', density: 1.22, viscosity: .61, volatility: .15, miscibility: .405, price: .075,
     lore: 'Naturally loose mineral grains collected from the bank. Stir with a little water to knead dough; abundant water and sustained stirring make a fluid infusion.', effects: { transformation: .28, love: .12, acidity: .08 } },
   { id: 12, name: 'Phoenix Sap', form: 'liquid', shape: 'water', icon: '🔥', color: '#e9914b', density: 1.08, viscosity: .4, volatility: .3, miscibility: .64, price: .24, lore: 'Golden sap tapped from a slow-growing phoenix tree. Carries fire and courage; warmth helps it blend.', effects: { fire: .88, strength: .4 } },
@@ -128,12 +128,16 @@ export function validateWorld(ingredients) {
 /** Preserve legacy recipe targets and pinned physics; only add missing metadata. */
 export function migrateIngredients(world) {
   if (!world?.ingredients) return world;
+  // The original all-liquid catalog has pinned identities and physical orders.
+  // Added garden metadata must not silently turn it into a different campaign.
+  const legacyCommissions = world.legacyCommissions || world.ingredients.filter(i => i.id <= 6)
+    .every(i => !i.form || i.form === 'liquid');
   const additions = generateWorld(world.seed).ingredients.filter(i => !world.ingredients.some(old => old.id === i.id));
   // Pre-magic worlds lack ingredientVersion; their pinned physical liquids
   // must never be replaced with the spell profile of an unrelated new herb.
   // Only the former magical garden catalogue (v3) needs innate rebalance.
   const rebalance = world.ingredientVersion === 3;
-  return { ...world, ingredientVersion: 4, ingredients: [...world.ingredients.map(ingredient => { 
+  return { ...world, ...(legacyCommissions ? { legacyCommissions: true } : {}), ingredientVersion: 4, ingredients: [...world.ingredients.map(ingredient => {
     const spec = INGREDIENTS.find(i => i.id === ingredient.id);
     const form = ingredient.form || 'liquid', liquid = form === 'liquid', powder = form === 'powder';
     const reference = makeIngredient(world.seed, spec || INGREDIENTS[0]);
@@ -143,7 +147,12 @@ export function migrateIngredients(world) {
       // Rebalance inventory/base materials from pre-awakening saves, without
       // resetting the thermal or magical state of a potion already brewing.
       if (rebalance && spec) material[key] = reference.material[key];
+      // Migrate old unmodified garden catalogs without rewriting a brew in progress.
+      if (!rebalance && world.ingredientVersion >= 4 && ingredient.id === 10 && key === 'acidity' && material.acidity < .05)
+        material.acidity = reference.material.acidity;
     }
+    if (!rebalance && world.ingredientVersion >= 4 && ingredient.id === 6 && material.miscibility > .6)
+      material.miscibility = reference.material.miscibility;
     return { ...ingredient, form, material,
       unit: ingredient.unit || (liquid ? 'ml' : 'measures'),
       solvent: ingredient.solvent ?? (ingredient.id === 1 || !ingredient.form),

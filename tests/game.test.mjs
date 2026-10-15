@@ -207,7 +207,13 @@ test('the Continue snapshot contains the latest particle positions and does not 
 });
 test('save migrations preserve progress, recover a good backup, reject corrupt and future data', () => {
   const { state, brew } = setup(); const text = encodeSave(state, brew), raw = JSON.parse(text); raw.version = 1;
-  assert.equal(decodeSave(JSON.stringify(raw)).version, SAVE_VERSION);
+  const migrated = decodeSave(JSON.stringify(raw));
+  assert.equal(migrated.version, SAVE_VERSION);
+  assert.deepEqual(migrated.order,raw.order,'the pinned all-liquid campaign keeps its active physical commission');
+  assert.equal(migrated.world.legacyCommissions,true);
+  for (const ingredient of world.ingredients) assert.equal(migrated.inventory[ingredient.id],raw.inventory[ingredient.id]);
+  assert.deepEqual(decodeSave(JSON.stringify(migrated)).order,migrated.order,'reloading does not generate a different contract');
+  assert.ok(generateOrder(migrated.world,6,migrated.equipment).requirements.length,'future grandfathered commissions remain playable');
   const store = new Map(), storage = { getItem: k => store.get(k) || null, setItem: (k, v) => store.set(k, v) };
   saveShop(storage, state, brew); state.coins = 75; saveShop(storage, state, brew);
   store.set(SAVE_KEY, '{broken'); assert.equal(loadShop(storage).state.coins, 80);
@@ -242,7 +248,7 @@ test('complete repeated commissions through physics, assessment, sale and progre
     state.pendingBottle = brew.bottle(recipe.volume);
     compilePotionId(state,state.pendingBottle,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,state.pendingBottle[k]])));
     startNegotiation(state);acceptCustomerOffer(state);const sale = completeSale(state);
-    assert.equal(sale.quality, 100); assert.ok(sale.profit > 0); assert.equal(state.completed, i + 1);
+    assert.equal(sale.quality, 100, JSON.stringify({commission:i, desired:state.order.requirements.filter(r=>r.comparison!=='maximum').map(r=>({p:r.property,target:r.target,actual:state.pendingBottle?.[r.property]})), failures:sale.hardFailures, breakdown:sale.breakdown?.filter(r=>!r.met)})); assert.ok(sale.profit > 0); assert.equal(state.completed, i + 1);
     if (i === 0) buyUpgrade(state, 0); if (i === 2) buyUpgrade(state, 2); if (i === 4) buyUpgrade(state, 4);
     nextCustomer(state);
   }
