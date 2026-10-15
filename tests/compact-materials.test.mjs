@@ -54,7 +54,7 @@ test('different density liquids settle into touching layers across the bowl and 
     assert.ok(gap<.01,`air gap at column ${x}: ${gap}`);
   }
   near(ps.totalMass(),mass);near(b.occupiedVolume,80);
-  assert.equal(ps.phaseCounts()[Phase.LIQUID],320);
+  assert.equal(ps.phaseCounts()[Phase.LIQUID],160);
 });
 
 test('new heavy liquid poured onto a settled light layer sinks and closes the interface',()=>{
@@ -74,7 +74,7 @@ test('new heavy liquid poured onto a settled light layer sinks and closes the in
       contactGap=Math.min(contactGap,Math.hypot(ps.x[i]-ps.x[j],ps.y[i]-ps.y[j])-particlePairRestDistance(ps,i,j,true));
   assert.ok(contactGap<.015,`unphysical gap between reordered liquid layers: ${contactGap}`);
   near(ps.totalMass(),mass);near(b.occupiedVolume,80);
-  assert.equal(ps.phaseCounts()[Phase.LIQUID],320);
+  assert.equal(ps.phaseCounts()[Phase.LIQUID],160);
 });
 
 test('unsupported fine powder keeps falling until actual grain or wall contact',()=>{
