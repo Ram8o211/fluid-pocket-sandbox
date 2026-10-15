@@ -139,11 +139,16 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   if (!solvent) throw new Error('A customer potion needs an available liquid solvent.');
   const candidates = ingredients.filter(i => i.id !== solvent.id &&
     !i.recoverOnly && Math.abs(i.material.miscibility - solvent.material.miscibility) < .06);
-  const possible = EFFECT_SEQUENCE.filter(key => candidates.some(i => i.material[key] >= .025));
+  // Awakening keeps only the dominant innate channel of a single reagent.
+  // A trace secondary channel cannot certify a strong customer demand.
+  const dominant = ingredient => EFFECT_PROPERTIES.reduce((best, key) =>
+    ingredient.material[key] > (best ? ingredient.material[best] : .003) ? key : best, null);
+  const specialists = key => candidates.filter(i => dominant(i) === key && i.material[key] >= .025);
+  const possible = EFFECT_SEQUENCE.filter(key => specialists(key).length);
   if (!possible.length) return generatePhysicalOrder(world, completed, equipment);
 
   const desired = possible[completed % possible.length];
-  const strongest = key => candidates.slice().sort((a, b) => b.material[key] - a.material[key])[0];
+  const strongest = key => specialists(key).sort((a, b) => b.material[key] - a.material[key])[0];
   const primary = strongest(desired);
   const linked = (COMPANIONS[desired] || []).filter(key => possible.includes(key) && strongest(key).id !== primary.id);
   const secondaryEffect = completed >= 2 && linked.length ? linked[Math.floor(rng() * linked.length)] : null;
@@ -185,7 +190,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
       weight: .4, hard: true, comparison: 'maximum' });
   }
   const storyKey = wanted.slice().sort().join('+');
-  const stories = STORIES[storyKey] || STORIES[desired];
+  const stories = STORIES[storyKey] || STORIES[wanted.join('+')] || STORIES[wanted.slice().reverse().join('+')] || STORIES[desired];
   const narrative = stories[Math.floor(rng() * stories.length)];
   const customer = { id: 'customer-' + completed, name: NAMES[Math.floor(rng() * NAMES.length)],
     role: STORY_ROLES[Math.floor(rng() * STORY_ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff),
