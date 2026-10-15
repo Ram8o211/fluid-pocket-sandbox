@@ -207,7 +207,13 @@ test('the Continue snapshot contains the latest particle positions and does not 
 });
 test('save migrations preserve progress, recover a good backup, reject corrupt and future data', () => {
   const { state, brew } = setup(); const text = encodeSave(state, brew), raw = JSON.parse(text); raw.version = 1;
-  assert.equal(decodeSave(JSON.stringify(raw)).version, SAVE_VERSION);
+  const migrated = decodeSave(JSON.stringify(raw));
+  assert.equal(migrated.version, SAVE_VERSION);
+  assert.deepEqual(migrated.order,raw.order,'the pinned all-liquid campaign keeps its active physical commission');
+  assert.equal(migrated.world.legacyCommissions,true);
+  for (const ingredient of world.ingredients) assert.equal(migrated.inventory[ingredient.id],raw.inventory[ingredient.id]);
+  assert.deepEqual(decodeSave(JSON.stringify(migrated)).order,migrated.order,'reloading does not generate a different contract');
+  assert.ok(generateOrder(migrated.world,6,migrated.equipment).requirements.length,'future grandfathered commissions remain playable');
   const store = new Map(), storage = { getItem: k => store.get(k) || null, setItem: (k, v) => store.set(k, v) };
   saveShop(storage, state, brew); state.coins = 75; saveShop(storage, state, brew);
   store.set(SAVE_KEY, '{broken'); assert.equal(loadShop(storage).state.coins, 80);

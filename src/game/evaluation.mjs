@@ -1,5 +1,31 @@
 import { clamp, hexToRgb } from '../simulation/math.mjs';
 import { PACKAGING_COST } from './contracts.mjs';
+import { EFFECT_PROPERTIES } from './effects.mjs';
+import { propertyDescription } from './potion.mjs';
+
+export const UNWANTED_EFFECT_MAX = .012;
+// Only absorb arithmetic roundoff at an inclusive boundary, never a visible
+// fraction of a percentage point (1.20001% is already outside the limit).
+const BOUNDARY_EPSILON = 1e-12;
+
+export function requirementBounds(requirement) {
+  const target = Number(requirement.target);
+  return {
+    minimum: requirement.comparison === 'maximum' ? 0
+      : Math.max(target - requirement.tolerance, requirement.minimum ?? -Infinity),
+    maximum: target + requirement.tolerance
+  };
+}
+
+/** Shared by the request card, details sheet and persisted target descriptions. */
+export function requirementDescription(requirement) {
+  if (!EFFECT_PROPERTIES.includes(requirement.property))
+    return propertyDescription(requirement.property, requirement.target);
+  const { minimum, maximum } = requirementBounds(requirement);
+  const percent = value => (value * 100).toFixed(1);
+  return requirement.comparison === 'maximum' ? `At most ${percent(maximum)}%`
+    : `${percent(Math.max(0, minimum))}–${percent(Math.min(1, maximum))}% · aim ${percent(requirement.target)}%`;
+}
 
 export function propertyError(property, actual, target) {
   if (property === 'color') {
@@ -23,11 +49,14 @@ export function assessPotion(sample, order) {
     return { quality: 0, quantityRatio: 0, acceptable: false, breakdown: [], hardFailures: [] };
   const breakdown = order.requirements.map(r => {
     const actual = sample[r.property], error = r.comparison === 'maximum' ? Math.max(0, actual - r.target) : propertyError(r.property, actual, r.target);
-    return { ...r, actual, error, similarity: toleranceSimilarity(error, r.tolerance), met: error <= r.tolerance };
+    const bounds = requirementBounds(r);
+    const met = r.property === 'color' ? error <= r.tolerance + BOUNDARY_EPSILON
+      : Number.isFinite(actual) && actual >= bounds.minimum - BOUNDARY_EPSILON && actual <= bounds.maximum + BOUNDARY_EPSILON;
+    return { ...r, actual, error, similarity: toleranceSimilarity(error, r.tolerance), met };
   });
   const weight = breakdown.reduce((s, r) => s + r.weight, 0);
   const match = breakdown.reduce((s, r) => s + r.weight * r.similarity, 0) / Math.max(.001, weight);
-  const hardFailures = breakdown.filter(r => r.hard && !r.met || r.minimum !== undefined && (!Number.isFinite(r.actual) || r.actual < r.minimum)).map(r => r.property);
+  const hardFailures = breakdown.filter(r => r.hard && !r.met || r.minimum !== undefined && (!Number.isFinite(r.actual) || r.actual < r.minimum - BOUNDARY_EPSILON)).map(r => r.property);
   const quantityRatio = clamp(sample.volume / order.volume, 0, 1);
   const quality = Math.round(1000 * match * quantityRatio * clamp(sample.liquidFraction, 0, 1) * (hardFailures.length ? .35 : 1)) / 10;
   return { quality, quantityRatio, acceptable: quality >= 25 && quantityRatio >= .5 && !hardFailures.length, breakdown, hardFailures };

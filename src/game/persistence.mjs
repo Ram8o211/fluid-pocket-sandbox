@@ -52,7 +52,7 @@ export function migrateSave(raw) {
     raw = { ...raw, world: migrateIngredients(raw.world) };
   // Switch an untouched commission to the effects concept without replacing an
   // in-progress brew, bottled potion, inventory, or completed customer sale.
-  if (raw.mode === 'shop' && raw.order?.conceptVersion !== 3 && raw.stage === 'brewing' && !raw.pendingBottle && !raw.brew?.count && raw.world?.ingredients?.length)
+  if (raw.mode === 'shop' && !raw.world?.legacyCommissions && raw.order?.conceptVersion !== 3 && raw.stage === 'brewing' && !raw.pendingBottle && !raw.brew?.count && raw.world?.ingredients?.length)
     raw = { ...raw, order: generateOrder(raw.world, raw.completed, raw.equipment) };
   raw = { ...raw, experiments: migrateRabbitColony(raw.experiments || createExperimentState(), Date.now()) };
   raw.discoveries = (raw.discoveries || []).map(discovery => discovery.tested === undefined ? { ...discovery,

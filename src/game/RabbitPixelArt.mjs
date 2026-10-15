@@ -1,4 +1,5 @@
 import { RABBIT_THRESHOLDS } from './rabbits.mjs';
+import { rabbitSprite, rabbitArtworkVersion } from './RabbitAssets.mjs';
 
 const clamp = value => Math.max(0, Math.min(1, Number(value) || 0));
 // A perceptual curve makes the first dilute dose legible. Exposure, damage and
@@ -82,7 +83,7 @@ export function drawPixelRabbit(ctx, rabbit, x, floor, size, time = 0, options =
   if (!ctx || !rabbit) return;
   if (typeof OffscreenCanvas === 'undefined') return drawRabbitPixels(ctx, rabbit, x, floor, size, time, options);
   const now = options.now ?? Date.now(), frame = rabbit.stats?.alive === false || options.reference ? 0 : Math.floor(time / 180) % 24;
-  const key = JSON.stringify([rabbit.id, rabbit.age, rabbit.stats?.growth, rabbit.stats?.alive,
+  const key = JSON.stringify([rabbitArtworkVersion(), rabbit.id, rabbit.age, rabbit.stats?.growth, rabbit.stats?.alive,
     rabbit.mutation?.seed, rabbit.deathAppearance, rabbit.dangerous, rabbit.aggression,
     rabbit.exposure, Number(rabbit.activeFireUntil) > now, options.selected, options.cullMode, options.activity, options.gait, options.hop, frame]);
   let sprite = sprites.get(key);
@@ -148,7 +149,13 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   const ear1 = Math.round((baby ? 11 : 15) + morph * (rand(2) * 18 - 4));
   const ear2 = Math.round((baby ? 10 : 14) + morph * (rand(3) * 20 - 5));
   const tucked = alive && options.gait === 1 ? 3 : 0;
-  silhouette(ctx,[
+  const sprite = rabbitSprite(rabbit, poison, frost, death, charred);
+  if (sprite) {
+    const height = Math.max(1, -y(-45 - muscle * 8) - (grazing ? 4 : sniffing ? 1 : 0));
+    ctx.drawImage(sprite, Math.round((-27 - muscle * 9) * erosion), -height,
+      Math.round((54 + muscle * 18) * erosion), height);
+  } else {
+    silhouette(ctx,[
     [-22-muscle*3,y(-13),4+morph*3,Math.max(2,y(5))],
     [-5,back,(15+muscle*4)*erosion,Math.max(3,y(10+muscle*4))],
     [-12-muscle*2,y(-11-muscle*3),haunch,Math.max(3,y(10+muscle*7))],
@@ -163,6 +170,7 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   rect(ctx,-12,y(-9),2,3,palette[2]);
   rect(ctx, -19 - muscle * 3, -2, 17 + muscle * 7, 3, palette[3]); rect(ctx, -17 - muscle * 3, -2, 14 + muscle * 7, 2, palette[0]);
   rect(ctx, 10 + muscle * 3 - tucked, -2-tucked, 11 + muscle * 4, 3, palette[3]); rect(ctx, 11 + muscle * 3 - tucked, -2-tucked, 9 + muscle * 4, 2, palette[0]);
+  }
   if (muscle) {
     rect(ctx, -13 - muscle * 2, y(-13 - muscle * 5), 1, 4 + muscle * 3, palette[3]);
     rect(ctx, 8 + muscle * 3, y(-18 - muscle * 4), 1, 4 + muscle * 4, palette[3]);
@@ -189,19 +197,23 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
     if (morph > .5) { rect(ctx, -1, y(-13), 3, 12 + morph * 8, '#9b77ac'); rect(ctx, -3, -1, 6, 2, '#d4b5cb'); }
   }
   // Pink interiors, bright cheeks and a quiet muzzle finish the clean silhouette.
+  if (!sprite) {
   rect(ctx, headX - 2, headY - ear1 + 2, 2, ear1 - 5, frost ? '#c3edfa' : '#cf9794');
   rect(ctx, headX - 3, headY - ear1 - 1, 3, 1, palette[0]);
   rect(ctx, headX+2,headY+2,7,2,palette[0]);
+  }
   if (love) rect(ctx, headX + 1, headY + 3, 3 + love * 2, 2, angry ? '#c26069' : '#eea7b0');
   const eye = angry ? '#e96565' : death > .6 ? '#c4b6cd' : '#252635';
   if (alive && (grazing || Math.floor(time/180)%24===20)) rect(ctx,headX+2,headY-2,3,1,eye);
-  else if (alive) {
+  else if (alive && (!sprite || angry || death > .6)) {
     rect(ctx, headX + 2, headY - 3, 2 + morph * 2, 3, eye);
     rect(ctx, headX + 2, headY - 3, 1, 1, '#fff4da');
-  } else { rect(ctx, headX + 2, headY, 3, 1, '#3a303c'); }
+  } else if (!alive) { rect(ctx, headX + 2, headY, 3, 1, '#3a303c'); }
+  if (!sprite) {
   rect(ctx, headX + 10, headY + 2, 2, 2, angry ? '#843e52' : '#ae777a');
   rect(ctx, headX + 7, headY + 5, 2, 1, palette[3]);
   rect(ctx, headX + 9, headY + 6, 5, 1, palette[0]);
+  }
   if (morph) { rect(ctx, headX - 1, headY - 9, 2 + morph * 3, 3 + morph * 4, '#b794c6'); }
   if (frost) { spark(ctx, headX - 3, headY - ear1 + 4, '#e6fbff'); rect(ctx, -10, -2, 3 + frost * 10, 2, '#a5d9e6'); }
   if (poison) { rect(ctx, headX + 4, headY + 6, 2, 4 + poison * 3, '#88b76b'); spark(ctx, -25, -21, '#b4d883', 1); }

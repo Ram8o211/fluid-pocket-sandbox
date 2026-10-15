@@ -1,9 +1,11 @@
 import { mulberry32 } from '../materials/MaterialGenerator.mjs';
 import { availableIngredients, seedNumber } from './world.mjs';
 import { BrewingSession } from './brewing.mjs';
-import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
+import { CAPACITY_ML, FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { propertyDescription } from './potion.mjs';
-import { describeEffects, EFFECT_PROPERTIES, EFFECT_DEFINITIONS } from './effects.mjs';
+import { describeEffects, EFFECT_PROPERTIES } from './effects.mjs';
+import { requirementDescription, UNWANTED_EFFECT_MAX } from './evaluation.mjs';
+import { arcaneRecipe } from '../simulation/ArcaneSolver.mjs';
 
 const NAMES = ['Mira', 'Oswin', 'Rowan', 'Elara', 'Bram', 'Sylvie', 'Aldric', 'Tamsin', 'Fern', 'Corin', 'Nessa', 'Hugo'];
 const ROLES = ['wandering bard', 'forest keeper', 'village knight', 'moon scholar', 'herbalist', 'castle cook'];
@@ -15,7 +17,14 @@ export function simulateWitness(world, recipe, equipment = {}) {
   const brew = new BrewingSession(world.ingredients, equipment);
   try {
     const stock = Object.fromEntries(world.ingredients.map(i => [i.id, 10000]));
-    for (const portion of recipe.portions) brew.pour(portion.ingredientId, portion.ml, stock, { crushed: Boolean(portion.crushed) });
+    const obtainable = availableIngredients(world, equipment).filter(i => !i.recoverOnly);
+    for (const portion of recipe.portions) {
+      if (!obtainable.some(i => i.id === portion.ingredientId))
+        throw new Error('A commission witness cannot use a locked or recovery-only ingredient.');
+      const poured = brew.pour(portion.ingredientId, portion.ml, stock, { crushed: Boolean(portion.crushed) });
+      if (Math.abs(poured - portion.ml) > 1e-6 || !(poured > 0))
+        throw new Error('A commission witness must fit every full portion in the unlocked cauldron.');
+    }
     for (let tick = 0; tick < recipe.ticks; tick++) {
       brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0);
       if (recipe.stir && tick > 20) brew.assistStir(FIXED_STEP);
@@ -31,7 +40,7 @@ export function simulateWitness(world, recipe, equipment = {}) {
 
 function generatePhysicalOrder(world, completed = 0, equipment = {}) {
   const rng = mulberry32(seedNumber(`${world.seed}:order:${completed}`));
-  const ingredients = availableIngredients(world, equipment), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
+  const ingredients = availableIngredients(world, equipment).filter(i => !i.recoverOnly), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
   const liquids = ingredients.filter(i => !i.form || i.form === 'liquid');
   const solvent = liquids.find(i => i.solvent) || liquids[0];
   if (!solvent) throw new Error('A customer potion needs an available liquid solvent.');
@@ -66,11 +75,10 @@ function generatePhysicalOrder(world, completed = 0, equipment = {}) {
   const unique = [...new Set(properties)];
   const requirements = unique.map((property, i) => ({ property, target: sample[property], tolerance: PROPERTIES[property].tolerance * (difficulty === 1 ? 1.2 : 1), weight: i === 0 ? 1.3 : 1, hard: property === 'temperature' && difficulty >= 3 }));
   const customer = { id: `customer-${completed}`, name: NAMES[Math.floor(rng() * NAMES.length)], role: ROLES[Math.floor(rng() * ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff), dialogue: `A potion ${PURPOSES[Math.floor(rng() * PURPOSES.length)]}, please. A careful brew is worth its weight in gold.` };
-  const sources = recipe.portions.map(p => world.ingredients.find(i => i.id === p.ingredientId).name);
   return {
     id: `${world.seed}-${completed}`, customer, requirements, volume, difficulty,
     budget: Math.round(43 + difficulty * 14 + rng() * 8), witness: recipe,
-    clue: completed === 0 ? `Your first commission: pour ${volume} ml of ${sources[0]}. Three 20 ml pours will do.` : `I like the character of ${sources.join(' with ')}.${recipe.crush ? ' Crush the raw ingredient, then stir it into the water to extract its properties.' : ''}${recipe.heat ? ' Gently warmed, please.' : recipe.cool ? ' A brief touch of frost would be lovely.' : ' A calm, well-mixed brew would suit me.'}`,
+    clue: 'Compare the known ingredient properties with the request. Test a spare dose before sealing the requested quantity.',
     targetDescriptions: Object.fromEntries(requirements.map(r => [r.property, propertyDescription(r.property, r.target)]))
   };
 }
@@ -84,7 +92,7 @@ const COMPANIONS = Object.freeze({
   fire: ['love', 'strength'], acidity: ['poison', 'transformation'],
   poison: ['transformation', 'acidity', 'death'], death: ['poison', 'transformation']
 });
-const STORIES = Object.freeze({
+export const CUSTOMER_SCENARIOS = Object.freeze({
   strength: ['The mountain rescue team needs strength to carry the stranded villagers home.',
     'My apprentice must lift the fallen forge gate before the river rises.'],
   love: ['The estranged siblings at the inn want to reconcile before winter.',
@@ -130,11 +138,14 @@ const STORY_ROLES = Object.freeze(['village healer', 'forest ranger', 'guild mes
   'travelling trader', 'village elder', 'watch captain', 'wandering scholar', 'farm steward', 'mountain scout']);
 const ORDER_CACHE = new Map();
 const SIDE_EFFECT_TARGET = .009;
-const SIDE_EFFECT_TOLERANCE = .003; // Actual hard ceiling: 1.2%, never 2%+.
+const SIDE_EFFECT_TOLERANCE = UNWANTED_EFFECT_MAX - SIDE_EFFECT_TARGET;
+const scenarioKey = wanted => Object.keys(CUSTOMER_SCENARIOS).find(key =>
+  key.split('+').sort().join('+') === wanted.slice().sort().join('+'));
 
 /** The client sees only goals, not the recipe. Reference brews are real particle
  * simulations and must meet the same limits before an order is offered. */
 export function generateOrder(world, completed = 0, equipment = {}) {
+  if (world.legacyCommissions) return generatePhysicalOrder(world, completed, equipment);
   const ingredients = availableIngredients(world, equipment);
   if (!ingredients.some(i => EFFECT_PROPERTIES.some(key => i.material[key] > .01)))
     return generatePhysicalOrder(world, completed, equipment);
@@ -153,9 +164,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
 
   // Scenario search runs full physics. Cache only identical catalogs and
   // equipment; callers receive fresh objects so save edits never mutate the cache.
-  const cacheKey = JSON.stringify([world.seed, completed, equipment,
-    candidates.map(i => [i.id, i.material.miscibility, i.material.arcaneThreshold,
-      ...EFFECT_PROPERTIES.map(k => i.material[k])])]);
+  const cacheKey = JSON.stringify([world, completed, equipment, typeof globalThis.b2World === 'function']);
   if (ORDER_CACHE.has(cacheKey)) return structuredClone(ORDER_CACHE.get(cacheKey));
   const desired = possible[completed % possible.length];
   const strongest = key => specialists(key).sort((a, b) => b.material[key] - a.material[key])[0];
@@ -164,20 +173,23 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const secondaryEffect = completed >= 2 && linked.length ? linked[Math.floor(rng() * linked.length)] : null;
   const difficulty = Math.min(4, 1 + Math.floor(completed / 3));
   const volume = completed === 0 ? 60 : difficulty < 3 ? 80 : 100;
-  const cauldronCapacity = [200, 320, 440][Math.max(0, Math.min(2, equipment.cauldron || 0))];
+  const cauldronCapacity = CAPACITY_ML[Math.max(0, Math.min(2, equipment.cauldron || 0))];
   const targetBand = completed < 6 ? [.08, .15] : completed < 12 ? [.16, .3] : [.20, .55];
   // Preserve varied, themed two-effect orders whenever an actual reference
   // infusion proves feasible. Never request concentrations the witness lacks.
   const plans = [
-    ...(secondaryEffect ? [secondaryEffect, ...linked.filter(k => k !== secondaryEffect)].map(key => [desired, key]) : []),
+    ...(secondaryEffect ? [secondaryEffect, ...linked.filter(k => k !== secondaryEffect)]
+      .map(key => [desired, key]).filter(keys => scenarioKey(keys)) : []),
     [desired],
     ...possible.filter(key => key !== desired).map(key => [key])
   ];
   let choice = null;
   for (const keys of plans) {
     const count = keys.length;
-    const intended = completed < 6 ? 15 : completed < 12 ? 38 : count === 1 ? 66 : 42;
-    const each = Math.max(10, Math.min(intended, Math.floor((cauldronCapacity - volume - 16) / count)));
+    const intended = completed < 6 ? 15 : completed < 12 ? 40 : count === 1 ? 65 : 40;
+    // All reference portions can be entered with the player's 5/10/20/40 controls
+    // and fit obtainable ingredient jars, including before capacity upgrades.
+    const each = Math.max(10, Math.min(intended, Math.floor((cauldronCapacity - volume - 15) / count / 5) * 5));
     const portion = ingredient => ({
       ingredientId: ingredient.id, ml: each,
       crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form))
@@ -189,18 +201,24 @@ export function generateOrder(world, completed = 0, equipment = {}) {
       heat: .7, cool: 0, reserveTrial: true, stir: true,
       crush: parts.some(ingredient => ingredient.crushable)
     };
+    // Include the solvent in the exact same signed, proportion-weighted rule
+    // used by live mixtures; opposite runes can change the required direction.
+    const activation = arcaneRecipe(recipe.portions.map(portion => {
+      const material = ingredients.find(i => i.id === portion.ingredientId).material;
+      return { amount:portion.ml, threshold:material.arcaneThreshold, effects:material };
+    }));
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt) {
         recipe.ticks += 160;
         recipe.thermalTicks += 130;
-        recipe.heat = parts.every(i => i.material.arcaneThreshold < 0) ? 0 : .7;
+        recipe.heat = activation.threshold < 0 ? 0 : 1;
         recipe.cool = recipe.heat ? 0 : .7;
       }
       let sample;
       try { sample = simulateWitness(world, recipe, equipment); } catch { continue; }
       if (sample.volume < volume - .001 || sample.liquidFraction < .98) continue;
       if (keys.some(key => sample[key] < targetBand[0] || sample[key] > targetBand[1])) continue;
-      if (EFFECT_PROPERTIES.some(key => !keys.includes(key) && sample[key] > SIDE_EFFECT_TARGET + SIDE_EFFECT_TOLERANCE)) continue;
+      if (EFFECT_PROPERTIES.some(key => !keys.includes(key) && sample[key] > UNWANTED_EFFECT_MAX)) continue;
       choice = { wanted: keys, recipe: { ...recipe, portions: recipe.portions.map(p => ({...p})) }, sample };
       break;
     }
@@ -210,8 +228,8 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const { wanted, recipe, sample } = choice;
   /** @type {import('./contracts.mjs').Requirement[]} */
   const requirements = wanted.map(property => ({
-    property, target: sample[property], tolerance: .02, weight: 3, hard: false,
-    minimum: Math.max(0, sample[property] - .02),
+    property, target: Math.floor(sample[property] * 1000) / 1000, tolerance: .02, weight: 3, hard: false,
+    minimum: Math.max(targetBand[0], Math.floor(sample[property] * 1000 - 20) / 1000),
     comparison: 'target'
   }));
   for (const property of EFFECT_PROPERTIES) {
@@ -219,18 +237,15 @@ export function generateOrder(world, completed = 0, equipment = {}) {
     requirements.push({ property, target: SIDE_EFFECT_TARGET, tolerance: SIDE_EFFECT_TOLERANCE,
       weight: .4, hard: true, comparison: 'maximum' });
   }
-  const storyKey = wanted.slice().sort().join('+');
-  const stories = STORIES[storyKey] || STORIES[wanted.join('+')] || STORIES[wanted.slice().reverse().join('+')] || STORIES[wanted[0]];
+  const storyKey = scenarioKey(wanted), stories = CUSTOMER_SCENARIOS[storyKey];
   const narrative = stories[Math.floor(rng() * stories.length)];
   const customer = { id: 'customer-' + completed, name: NAMES[Math.floor(rng() * NAMES.length)],
     role: STORY_ROLES[Math.floor(rng() * STORY_ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff),
     dialogue: narrative + ' I need a reliable potion, with no dangerous side effects.' };
   const clue = 'Study the known garden essences and their activation temperatures. Test a spare dose on your familiars, then write your potion ID from their response.';
-  const order = { id: world.seed + '-' + completed, conceptVersion: 3, customer, requirements, volume, difficulty,
+  const order = { id: world.seed + '-' + completed, conceptVersion: 3, scenarioKey: storyKey, customer, requirements, volume, difficulty,
     budget: Math.round(43 + difficulty * 14 + wanted.length * 6 + rng() * 8), witness: recipe, clue,
-    targetDescriptions: Object.fromEntries(requirements.map(r => [r.property,
-      r.comparison === 'maximum' ? 'At most 1.2% ' + EFFECT_DEFINITIONS[r.property].label.toLowerCase()
-        : propertyDescription(r.property, r.target)])) };
+    targetDescriptions: Object.fromEntries(requirements.map(r => [r.property, requirementDescription(r)])) };
   if (ORDER_CACHE.size >= 96) ORDER_CACHE.delete(ORDER_CACHE.keys().next().value);
   ORDER_CACHE.set(cacheKey, order);
   return structuredClone(order);

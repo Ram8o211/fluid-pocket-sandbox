@@ -1,5 +1,6 @@
 import { drawPixelRabbit as drawRabbit } from './RabbitPixelArt.mjs';
 import { rabbitColonyPoses } from './RabbitMotion.mjs';
+import { rabbitArtworkVersion } from './RabbitAssets.mjs';
 // Rabbit anatomy is drawn from the accumulated dose, rather than choosing a
 // sprite for the most recent potion. Every mark and mutation has a stable seed.
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -54,7 +55,7 @@ export class RabbitColonyRenderer {
     if (!paused && this.paused) this.motionOffset+=Date.now()-this.pausedAt;
     const clock = paused ? this.frozenClock : time;
     this.paused = paused; this.lastClock = clock;
-    const signature = `${selectedId}:${cullMode}:${paused}:${rabbits.map(rabbit => `${rabbit.id}:${rabbit.location}:${rabbit.age}:${rabbit.stats?.health}:${rabbit.stats?.doseCount}:${rabbit.stats?.alive}:${rabbit.dangerous}:${Object.values(rabbit.exposure || {}).join(',')}`).join('|')}`;
+    const signature = `${rabbitArtworkVersion()}:${selectedId}:${cullMode}:${paused}:${rabbits.map(rabbit => `${rabbit.id}:${rabbit.location}:${rabbit.age}:${rabbit.stats?.health}:${rabbit.stats?.doseCount}:${rabbit.stats?.alive}:${rabbit.dangerous}:${Object.values(rabbit.exposure || {}).join(',')}`).join('|')}`;
     if (signature === this.signature && (paused || time - this.lastPaint < 32)) return;
     this.signature = signature; this.lastPaint = time; this.targets = [];
     const ctx = this.ctx; ctx.save(); ctx.setTransform(this.canvas.width / 640, 0, 0, this.canvas.height / 350, 0, 0);

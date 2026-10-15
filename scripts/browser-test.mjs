@@ -56,32 +56,34 @@ async function pourRecipe(recipe){
     await page.waitForTimeout(ticks * 25 + 150);
     if (recipe.stir) await page.mouse.up();
   };
-  let presetHeat = 0;
-  const setFlame = async power => {
+  const presets = { heat:0, cool:0 };
+  const setPower = async (kind,power) => {
     const current = await readSave();
     if (!current.equipment.furnace) {
       // Before the furnace upgrade the player has four preset flame levels,
       // not a slider. Follow those same controls in browser acceptance.
       const levels = [0, .35, .7, 1];
-      const active = presetHeat;
+      const active = presets[kind];
       const nearest = x => levels.reduce((best, n) => Math.abs(n - x) < Math.abs(best - x) ? n : best, 0);
       const from = levels.indexOf(nearest(active)), to = levels.indexOf(nearest(power));
       for (let n = 0; n < (to - from + levels.length) % levels.length; n++)
-        await page.locator('#heatBtn').click();
-      presetHeat = levels[to];
+        await page.locator(kind==='heat'?'#heatBtn':'#coolBtn').click();
+      presets[kind] = levels[to];
+      if(power) presets[kind==='heat'?'cool':'heat']=0;
       return;
     }
-    await page.locator('#heatBtn').click();
+    await page.locator(kind==='heat'?'#heatBtn':'#coolBtn').click();
     await page.locator('#thermalPower').evaluate((el, value) => {
       el.value = String(Math.round(value * 100));
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }, power);
     await page.locator('[data-action="close"]').click();
   };
-  if(recipe.heat && recipe.thermalTicks) {
-    await setFlame(recipe.heat);
+  if((recipe.heat || recipe.cool) && recipe.thermalTicks) {
+    const kind=recipe.heat?'heat':'cool';
+    await setPower(kind,recipe[kind]);
     await stirFor(recipe.thermalTicks);
-    await setFlame(0);
+    await setPower(kind,0);
     await stirFor(recipe.ticks - recipe.thermalTicks);
   } else await stirFor(recipe.ticks);
 }
@@ -126,6 +128,8 @@ async function brewAndSell(state,subject){
   assert.ok((await readSave()).negotiation.offer>offer);
   await screenshot('bargaining');await page.locator('[data-action="accept-offer"]').click();
   const sold=await readSave();assert.equal(sold.completed,state.completed+1);assert.ok(sold.deliveries.length>0);assert.equal(sold.pendingBottle,null);
+  assert.equal(sold.lastSale.acceptable,true,'the real customer loop must satisfy mandatory magical constraints');
+  assert.equal(sold.deliveries[0].genuine,false,'a correctly prepared commission must not cause a genuine complaint');
   await screenshot('negotiated-delivery');await page.locator('[data-action="next"]').click();
   await page.waitForSelector('body[data-game-state="brewing"]');
 }
@@ -140,6 +144,29 @@ try{
   page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400)failedResponses.push(r.url());});
   await page.goto(base);await page.waitForSelector('body[data-game-ready="true"]');
   assert.equal(await page.evaluate(()=>typeof b2World),'function','official LiquidFun must be loaded by the browser');
+  // Validate advanced and unupgraded commissions in the actual browser engine,
+  // independently of Node's fallback solver. No player save is written here.
+  for (const completed of [0,6,12]) {
+    const proof = await page.evaluate(async completed => {
+      const {generateWorld,availableIngredients}=await import('./src/game/world.mjs');
+      const {generateOrder,simulateWitness}=await import('./src/game/orders.mjs');
+      const {assessPotion}=await import('./src/game/evaluation.mjs');
+      const {EFFECT_PROPERTIES}=await import('./src/game/effects.mjs');
+      const equipment=completed<12?{}:{cauldron:2,reagents:3,furnace:1},world=generateWorld('native-milestone');
+      const order=generateOrder(world,completed,equipment),sample=simulateWitness(world,order.witness,equipment);
+      const wanted=order.requirements.filter(r=>r.comparison==='target');
+      const repeat=simulateWitness(world,order.witness,equipment);
+      return {quality:assessPotion(sample,order).quality,deterministic:['mass','volume','temperature',...EFFECT_PROPERTIES].every(key=>Math.abs(sample[key]-repeat[key])<1e-10),targets:wanted.map(r=>r.target),
+        minimums:wanted.map(r=>r.minimum),obtainable:order.witness.portions.every(p=>p.ml%5===0&&availableIngredients(world,equipment).some(i=>i.id===p.ingredientId&&!i.recoverOnly)),
+        limits:order.requirements.filter(r=>r.comparison==='maximum').map(r=>r.target+r.tolerance)};
+    },completed);
+    assert.equal(proof.quality,100,`native witness for commission ${completed+1}`);
+    assert.equal(proof.deterministic,true,'identical native brews repeat their physical and magical results');
+    assert.equal(proof.obtainable,true);
+    assert.ok(proof.limits.every(limit=>Math.abs(limit-.012)<1e-12));
+    assert.ok(proof.targets.every(target=>completed<6?target>=.08&&target<=.15:target>.15));
+    assert.ok(proof.minimums.every(minimum=>minimum>=(completed<6?.08:.16)));
+  }
   for(const viewport of [{width:320,height:568},{width:393,height:852}]){await page.setViewportSize(viewport);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));assert.ok(await page.locator('#sandboxBtn').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight));}
   await page.setViewportSize({width:393,height:852});await page.locator('#worldSeed').fill('mobile-magical-garden');await page.locator('#newWorldBtn').click();await page.waitForSelector('body[data-game-state="brewing"]');
   assert.equal(await page.locator('body').getAttribute('data-physics-engine'),'liquidfun',
@@ -151,7 +178,16 @@ try{
     assert.ok(await page.locator('#labCanvas').evaluate(e=>e.getBoundingClientRect().height>60));
   }
   await page.setViewportSize({width:393,height:852});await screenshot('mobile-workshop');
-  await room('#customerDetailsBtn');assert.match(await page.locator('#sheetContent').textContent(),/Desired enchantment/);assert.doesNotMatch(await page.locator('#sheetContent').textContent(),/Density|Texture|Acidity/);await closePanel();
+  const requirementText=await page.evaluate(async()=>{
+    const {requirementDescription}=await import('./src/game/evaluation.mjs');
+    return JSON.parse(localStorage.getItem('alchemists-shop-save')).order.requirements.map(requirementDescription);
+  });
+  assert.deepEqual(await page.locator('#requirements .req-target').allTextContents(),requirementText,'the request card uses the effective bounds');
+  await room('#customerDetailsBtn');assert.match(await page.locator('#sheetContent').textContent(),/Desired enchantment/);assert.doesNotMatch(await page.locator('#sheetContent').textContent(),/Density|Texture|Acidity/);
+  const descriptions=await page.locator('#sheetContent .mini-card').evaluateAll(cards=>cards.map(card=>card.querySelector('p').textContent));
+  assert.deepEqual(descriptions,requirementText,'the card and details sheet describe identical numeric requirements');
+  for(const ingredient of initial.world.ingredients)assert.ok(!(await page.locator('#sheetContent').textContent()).includes(ingredient.name),'a request must not reveal its private witness ingredients');
+  await closePanel();
   await room('#inventoryBtn');assert.match(await page.locator('#sheetContent').textContent(),/Strength/);assert.doesNotMatch(await page.locator('#sheetContent').textContent(),/Density|Viscosity|Chemical/);await screenshot('known-ingredients');await closePanel();
   await brewAndSell(initial,'rabbit-1');
   const beforeSecond=await readSave();if(beforeSecond.brew.count){await room('#cleanBtn');await page.locator('[data-action="confirm-clean"]').click();}
@@ -271,7 +307,9 @@ try{
     const canvas=document.createElement('canvas');canvas.width=640;canvas.height=350;const renderer=new TestingRenderer(canvas),results=[];
     for(const key of [...EFFECT_PROPERTIES,'mixed']){
       const subject=createExperimentState().rabbits[0],sample={stability:100,color:'#90c6c8',...Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,key==='mixed'?.025:k===key?.2:0]))};
-      const report={...assessRabbitEffects(sample,subject,5,Date.now()),id:key,sample};Object.assign(subject,report.afterRabbit);
+      // A production experiment report always contains its administration time.
+      // Without it the renderer receives NaN as "now" and cannot show live fire.
+      const at=Date.now(),report={...assessRabbitEffects(sample,subject,5,at),id:key,sample,at};Object.assign(subject,report.afterRabbit);
       renderer.render(subject,report,1000);renderer.render(subject,report,2500,true);
       const baseline=canvas.getContext('2d').getImageData(0,0,640,350).data;
       renderer.render(subject,report,2500,false);const pixels=canvas.getContext('2d').getImageData(0,0,640,350).data;let changed=0;

@@ -6,6 +6,8 @@ on:
       - 'scripts/rabbit-browser-test.mjs'
       - 'public/game.css'
       - 'public/toon.css'
+      - 'public/rabbit-trials.css'
+      - 'public/assets/rabbit-trials/**'
       - 'public/fonts/**'
       - 'tests/rabbit-recovery-motion.test.mjs'
       - '.github/workflows/rabbit-trials.yml'

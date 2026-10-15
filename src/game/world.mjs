@@ -128,12 +128,16 @@ export function validateWorld(ingredients) {
 /** Preserve legacy recipe targets and pinned physics; only add missing metadata. */
 export function migrateIngredients(world) {
   if (!world?.ingredients) return world;
+  // The original all-liquid catalog has pinned identities and physical orders.
+  // Added garden metadata must not silently turn it into a different campaign.
+  const legacyCommissions = world.legacyCommissions || world.ingredients.filter(i => i.id <= 6)
+    .every(i => !i.form || i.form === 'liquid');
   const additions = generateWorld(world.seed).ingredients.filter(i => !world.ingredients.some(old => old.id === i.id));
   // Pre-magic worlds lack ingredientVersion; their pinned physical liquids
   // must never be replaced with the spell profile of an unrelated new herb.
   // Only the former magical garden catalogue (v3) needs innate rebalance.
   const rebalance = world.ingredientVersion === 3;
-  return { ...world, ingredientVersion: 4, ingredients: [...world.ingredients.map(ingredient => { 
+  return { ...world, ...(legacyCommissions ? { legacyCommissions: true } : {}), ingredientVersion: 4, ingredients: [...world.ingredients.map(ingredient => {
     const spec = INGREDIENTS.find(i => i.id === ingredient.id);
     const form = ingredient.form || 'liquid', liquid = form === 'liquid', powder = form === 'powder';
     const reference = makeIngredient(world.seed, spec || INGREDIENTS[0]);

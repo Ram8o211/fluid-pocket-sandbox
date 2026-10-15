@@ -43,9 +43,12 @@ test('unwanted effect limits reward lower concentrations and requested effects d
   assert.equal(ideal.quality, 100);
   assert.equal(priceSale({ ...sample, poison: 0 }, state.order).quality, 100);
   assert.equal(priceSale({ ...sample, poison: .9 }, state.order).acceptable, false);
-  const wanted = state.order.requirements.find(r => r.comparison === 'target').property;
-  const near = priceSale({ ...sample, [wanted]: sample[wanted] * .85 }, state.order);
-  const far = priceSale({ ...sample, [wanted]: sample[wanted] * .5 }, state.order);
+  const requirement = state.order.requirements.find(r => r.comparison === 'target'), wanted = requirement.property;
+  // A near miss stays above the real mandatory minimum. The former 85% of
+  // target could already fail it, correctly making both understrength vials 0.
+  const near = priceSale({ ...sample, [wanted]: (requirement.target + requirement.minimum) / 2 }, state.order);
+  const far = priceSale({ ...sample, [wanted]: requirement.minimum / 2 }, state.order);
+  assert.equal(near.acceptable, true); assert.equal(far.acceptable, false);
   assert.ok(ideal.payment > near.payment && near.payment > far.payment);
 });
 
