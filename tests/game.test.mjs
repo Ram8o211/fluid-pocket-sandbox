@@ -242,7 +242,7 @@ test('complete repeated commissions through physics, assessment, sale and progre
     state.pendingBottle = brew.bottle(recipe.volume);
     compilePotionId(state,state.pendingBottle,Object.fromEntries(EFFECT_PROPERTIES.map(k=>[k,state.pendingBottle[k]])));
     startNegotiation(state);acceptCustomerOffer(state);const sale = completeSale(state);
-    assert.equal(sale.quality, 100); assert.ok(sale.profit > 0); assert.equal(state.completed, i + 1);
+    assert.equal(sale.quality, 100, JSON.stringify({commission:i, desired:state.order.requirements.filter(r=>r.comparison!=='maximum').map(r=>({p:r.property,target:r.target,actual:state.pendingBottle?.[r.property]})), failures:sale.hardFailures, breakdown:sale.breakdown?.filter(r=>!r.met)})); assert.ok(sale.profit > 0); assert.equal(state.completed, i + 1);
     if (i === 0) buyUpgrade(state, 0); if (i === 2) buyUpgrade(state, 2); if (i === 4) buyUpgrade(state, 4);
     nextCustomer(state);
   }
