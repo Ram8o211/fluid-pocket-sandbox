@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-rabbit-effects-41';
+const CACHE = 'alchemist-shop-cauldron-focus-42';
 const CORE = [
   './',
   './index.html',
@@ -126,6 +126,7 @@ const CORE = [
   './public/fonts/guild-pixel.woff',
   './public/icons/alchemist.svg',
   './src/game/main.mjs',
+  './src/game/ingredientRackFocus.mjs',
   './src/game/contracts.mjs',
   './src/game/world.mjs',
   './src/game/effects.mjs',

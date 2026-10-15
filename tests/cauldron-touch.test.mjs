@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
+import { LaboratoryRenderer, BREW_STAGE_CAMERA } from '../src/game/LaboratoryRenderer.mjs';
 
 function renderer(width,height,rect){
   const view=Object.create(LaboratoryRenderer.prototype);
@@ -11,7 +11,8 @@ test('spoon coordinates follow the visible cauldron through portrait and short-s
   for(const rect of [{left:8,top:220,width:304,height:65},{left:8,top:210,width:377,height:260},{left:308,top:260,width:664,height:300}])for(const scale of [1,2]){
     const view=renderer(384*scale,232*scale,rect);
     for(const [x,y] of [[0,-1.1],[-1.8,-.5],[1.8,-.5],[0,.9]]){
-      const canvasX=(192+x*40)*scale,canvasY=(158-y*40)*scale;
+      const canvasX=((192+x*40)*BREW_STAGE_CAMERA.zoom+BREW_STAGE_CAMERA.shiftX)*scale;
+      const canvasY=((158-y*40)*BREW_STAGE_CAMERA.zoom+BREW_STAGE_CAMERA.shiftY)*scale;
       const ratio=Math.min(rect.width/(384*scale),rect.height/(232*scale));
       const clientX=rect.left+(rect.width-384*scale*ratio)/2+canvasX*ratio;
       const clientY=rect.top+(rect.height-232*scale*ratio)/2+canvasY*ratio;
@@ -24,4 +25,12 @@ test('spoon coordinates follow the visible cauldron through portrait and short-s
 test('empty or hidden canvas geometry never produces non-finite pointer coordinates',()=>{
   const view=renderer(384,232,{left:0,top:0,width:0,height:0});
   const point=view.screenToWorld(0,0);assert.ok(Number.isFinite(point.x)&&Number.isFinite(point.y));
+});
+
+test('the enlarged cauldron handles and heat source fit within the frame', () => {
+  const { zoom, shiftX, shiftY } = BREW_STAGE_CAMERA;
+  const x = p => p * zoom + shiftX;
+  const y = p => p * zoom + shiftY;
+  assert.ok(x(54) >= 0 && x(330) <= 384 && y(73) >= 0 && y(235) <= 232);
+  assert.ok(x(330) - x(54) > 320, 'the copper vessel should dominate the canvas');
 });

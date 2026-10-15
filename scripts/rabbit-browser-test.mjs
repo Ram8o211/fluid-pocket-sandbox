@@ -304,6 +304,11 @@ try {
     await mobile.locator('#sandboxBtn').tap();
     await mobile.waitForSelector('body[data-game-state="brewing"]');
     await mobile.clock.install();
+    // Short portrait screens put ingredient cards behind the visible picker so
+    // the brewing vessel can take up the primary touch region.
+    if (!(await mobile.locator('#ingredientRack').isVisible())) {
+      await mobile.locator('#ingredientRackToggle').tap();
+    }
     await mobile.locator('[data-ingredient="12"]').tap();
     await mobile.locator('[data-dose="10"]').tap();
     await mobile.locator('#pourBtn').tap();

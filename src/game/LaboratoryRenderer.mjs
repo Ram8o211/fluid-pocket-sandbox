@@ -8,6 +8,8 @@ import { paintMaterialParticles } from './MaterialRaster.mjs';
 import { FluidSurfaceGPU } from './FluidSurfaceGPU.mjs';
 
 const MAGIC_GLOW_LIMIT = 160;
+// Presentation-only cauldron zoom. Physics and collision boundaries are unchanged.
+export const BREW_STAGE_CAMERA = Object.freeze({ zoom: 1.2, shiftX: -38.4, shiftY: -57 });
 
 // Reuses the existing planar renderer's particle colours, effects and picking
 // contract. The laboratory is a low-resolution, pixel-scaled 2D canvas only.
@@ -35,19 +37,30 @@ export class LaboratoryRenderer extends PlanarRenderer {
   }
   screenToWorld(clientX, clientY) {
     const fit = this.fittedCanvas(), t = this.transform();
-    return { x: ((clientX - fit.left) / fit.scale - t.cx) / t.scale,
-      y: -((clientY - fit.top) / fit.scale - t.cy) / t.scale, z: 0 };
+    const factor = this.canvas.width / 384, camera = BREW_STAGE_CAMERA;
+    const px = ((clientX - fit.left) / fit.scale - camera.shiftX * factor) / camera.zoom;
+    const py = ((clientY - fit.top) / fit.scale - camera.shiftY * factor) / camera.zoom;
+    return { x: (px - t.cx) / t.scale, y: -(py - t.cy) / t.scale, z: 0 };
   }
   projectWorldToScreen(x, y) {
     const fit = this.fittedCanvas(), t = this.transform();
-    return { x: fit.left + (t.cx + x * t.scale) * fit.scale,
-      y: fit.top + (t.cy - y * t.scale) * fit.scale };
+    const factor = this.canvas.width / 384, camera = BREW_STAGE_CAMERA;
+    return { x: fit.left + ((t.cx + x * t.scale) * camera.zoom + camera.shiftX * factor) * fit.scale,
+      y: fit.top + ((t.cy - y * t.scale) * camera.zoom + camera.shiftY * factor) * fit.scale };
   }
   setQuality(quality) { this.quality = quality; this.resize(); }
   render() {
     this.resize(); const ctx = this.ctx, factor = this.canvas.width / 384, t = this.transform();
     if (!ctx || !this.background) return;
-    ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1; ctx.drawImage(this.background, 0, 0, 384, 232, 0, 0, t.w, t.h);
+    // Keep the scenery stationary; enlarge walls, fluid, fire and tools together.
+    // The inverse camera above makes spoon and pestle strokes pixel-accurate.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, t.w, t.h);
+    ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1;
+    ctx.drawImage(this.background, 0, 0, 384, 232, 0, 0, t.w, t.h);
+    ctx.save();
+    ctx.translate(BREW_STAGE_CAMERA.shiftX * factor, BREW_STAGE_CAMERA.shiftY * factor);
+    ctx.scale(BREW_STAGE_CAMERA.zoom, BREW_STAGE_CAMERA.zoom);
     ctx.save(); ctx.scale(factor, factor);
     const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
     const polygon = (points, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(...points[0]); for (const p of points.slice(1)) ctx.lineTo(...p); ctx.closePath(); ctx.fill(); };
@@ -117,7 +130,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
         ctx.strokeStyle = '#e3bd85'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(-1,-3,8,11,0,Math.PI,Math.PI*1.7);ctx.stroke();ctx.restore();
       }
     }
-    ctx.restore(); this.frame++;
+    ctx.restore(); ctx.restore(); this.frame++;
   }
   getGlowSprite(colour) {
     if (!this.glowSprites) this.glowSprites = new Map();
