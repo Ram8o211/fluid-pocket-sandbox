@@ -11,7 +11,7 @@ if (toggle && rack && panel) {
   };
   toggle.addEventListener('click', () => setOpen(!panel.classList.contains('rack-expanded')));
   rack.addEventListener('click', event => {
-    if (event.target.closest('[data-ingredient]') &&
+    if (event.target instanceof Element && event.target.closest('[data-ingredient]') &&
         matchMedia('(max-width:699px) and (max-height:720px)').matches) setOpen(false);
   });
 }
