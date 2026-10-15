@@ -155,36 +155,56 @@ export function generateOrder(world, completed = 0, equipment = {}) {
   const primary = strongest(desired);
   const linked = (COMPANIONS[desired] || []).filter(key => possible.includes(key) && strongest(key).id !== primary.id);
   const secondaryEffect = completed >= 2 && linked.length ? linked[Math.floor(rng() * linked.length)] : null;
-  const secondary = secondaryEffect ? strongest(secondaryEffect) : null;
-  const wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])];
   const difficulty = Math.min(4, 1 + Math.floor(completed / 3));
   const volume = completed === 0 ? 60 : difficulty < 3 ? 80 : 100;
   const cauldronCapacity = [200, 320, 440][Math.max(0, Math.min(2, equipment.cauldron || 0))];
-  const targetBand = completed < 6 ? [.08, .15] : completed < 12 ? [.16, .3] : [.26, .65];
-  // The starting 20-measure stock is sufficient for early single or dual
-  // commissions. Later orders intentionally demand gardening and awakening.
-  const idealAmount = completed < 6 ? 15 : completed < 12 ? 38 : 90;
-  const each = Math.max(10, Math.min(idealAmount, Math.floor((cauldronCapacity - volume - 16) / wanted.length)));
-  const portion = ingredient => ({ ingredientId: ingredient.id, ml: each,
-    crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form)) });
-  const recipe = { portions: [{ ingredientId: solvent.id, ml: volume + 15 }, portion(primary),
-    ...(secondary ? [portion(secondary)] : [])], volume,
-    ticks: secondary ? 480 : 440, thermalTicks: secondary ? 375 : 340,
-    heat: .52, cool: 0, reserveTrial: true, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
-
-  let sample = simulateWitness(world, recipe, equipment);
-  // Weak, partly extracted essences may need a longer real infusion. This is
-  // never a fabricated sample and never changes the underlying magic physics.
-  if (sample.volume < volume - .001 || wanted.some(key => sample[key] < targetBand[0])) {
-    recipe.ticks += 160; recipe.thermalTicks += 130; recipe.heat = .7;
-    sample = simulateWitness(world, recipe, equipment);
+  const targetBand = completed < 6 ? [.08, .15] : completed < 12 ? [.16, .3] : [.20, .55];
+  // Preserve varied, themed two-effect orders whenever an actual reference
+  // infusion proves feasible. Never request concentrations the witness lacks.
+  const plans = [
+    ...(secondaryEffect ? [secondaryEffect, ...linked.filter(k => k !== secondaryEffect)].map(key => [desired, key]) : []),
+    [desired],
+    ...possible.filter(key => key !== desired).map(key => [key])
+  ];
+  let choice = null;
+  for (const keys of plans) {
+    const count = keys.length;
+    const intended = completed < 6 ? 15 : completed < 12 ? 38 : count === 1 ? 66 : 42;
+    const each = Math.max(10, Math.min(intended, Math.floor((cauldronCapacity - volume - 16) / count)));
+    const portion = ingredient => ({
+      ingredientId: ingredient.id, ml: each,
+      crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form))
+    });
+    const parts = keys.map(key => strongest(key));
+    const recipe = {
+      portions: [{ ingredientId: solvent.id, ml: volume + 15 }, ...parts.map(portion)],
+      volume, ticks: count > 1 ? 480 : 440, thermalTicks: count > 1 ? 375 : 340,
+      heat: .52, cool: 0, reserveTrial: true, stir: true,
+      crush: parts.some(ingredient => ingredient.crushable)
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) {
+        recipe.ticks += 160;
+        recipe.thermalTicks += 130;
+        recipe.heat = parts.every(i => i.material.arcaneThreshold < 0) ? 0 : .7;
+        recipe.cool = recipe.heat ? 0 : .8;
+      }
+      let sample;
+      try { sample = simulateWitness(world, recipe, equipment); } catch { continue; }
+      if (sample.volume < volume - .001 || sample.liquidFraction < .98) continue;
+      if (keys.some(key => sample[key] < targetBand[0] || sample[key] > targetBand[1])) continue;
+      if (EFFECT_PROPERTIES.some(key => !keys.includes(key) && sample[key] > SIDE_EFFECT_TARGET + SIDE_EFFECT_TOLERANCE)) continue;
+      choice = { wanted: keys, recipe: { ...recipe, portions: recipe.portions.map(p => ({...p})) }, sample };
+      break;
+    }
+    if (choice) break;
   }
-  if (sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
+  if (!choice) throw new Error('Could not validate an effect commission within strict magic limits.');
+  const { wanted, recipe, sample } = choice;
   /** @type {import('./contracts.mjs').Requirement[]} */
   const requirements = wanted.map(property => ({
-    property, target: Math.max(targetBand[0], Math.min(targetBand[1], sample[property])),
-    tolerance: .02, weight: 3, hard: false,
-    minimum: Math.max(targetBand[0], Math.min(targetBand[1], sample[property]) - .02),
+    property, target: sample[property], tolerance: .02, weight: 3, hard: false,
+    minimum: Math.max(0, sample[property] - .02),
     comparison: 'target'
   }));
   for (const property of EFFECT_PROPERTIES) {
