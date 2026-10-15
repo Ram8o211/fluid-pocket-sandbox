@@ -56,17 +56,19 @@ async function pourRecipe(recipe){
     await page.waitForTimeout(ticks * 25 + 150);
     if (recipe.stir) await page.mouse.up();
   };
+  let presetHeat = 0;
   const setFlame = async power => {
     const current = await readSave();
     if (!current.equipment.furnace) {
       // Before the furnace upgrade the player has four preset flame levels,
       // not a slider. Follow those same controls in browser acceptance.
       const levels = [0, .35, .7, 1];
-      const active = current.brew?.heat ?? 0;
+      const active = presetHeat;
       const nearest = x => levels.reduce((best, n) => Math.abs(n - x) < Math.abs(best - x) ? n : best, 0);
       const from = levels.indexOf(nearest(active)), to = levels.indexOf(nearest(power));
       for (let n = 0; n < (to - from + levels.length) % levels.length; n++)
         await page.locator('#heatBtn').click();
+      presetHeat = levels[to];
       return;
     }
     await page.locator('#heatBtn').click();
