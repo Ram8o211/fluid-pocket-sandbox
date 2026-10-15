@@ -17,7 +17,9 @@ export function toleranceSimilarity(error, tolerance) {
 
 /** Pure, continuous, priority- and tolerance-aware, including exact vial volume. */
 export function assessPotion(sample, order) {
-  if (!sample || sample.volume < 1 || sample.mass <= 0 || !order.requirements.length)
+  // Partial vials use floating-point mass fractions: a nominal 1 ml dose can
+  // evaluate infinitesimally below 1 ml despite being a complete dose.
+  if (!sample || sample.volume < 1 - 1e-6 || sample.mass <= 0 || !order.requirements.length)
     return { quality: 0, quantityRatio: 0, acceptable: false, breakdown: [], hardFailures: [] };
   const breakdown = order.requirements.map(r => {
     const actual = sample[r.property], error = r.comparison === 'maximum' ? Math.max(0, actual - r.target) : propertyError(r.property, actual, r.target);
