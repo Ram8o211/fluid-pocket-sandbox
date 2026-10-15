@@ -62,9 +62,11 @@ export class BrewingSession {
     this.engine.env.granularWallSupport = cauldronGranularWallSupport;
     this.engine.rules.mixingTemperatureCoefficient = 3.5;
     this.engine.rules.heatSolubility = .95;
-    // Contact ranges track the finer particle spacing. The sandbox defaults are
-    // untouched; local neighbours keep full cauldrons within the mobile budget.
-    this.engine.rules.interactionRadiusScale = .5;
+    // Keep the *relative* neighbour reach of the former fine-grained parcels.
+    // Larger particles need proportionally wider contact to exchange density,
+    // heat and colour; otherwise heavy liquids cannot pass light layers.
+    // Contact pairs per particle stay similar while the particle count halves.
+    this.engine.rules.interactionRadiusScale = .5 * Math.sqrt(PARTICLE_ML / .25);
     this.engine.grid.cellSize = .15;
     this.engine.grid.configure(this.engine.env.box);
     this.previousPhases = new Int32Array(PARTICLE_CAPACITY);
