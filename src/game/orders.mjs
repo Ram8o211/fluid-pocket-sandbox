@@ -72,70 +72,127 @@ function generatePhysicalOrder(world, completed = 0, equipment = {}) {
   };
 }
 
-const EFFECT_PURPOSES = Object.freeze({
-  strength: 'build strength for a long journey', love: 'bring affection and calm to a restless companion',
-  transformation: 'change the shape of a stubborn familiar', fire: 'keep my lantern burning through a cold night',
-  freeze: 'bring frost to the summer storeroom', acidity: 'break a creeping enchantment on my orchard',
-  poison: 'banish magical pests from a sealed garden', death: 'banish an undead curse from my cellar'
-});
 const EFFECT_SEQUENCE = ['strength', 'love', 'freeze', 'transformation', 'fire', 'acidity', 'poison', 'death'];
+// Every second enchantment must contribute to the SAME practical problem.
+// No independent random purposes are ever spliced together.
+const COMPANIONS = Object.freeze({
+  strength: ['love', 'transformation'], love: ['fire', 'strength', 'transformation'],
+  freeze: ['transformation', 'poison'], transformation: ['strength', 'poison', 'freeze', 'love'],
+  fire: ['love', 'strength'], acidity: ['poison', 'transformation'],
+  poison: ['transformation', 'acidity', 'death'], death: ['poison', 'transformation']
+});
+const STORIES = Object.freeze({
+  strength: ['The mountain rescue team needs strength to carry the stranded villagers home.',
+    'My apprentice must lift the fallen forge gate before the river rises.'],
+  love: ['The estranged siblings at the inn want to reconcile before winter.',
+    'Our frightened rescue animal needs to trust its new caretaker.'],
+  freeze: ['The fish merchants need a spell to preserve their catch during the heatwave.',
+    'Please keep the medicinal herbs frozen until the healer arrives.'],
+  transformation: ['The guard needs a harmless disguise to infiltrate the bandit camp.',
+    'Our messenger must take the shape of a bird to cross the blocked pass.'],
+  fire: ['The isolated village needs heat until the storm passes.',
+    'Our signal lantern must burn through the freezing mountain night.'],
+  acidity: ['A petrified thorn hedge blocks our only road; we need to dissolve it.',
+    'A cursed metal lock must be corroded before its prisoner suffocates.'],
+  poison: ['Venomous pests are devouring the crops. We need a stronger poison for the sealed traps.',
+    'The giant rats are overrunning the abandoned mill. Our poison must work.'],
+  death: ['The necromancer’s summoned dead must finally be laid to rest.',
+    'The tomb guardian will not release the spirits; a death enchantment is needed.'],
+  'strength+love': ['The exhausted watch needs strength to rebuild the wall, and affection to end the quarrel dividing them.',
+    'A weakened caretaker needs renewed strength and compassion for the frightened animals.'],
+  'love+fire': ['Please warm our snowbound cottage and rekindle the affection between my wife and me.',
+    'The winter festival needs a warming flame and a charm to reunite estranged families.'],
+  'love+transformation': ['Our rescued shapeshifter must regain a gentle form and learn to trust its keeper.',
+    'The cursed couple need their true appearances restored and their affection renewed.'],
+  'strength+transformation': ['Our scout must change into a strong mountain beast to drag the fallen cart to safety.',
+    'The besieged defenders need both a protective disguise and the strength to break free.'],
+  'freeze+transformation': ['We must turn the flood into a temporary icy crossing so the children can escape.',
+    'The captured spy needs a changed appearance and a frosty trail to throw off pursuers.'],
+  'freeze+poison': ['Freeze the infested grain store and poison the insects hidden inside its walls.',
+    'Immobilize the venomous marsh vermin with frost and finish them with poison.'],
+  'poison+transformation': ['Our enemy must mistake the bait for a harmless feast, then be poisoned by it.',
+    'Disguise the trap as a beautiful fruit while lacing it with venom for the invading monster.'],
+  'acidity+poison': ['Corrode the burrowing pests’ armored shells and poison them before they spread.',
+    'Wither the invasive roots and poison the blight growing beneath them.'],
+  'acidity+transformation': ['Change the cursed armor into brittle stone and corrode it to free its wearer.',
+    'Transform the locked gate into soft material and eat through it with acid.'],
+  'death+poison': ['Poison the necromancer’s undead servants and end the death curse binding them.',
+    'Lay the plague spirits to rest and destroy their poisoned vessel.'],
+  'death+transformation': ['Return the wandering wraith to its mortal shape, then lay it to rest.',
+    'Reveal the disguised revenant and break the death curse animating it.'],
+  'fire+strength': ['The forge workers need strength to clear the debris and fire to restart the furnace.',
+    'Our lost travelers must stay warm and strong enough to cross the blizzard.']
+});
+const STORY_ROLES = Object.freeze(['village healer', 'forest ranger', 'guild messenger', 'castle caretaker',
+  'travelling trader', 'village elder', 'watch captain', 'wandering scholar', 'farm steward', 'mountain scout']);
+const SIDE_EFFECT_TARGET = .009;
+const SIDE_EFFECT_TOLERANCE = .003; // Actual hard ceiling: 1.2%, never 2%+.
 
-/** Customers describe an outcome. A private simulated witness proves that the
- * unlocked ingredients and visible dose controls can achieve it; it never
- * becomes a customer clue or a player recipe. Legacy inert worlds keep their
- * pinned physical commissions until the player opens a modern world. */
+/** The client sees only goals, not the recipe. Reference brews are real particle
+ * simulations and must meet the same limits before an order is offered. */
 export function generateOrder(world, completed = 0, equipment = {}) {
   const ingredients = availableIngredients(world, equipment);
-  if (!ingredients.some(i => EFFECT_PROPERTIES.some(key => i.material[key] > .01))) return generatePhysicalOrder(world, completed, equipment);
-  const rng = mulberry32(seedNumber(`${world.seed}:effects-order:${completed}`));
+  if (!ingredients.some(i => EFFECT_PROPERTIES.some(key => i.material[key] > .01)))
+    return generatePhysicalOrder(world, completed, equipment);
+  const rng = mulberry32(seedNumber(world.seed + ':effects-order:' + completed));
   const solvent = ingredients.find(i => i.solvent) || ingredients.find(i => !i.form || i.form === 'liquid');
   if (!solvent) throw new Error('A customer potion needs an available liquid solvent.');
-  const candidates = ingredients.filter(i => i.id !== solvent.id && Math.abs(i.material.miscibility - solvent.material.miscibility) < .06);
+  const candidates = ingredients.filter(i => i.id !== solvent.id &&
+    !i.recoverOnly && Math.abs(i.material.miscibility - solvent.material.miscibility) < .06);
   const possible = EFFECT_SEQUENCE.filter(key => candidates.some(i => i.material[key] >= .025));
   if (!possible.length) return generatePhysicalOrder(world, completed, equipment);
+
   const desired = possible[completed % possible.length];
   const strongest = key => candidates.slice().sort((a, b) => b.material[key] - a.material[key])[0];
-  const primary = strongest(desired), difficulty = Math.min(4, 1 + Math.floor(completed / 3));
-  const opposes = ingredient => primary.material.fire > .02 && ingredient.material.freeze > .02 || primary.material.freeze > .02 && ingredient.material.fire > .02;
-  const complements = possible.filter(key => key !== desired && strongest(key).id !== primary.id && !opposes(strongest(key)));
-  const secondaryEffect = completed >= 2 && complements.length ? complements[Math.floor(rng() * complements.length)] : null;
+  const primary = strongest(desired);
+  const linked = (COMPANIONS[desired] || []).filter(key => possible.includes(key) && strongest(key).id !== primary.id);
+  const secondaryEffect = completed >= 2 && linked.length ? linked[Math.floor(rng() * linked.length)] : null;
   const secondary = secondaryEffect ? strongest(secondaryEffect) : null;
+  const wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])];
+  const difficulty = Math.min(4, 1 + Math.floor(completed / 3));
   const volume = completed === 0 ? 60 : difficulty < 3 ? 80 : 100;
-  // Weak innate essences require an appreciable dose to yield testable early
-  // commissions; keep the recipe within the basic 200 ml cauldron and the
-  // player's finite 20-measure starter stock per raw ingredient.
-  const water = volume + 20;
-  const portion = ingredient => ({ ingredientId: ingredient.id, ml: 20, crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form)) });
-  const recipe = { portions: [{ ingredientId: solvent.id, ml: water }, portion(primary), ...(secondary ? [portion(secondary)] : [])], volume,
-    ticks: secondary ? 320 : 280, thermalTicks: 0, heat: 0, cool: 0, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
+  const cauldronCapacity = [200, 320, 440][Math.max(0, Math.min(2, equipment.cauldron || 0))];
+  const targetBand = completed < 6 ? [.08, .15] : completed < 12 ? [.16, .3] : [.26, .65];
+  // The starting 20-measure stock is sufficient for early single or dual
+  // commissions. Later orders intentionally demand gardening and awakening.
+  const idealAmount = completed < 6 ? 15 : completed < 12 ? 38 : 90;
+  const each = Math.max(10, Math.min(idealAmount, Math.floor((cauldronCapacity - volume - 16) / wanted.length)));
+  const portion = ingredient => ({ ingredientId: ingredient.id, ml: each,
+    crushed: Boolean(ingredient.form && !['liquid', 'powder'].includes(ingredient.form)) });
+  const recipe = { portions: [{ ingredientId: solvent.id, ml: volume + 15 }, portion(primary),
+    ...(secondary ? [portion(secondary)] : [])], volume,
+    ticks: secondary ? 480 : 440, thermalTicks: secondary ? 375 : 340,
+    heat: .52, cool: 0, stir: true, crush: Boolean(primary.crushable || secondary?.crushable) };
+
   let sample = simulateWitness(world, recipe, equipment);
-  let wanted = [desired, ...(secondaryEffect ? [secondaryEffect] : [])].filter(key => sample[key] > .01);
-  if (sample.volume < volume - .001 || !wanted.includes(desired)) {
-    // Some pinned legacy raw materials may not extract reliably. Try a known
-    // compatible strength infusion rather than request an unattainable effect.
-    const fallback = strongest(possible[0]);
-    recipe.portions = [{ ingredientId: solvent.id, ml: volume + 20 }, portion(fallback)];
-    // Stable pressure no longer supplies incidental agitation to extraction.
-    // Give the reference infusion more actual spoon work before deciding that
-    // the seed cannot support a commission; the target still comes entirely
-    // from the player's normal simulation and finite starting ingredients.
-    recipe.ticks = 440; sample = simulateWitness(world, recipe, equipment);
-    wanted = possible.filter(key => sample[key] > .01).slice(0, 1);
+  // Weak, partly extracted essences may need a longer real infusion. This is
+  // never a fabricated sample and never changes the underlying magic physics.
+  if (sample.volume < volume - .001 || wanted.some(key => sample[key] < targetBand[0])) {
+    recipe.ticks += 160; recipe.thermalTicks += 130; recipe.heat = .7;
+    sample = simulateWitness(world, recipe, equipment);
   }
-  if (!wanted.length || sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
-  /** @type {import('./contracts.mjs').Requirement[]} */
-  const requirements = wanted.map(property => ({ property, target: sample[property], tolerance: Math.max(.002, Math.min(PROPERTIES[property].tolerance, sample[property] * .35)),
-    weight: 3, hard: false, minimum: sample[property] * .3, comparison: 'target' }));
+  if (sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
+  const requirements = wanted.map(property => ({
+    property, target: Math.max(targetBand[0], Math.min(targetBand[1], sample[property])),
+    tolerance: .02, weight: 3, hard: false,
+    minimum: Math.max(targetBand[0], Math.min(targetBand[1], sample[property]) - .02),
+    comparison: 'target'
+  }));
   for (const property of EFFECT_PROPERTIES) {
     if (wanted.includes(property)) continue;
-    const ceiling = Math.max(property === 'acidity' ? .035 : .015, sample[property] * 1.3 + .005);
-    requirements.push({ property, target: Math.min(1, ceiling), tolerance: .008, weight: .4, hard: true, comparison: 'maximum' });
+    requirements.push({ property, target: SIDE_EFFECT_TARGET, tolerance: SIDE_EFFECT_TOLERANCE,
+      weight: .4, hard: true, comparison: 'maximum' });
   }
-  const purpose = wanted.map(key => EFFECT_PURPOSES[key]).join(' and ');
-  const customer = { id: `customer-${completed}`, name: NAMES[Math.floor(rng() * NAMES.length)], role: ROLES[Math.floor(rng() * ROLES.length)],
-    portraitSeed: Math.floor(rng() * 0xffffffff), dialogue: `I need a potion to ${purpose}. I need the enchantment in this range, with no unwanted surprises.` };
-  const clue = 'Use the known garden essences. Test a spare dose on your familiars, then write your own potion ID from their response.';
-  return { id: `${world.seed}-${completed}`, conceptVersion: 2, customer, requirements, volume, difficulty,
+  const storyKey = wanted.slice().sort().join('+');
+  const stories = STORIES[storyKey] || STORIES[desired];
+  const narrative = stories[Math.floor(rng() * stories.length)];
+  const customer = { id: 'customer-' + completed, name: NAMES[Math.floor(rng() * NAMES.length)],
+    role: STORY_ROLES[Math.floor(rng() * STORY_ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff),
+    dialogue: narrative + ' I need a reliable potion, with no dangerous side effects.' };
+  const clue = 'Study the known garden essences and their activation temperatures. Test a spare dose on your familiars, then write your potion ID from their response.';
+  return { id: world.seed + '-' + completed, conceptVersion: 2, customer, requirements, volume, difficulty,
     budget: Math.round(43 + difficulty * 14 + wanted.length * 6 + rng() * 8), witness: recipe, clue,
-    targetDescriptions: Object.fromEntries(requirements.map(r => [r.property, r.comparison === 'maximum' ? `At most ${Math.round(Number(r.target) * 100)}% ${EFFECT_DEFINITIONS[r.property].label.toLowerCase()}` : propertyDescription(r.property, r.target)])) };
+    targetDescriptions: Object.fromEntries(requirements.map(r => [r.property,
+      r.comparison === 'maximum' ? 'At most 1.2% ' + EFFECT_DEFINITIONS[r.property].label.toLowerCase()
+        : propertyDescription(r.property, r.target)])) };
 }
