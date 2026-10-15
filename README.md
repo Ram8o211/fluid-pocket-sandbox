@@ -67,6 +67,22 @@ surfaces and rounded material footprints make local motion visible. Navigation,
 beds, ingredients, receipts and ID forms use horizontal collections inside the
 phone viewport. Saved shops migrate without replacing an active cauldron.
 
+Cauldron liquids use the vendored Google LiquidFun engine with pressure steps
+of at most 1/80 s (up to four steps for fast spoon strokes). Its collision
+outline and parcel radius match the game's vessel contacts, including after
+partial bottling and refilling. Vapour shares the swept spoon footprint and
+local momentum transport; compressible pressure, temperature and material
+buoyancy retain a steam layer beneath the sealed lid without elastic rebounds.
+
+The workshop reconstructs liquid and vapour on WebGL2 from batched particle
+instances. Two vessel-sized half-float density/colour fields keep touching
+liquids continuous and steam translucent; grains retain their texture. Colours
+and magical light come from each live parcel. Balanced fields are 192×100,
+independent of screen DPR, and eco fields are 98×52. A liquid pool takes two
+draw calls, liquid plus vapour four, and an added granular batch one more.
+Unsupported devices and lost GPU contexts use the Canvas2D fallback; restored
+contexts resume WebGL2. Replacing a shop releases its GPU resources.
+
 ## Development and verification
 
 ```sh
@@ -79,6 +95,8 @@ npm run build
 npm run e2e
 npx playwright install --with-deps chromium --only-shell
 npm run test:browser
+npm run test:liquidfun
+npm run test:fluids:browser
 npm run benchmark:game
 ```
 

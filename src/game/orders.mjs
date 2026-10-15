@@ -115,7 +115,11 @@ export function generateOrder(world, completed = 0, equipment = {}) {
     // compatible strength infusion rather than request an unattainable effect.
     const fallback = strongest(possible[0]);
     recipe.portions = [{ ingredientId: solvent.id, ml: volume + 20 }, portion(fallback)];
-    recipe.ticks = 280; sample = simulateWitness(world, recipe, equipment);
+    // Stable pressure no longer supplies incidental agitation to extraction.
+    // Give the reference infusion more actual spoon work before deciding that
+    // the seed cannot support a commission; the target still comes entirely
+    // from the player's normal simulation and finite starting ingredients.
+    recipe.ticks = 440; sample = simulateWitness(world, recipe, equipment);
     wanted = possible.filter(key => sample[key] > .01).slice(0, 1);
   }
   if (!wanted.length || sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');

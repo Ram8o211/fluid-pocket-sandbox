@@ -103,7 +103,7 @@ async function openWorld(seed, saved = null, mode = 'shop') {
     const candidate = saved || newShop(world, { sandbox: mode === 'sandbox' });
     session = new BrewingSession(world.ingredients, candidate.equipment);
     if (saved?.brew) session.restore(saved.brew);
-    brew?.dispose();
+    renderer?.dispose(); brew?.dispose();
     state = candidate; advanceComplaints(state); advanceRabbits(state); brew = session; selected = availableIngredients(world, state.equipment)[0].id; experimentReport = null;
     selectedSubject = state.experiments.rabbits.find(r => r.stats.alive)?.id || state.experiments.rabbits[0].id; cullMode = false;
     renderer = new LaboratoryRenderer($('labCanvas'), brew); renderer.setQuality(state.settings.graphics);

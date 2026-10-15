@@ -8,6 +8,7 @@ import { SpatialGrid } from '../src/simulation/SpatialGrid.mjs';
 import { updateGasDensity } from '../src/simulation/GasDensitySolver.mjs';
 import { applyBuoyancy } from '../src/simulation/BuoyancySolver.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
+import { FluidSolver } from '../src/simulation/FluidSolver.mjs';
 import { insideCauldron, cauldronParticlePadding, PARTICLE_ML } from '../src/game/cauldron.mjs';
 
 const close = (a, b, tolerance = .0001) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
@@ -19,6 +20,42 @@ const setup = () => {
   return brew;
 };
 const ticks = (brew, count) => { for (let i = 0; i < count; i++) brew.step(); };
+
+test('gas flow entrains nearby vapour, conserves contact momentum and dissipates relative energy', () => {
+  const brew = setup(), ps = brew.engine.ps, solver = new FluidSolver();
+  brew.pour(1, 2, { 1: 10 }); ps.count = 3;
+  ps.setPhase(0, Phase.GAS); ps.setPhase(1, Phase.LIQUID); ps.setPhase(2, Phase.GAS);
+  ps.vx.set([0, 2, 0]); ps.vy.fill(0);
+  const m0 = ps.mass[0] * ps.density[0] / ps.baseDensity[0], m1 = ps.mass[1];
+  const momentum = () => ps.vx[0] * m0 + ps.vx[1] * m1;
+  const energy = () => ps.vx[0] ** 2 * m0 + ps.vx[1] ** 2 * m1;
+  const beforeMomentum = momentum(), beforeEnergy = energy(), mass = ps.totalMass();
+  solver.exchangeGasFlow(ps, 0, 1, .06, FIXED_STEP, true, 2.5);
+  assert.ok(ps.vx[0] > .01 && ps.vx[1] < 2, 'a liquid current must entrain adjacent steam');
+  close(momentum(), beforeMomentum); assert.ok(energy() < beforeEnergy);
+  solver.exchangeGasFlow(ps, 0, 2, 1.5, FIXED_STEP, true, 2.5);
+  assert.equal(ps.vx[2], 0, 'remote steam cannot inherit the current');
+  close(ps.totalMass(), mass);
+});
+
+test('a swept spoon moves local steam and reload retains its phase, quantity and magical fields', () => {
+  const brew = setup(), ps = brew.engine.ps;
+  brew.pour(1, 3, { 1: 10 });
+  for (let i = 0; i < ps.count; i++) {
+    ps.setPhase(i, Phase.GAS); ps.temperature[i] = .95;
+    ps.x[i] = -1.5 + i * .6; ps.y[i] = .5; ps.vx[i] = ps.vy[i] = 0;
+    ps.poison[i] = .3;
+  }
+  const mass = ps.totalMass();
+  assert.equal(brew.stir({ x: .5, y: .5 }, { x: 4, y: 0 }, FIXED_STEP, { x: -.5, y: .5 }), 4);
+  assert.equal(ps.vx[0], 0); assert.equal(ps.vx[5], 0);
+  for (let i = 1; i <= 4; i++) assert.ok(ps.vx[i] > .05);
+  close(ps.totalMass(), mass);
+  const restored = setup(); restored.restore(brew.snapshot());
+  assert.equal(restored.engine.ps.phaseCounts()[Phase.GAS], ps.count);
+  assert.deepEqual(Array.from(restored.engine.ps.poison.subarray(0, ps.count)), Array.from(ps.poison.subarray(0, ps.count)));
+  close(restored.engine.ps.totalMass(), mass);
+});
 
 test('the empty-atmosphere reference stays fixed and crowding never removes density-dependent gas lift', () => {
   const brew = setup(), ps = brew.engine.ps, env = brew.engine.env;

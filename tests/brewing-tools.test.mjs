@@ -19,18 +19,18 @@ test('spoon touches only nearby liquid and pestle crushes only touched solid, pr
   const restored=make();restored.restore(b.snapshot());assert.equal(restored.engine.ps.solidSubdivision[3],1);assert.equal(restored.engine.ps.solidBodyId[3],0);assert.ok(restored.engine.ps.solidBodyId[4]>0);
 });
 
-test('wider spoon catches multiple liquid and powder grains per stroke without pulling distant matter', () => {
+test('wider spoon catches nearby liquid, vapour and powder without pulling distant matter or rigid blocks', () => {
   const b=make(),ps=b.engine.ps,indices=[];
   for(const x of [-.38,-.16,0,.16,.39,.7])indices.push(add(b,x,0,x===.39?Phase.SOLID:Phase.LIQUID));
   ps.solidSubdivision[4]=1;ps.powderContent[4]=1;
   const gas=add(b,0,.1,Phase.GAS),frozen=add(b,0,-.1,Phase.SOLID);
   ps.solidSubdivision[frozen]=0;
   const mass=ps.totalMass();
-  assert.equal(b.stir({x:0,y:0},{x:4,y:0}),5,
-    'one stroke should affect all five nearby grains, including loose powder');
+  assert.equal(b.stir({x:0,y:0},{x:4,y:0}),6,
+    'one stroke should affect all five nearby grains and the local vapour');
   for(const i of indices.slice(0,5))assert.ok(ps.vx[i]>.05,`grain ${i} was missed by stirring`);
   assert.equal(ps.vx[indices[5]],0,'distant liquid must remain unaffected');
-  assert.equal(ps.vx[gas],0,'vapour must remain unaffected');
+  assert.ok(ps.vx[gas]>.05,'vapour must follow the same local spoon stroke');
   assert.equal(ps.vx[frozen],0,'coherent frozen blocks cannot be stirred');
   assert.equal(ps.totalMass(),mass);
 });

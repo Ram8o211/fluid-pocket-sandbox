@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LiquidFunFluid } from '../src/game/LiquidFunFluid.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
+import { insideCauldron, WALL_CLEARANCE } from '../src/game/cauldron.mjs';
 
 function mockLiquidFun() {
   const runtime = {};
@@ -49,9 +50,13 @@ function particles(){
     magicDecayTemperature:new Float32Array([.9,.9,.9]),
     materialId:new Int32Array([1,2,3]),mass:new Float32Array([1,2,3])};
 }
-test('LiquidFun adapter creates exactly the original cauldron walls and moves liquids only',()=>{
+test('LiquidFun adapter aligns its walls with the shared vessel clearance and moves liquids only',()=>{
   const runtime=mockLiquidFun(),backend=new LiquidFunFluid(runtime),ps=particles();
   assert.equal(runtime.lastWorld.edges.length,10);
+  for(const edge of runtime.lastWorld.edges) {
+    assert.ok(insideCauldron(edge.a.x,edge.a.y,WALL_CLEARANCE));
+    assert.ok(insideCauldron(edge.b.x,edge.b.y,WALL_CLEARANCE));
+  }
   assert.equal(backend.definition.destroyByAge,false);
   const magic=Array.from(ps.strength),venom=Array.from(ps.poison),
     phases=Array.from(ps.phase),temps=Array.from(ps.temperature),

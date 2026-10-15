@@ -15,6 +15,7 @@
     "test:browser": "node scripts/browser-test.mjs",
     "test:rabbits:browser": "node scripts/rabbit-browser-test.mjs",
     "test:liquidfun": "node scripts/liquidfun-smoke.mjs",
+    "test:fluids:browser": "node scripts/fluid-browser-test.mjs",
     "benchmark:game": "node scripts/benchmark-game.mjs"
   },
   "engines": {
