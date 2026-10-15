@@ -132,7 +132,22 @@ try {
   const firstId = initial.experiments.rabbits[0].id, secondId = initial.experiments.rabbits[1].id;
   await selectRabbit(firstId); await page.locator('[data-action="move-rabbit"]').click();
   assert.equal(rabbit(await readState(), firstId).location, 'cage', 'a rabbit can be isolated');
-  const once = await administer(firstId, 5), twice = await administer(firstId, 5);
+  const once = await administer(firstId, 5);
+  assert.ok(rabbit(once, firstId).activeFireUntil > await page.evaluate(() => Date.now()), 'the real mixed potion is still burning after its replay');
+  const portrait = page.locator(`[data-subject="${firstId}"] canvas`);
+  await portrait.evaluate(canvas => {
+    const ctx = canvas.getContext('2d'), original = ctx.drawImage;
+    canvas.expiryPaints = 0; canvas.originalDrawImage = original;
+    ctx.drawImage = function (...args) { canvas.expiryPaints++; return original.apply(this, args); };
+  });
+  await tick(2200);
+  const expiryPaints = await portrait.evaluate(canvas => {
+    canvas.getContext('2d').drawImage = canvas.originalDrawImage;
+    return canvas.expiryPaints;
+  });
+  assert.ok(expiryPaints > 0, 'the actual card repaints when the fire timer expires, without another dose or injury');
+  assert.deepEqual(rabbit(await readState(), firstId).exposure, rabbit(once, firstId).exposure);
+  const twice = await administer(firstId, 5);
   assert.ok(rabbit(twice, firstId).stats.muscleMass > rabbit(once, firstId).stats.muscleMass, 'muscle growth accumulates');
   assert.ok(rabbit(twice, firstId).stats.scorch > rabbit(once, firstId).stats.scorch, 'burned fur accumulates');
   await screenshot('rabbit-isolated-repeat-dose');
@@ -221,8 +236,12 @@ try {
   assert.equal(rabbit(await readState(), male.id).stats.alive, false, 'the cull tool also removes the isolated danger immediately');
   await page.locator('[data-action="cull-tool"]').click();
   await page.locator('[data-action="recover-rabbit"]').click();
+  // Births were checked above. Freeze world time while filling the remaining
+  // slots so a birth between the capacity check and click cannot fill the pen.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
   while (alive(await readState()).length < 12) await buy();
   assert.equal(await page.locator('[data-action="buy-rabbit"]').isDisabled(), true, 'the living colony has a hard capacity');
+  await page.clock.resume();
   for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }, { width: 1280, height: 950 }]) {
     await page.setViewportSize(viewport);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'the colony fits the viewport');
