@@ -75,7 +75,11 @@ async function buy() {
   const before = await readState();
   await page.locator('[data-action="buy-rabbit"]').click();
   const after = await readState();
-  const added = after.experiments.rabbits.find(subject => !before.experiments.rabbits.some(old => old.id === subject.id));
+  // A birth can occur between the snapshot and the click. Identify the actual
+  // purchase event instead of mistaking the first newborn for the bought adult.
+  const purchase = after.experiments.events.find(event => event.type === 'purchase' &&
+    !before.experiments.events.some(old => old.id === event.id));
+  const added = after.experiments.rabbits.find(subject => subject.id === purchase?.rabbitId);
   assert.ok(added && added.stats.alive && added.age === 'adult', 'buying adds a distinct healthy adult');
   assert.equal(after.experiments.records.length, before.experiments.records.length, 'buying does not erase the notebook');
   return added;
