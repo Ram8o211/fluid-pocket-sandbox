@@ -123,7 +123,7 @@ try {
   const offlineArtwork = await page.evaluate(async () => {
     const art = await import('./src/game/RabbitAssets.mjs'); await art.loadRabbitArtwork(); return art.rabbitArtworkVersion();
   });
-  assert.equal(offlineArtwork, 6, 'the offline saved shop loads all rabbit coats, the room and caption');
+  assert.equal(offlineArtwork, 35, 'the first offline saved-shop reload loads the room, coats and every reference-matched effect layer');
   assert.deepEqual(errors, []);
   assert.deepEqual(missing, []);
   console.log('HUD OK: five viewport sizes, live controls, all rooms, responsive trial artwork, offline saved-shop reload, no missing textures or browser errors.');

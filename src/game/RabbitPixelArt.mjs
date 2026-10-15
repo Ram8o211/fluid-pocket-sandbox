@@ -1,5 +1,6 @@
 import { RABBIT_THRESHOLDS } from './rabbits.mjs';
-import { rabbitSprite, rabbitArtworkVersion } from './RabbitAssets.mjs';
+import { rabbitSprite, rabbitArtwork, rabbitArtworkVersion } from './RabbitAssets.mjs';
+import { rabbitAppearance } from './RabbitAppearance.mjs';
 
 const clamp = value => Math.max(0, Math.min(1, Number(value) || 0));
 // A perceptual curve makes the first dilute dose legible. Exposure, damage and
@@ -116,6 +117,13 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   const poison = response('poison'), death = response('death');
   const angry = rabbit.dangerous || rabbit.aggression || load('love') >= RABBIT_THRESHOLDS.love;
   const charred = rabbit.deathAppearance === 'charred';
+  const appearance = rabbitAppearance(rabbit, now);
+  const artwork = rabbitSprite(rabbit, poison, frost, death, charred, appearance);
+  const matched = Boolean(artwork);
+  const sprite = artwork || rabbitSprite(rabbit, poison, frost, death, charred);
+  const secondaryMuscle = matched && appearance.secondary.includes('strength') ? muscle : 0;
+  const artWidth = 96 + Math.round(secondaryMuscle * 8), artHeight = 72 + Math.round(secondaryMuscle * 4);
+  const artX = -Math.round(artWidth / 2), artY = -Math.round(artHeight * 180 / 192);
   const scale = Math.max(1, Math.round(size / 48 * (baby ? .65 + growth * .25 : 1)));
   const snap = value => Math.round(value / scale) * scale;
   ctx.save(); ctx.imageSmoothingEnabled = false;
@@ -125,7 +133,7 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
     rect(ctx, -27, 1, 5, 1, options.cullMode ? '#f19b8d' : '#ffe0a0');
     rect(ctx, 22, 1, 5, 1, options.cullMode ? '#f19b8d' : '#ffe0a0');
   }
-  if (acid) {
+  if (acid && !matched) {
     ellipse(ctx, -3, 1, 10 + acid * 15, 2, '#657c4a');
     if(alive)for (let i = 0; i < 3 + acid * 6; i++) rect(ctx, -20 + rand(50 + i) * 35, -1 - (Math.floor(time / 180) + i * 3) % 8, 2, 2, '#bdcf7c');
   }
@@ -149,11 +157,16 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   const ear1 = Math.round((baby ? 11 : 15) + morph * (rand(2) * 18 - 4));
   const ear2 = Math.round((baby ? 10 : 14) + morph * (rand(3) * 20 - 5));
   const tucked = alive && options.gait === 1 ? 3 : 0;
-  const sprite = rabbitSprite(rabbit, poison, frost, death, charred);
   if (sprite) {
-    const height = Math.max(1, -y(-45 - muscle * 8) - (grazing ? 4 : sniffing ? 1 : 0));
-    ctx.drawImage(sprite, Math.round((-27 - muscle * 9) * erosion), -height,
-      Math.round((54 + muscle * 18) * erosion), height);
+    if (matched) {
+      // All supplied layers share the 256x192 canvas and (128,180) pivot.
+      // Preserve that aspect/pivot instead of stretching each animal's bounds.
+      ctx.drawImage(sprite, artX, Math.round(artY * collapse), artWidth, Math.round(artHeight * collapse));
+    } else {
+      const height = Math.max(1, -y(-45 - muscle * 8) - (grazing ? 4 : sniffing ? 1 : 0));
+      ctx.drawImage(sprite, Math.round((-27 - muscle * 9) * erosion), -height,
+        Math.round((54 + muscle * 18) * erosion), height);
+    }
   } else {
     silhouette(ctx,[
     [-22-muscle*3,y(-13),4+morph*3,Math.max(2,y(5))],
@@ -171,7 +184,7 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   rect(ctx, -19 - muscle * 3, -2, 17 + muscle * 7, 3, palette[3]); rect(ctx, -17 - muscle * 3, -2, 14 + muscle * 7, 2, palette[0]);
   rect(ctx, 10 + muscle * 3 - tucked, -2-tucked, 11 + muscle * 4, 3, palette[3]); rect(ctx, 11 + muscle * 3 - tucked, -2-tucked, 9 + muscle * 4, 2, palette[0]);
   }
-  if (muscle) {
+  if (muscle && !matched) {
     rect(ctx, -13 - muscle * 2, y(-13 - muscle * 5), 1, 4 + muscle * 3, palette[3]);
     rect(ctx, 8 + muscle * 3, y(-18 - muscle * 4), 1, 4 + muscle * 4, palette[3]);
     rect(ctx, 11 + muscle * 4, y(-6), 2 + muscle * 3, 1, palette[3]);
@@ -179,17 +192,17 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   // Seeded color patches, tissue loss, burns and ice grow in place across doses.
   for (let i = 0; i < 18; i++) {
     const px = -19 + rand(100 + i) * 30, py = y(-21 + rand(140 + i) * 16);
-    if (acid && rand(220 + i) < acid) {
+    if (acid && !matched && rand(220 + i) < acid) {
       rect(ctx, px, py, 2 + acid * 4, 1 + acid * 3, '#bd8b79');
       if (acid > .45) rect(ctx, px + 1, py + 1, 1 + acid * 3, 1 + acid * 2, '#7d5457');
     }
-    if (scorch && rand(260 + i) < scorch) rect(ctx, px, py, 2 + scorch * 3, 2, charred ? '#1f1e28' : '#5b423d');
+    if (scorch && !matched && rand(260 + i) < scorch) rect(ctx, px, py, 2 + scorch * 3, 2, charred ? '#1f1e28' : '#5b423d');
     if (frost && rand(300 + i) < frost) spark(ctx, px, py, '#e6fbff', frost > .65 ? 2 : 1);
-    if (morph && rand(340 + i) < morph * .6) rect(ctx, px, py, 2, 2, '#bd91cc');
+    if (morph && !matched && rand(340 + i) < morph * .6) rect(ctx, px, py, 2, 2, '#bd91cc');
   }
   // Transformation is anatomical from the first dose: asymmetric ears, forehead
   // growth and seeded back spines, then additional limbs at high exposure.
-  if (morph) {
+  if (morph && !matched) {
     for (let i = 0; i < 3 + rand(4) * 3; i++) {
       const sx = -16 + i * 6, height = Math.round(2 + morph * (5 + rand(5 + i) * 10));
       for (let row = 0; row < height; row++) rect(ctx, sx + Math.floor(row / 3), back - y(9) - row, Math.max(1, 4 - Math.floor(row / 3)), 1, i % 2 ? '#b895c8' : '#80678e');
@@ -202,9 +215,9 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   rect(ctx, headX - 3, headY - ear1 - 1, 3, 1, palette[0]);
   rect(ctx, headX+2,headY+2,7,2,palette[0]);
   }
-  if (love) rect(ctx, headX + 1, headY + 3, 3 + love * 2, 2, angry ? '#c26069' : '#eea7b0');
+  if (love && (!matched || angry)) rect(ctx, headX + 1, headY + 3, 3 + love * 2, 2, angry ? '#c26069' : '#eea7b0');
   const eye = angry ? '#e96565' : death > .6 ? '#c4b6cd' : '#252635';
-  if (alive && (grazing || Math.floor(time/180)%24===20)) rect(ctx,headX+2,headY-2,3,1,eye);
+  if (alive && !matched && (grazing || Math.floor(time/180)%24===20)) rect(ctx,headX+2,headY-2,3,1,eye);
   else if (alive && (!sprite || angry || death > .6)) {
     rect(ctx, headX + 2, headY - 3, 2 + morph * 2, 3, eye);
     rect(ctx, headX + 2, headY - 3, 1, 1, '#fff4da');
@@ -214,13 +227,13 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   rect(ctx, headX + 7, headY + 5, 2, 1, palette[3]);
   rect(ctx, headX + 9, headY + 6, 5, 1, palette[0]);
   }
-  if (morph) { rect(ctx, headX - 1, headY - 9, 2 + morph * 3, 3 + morph * 4, '#b794c6'); }
+  if (morph && !matched) { rect(ctx, headX - 1, headY - 9, 2 + morph * 3, 3 + morph * 4, '#b794c6'); }
   if (frost) { spark(ctx, headX - 3, headY - ear1 + 4, '#e6fbff'); rect(ctx, -10, -2, 3 + frost * 10, 2, '#a5d9e6'); }
-  if (poison) { rect(ctx, headX + 4, headY + 6, 2, 4 + poison * 3, '#88b76b'); spark(ctx, -25, -21, '#b4d883', 1); }
-  if (alive && scorch && Number(rabbit.activeFireUntil) > now) {
+  if (poison && !matched) { rect(ctx, headX + 4, headY + 6, 2, 4 + poison * 3, '#88b76b'); spark(ctx, -25, -21, '#b4d883', 1); }
+  if (alive && scorch && Number(rabbit.activeFireUntil) > now && !matched) {
     for (let i = 0; i < 2 + scorch * 6; i++) flame(ctx, -17 + i * 7, y(-20), 5 + scorch * 17 + rand(400 + i) * 5, time * .012 + i);
   }
-  if (alive && love) {
+  if (alive && love && !matched) {
     for (let i = 0; i < 1 + Math.floor(love * 4); i++) {
       const rise = (Math.floor(time / 130) + i * 5) % 13;
       if (angry) spark(ctx, -18 + i * 10, -40 - rise, '#ec8a78', 2);
@@ -232,6 +245,10 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
       const rise = (Math.floor(time / 140) + i * 3) % 18;
       rect(ctx, -22 + i * 7, -22 - rise, 2, 2 + death * 3, i % 2 ? '#9a8bb5' : '#504563');
     }
+  }
+  if (matched) for (const overlay of appearance.overlays) {
+    const layer = rabbitArtwork(overlay.key);
+    if (layer) ctx.drawImage(layer, artX, artY, artWidth, artHeight);
   }
   ctx.restore();
 }

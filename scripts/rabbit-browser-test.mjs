@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { verifyRabbitEffectArtwork } from './rabbit-artwork-browser-check.mjs';
 
 // The game uses system fonts. Generated SVG images can keep Chromium's
 // document-wide font readiness pending after the visible text has rendered.
@@ -121,11 +122,12 @@ try {
       native: rabbitArtwork('moon').width, room: rabbitArtwork('room').width,
       frame: getComputedStyle(document.querySelector('[data-subject].active')).borderImageSource };
   });
-  assert.equal(artwork.loaded, 6, 'all shared sprites, the room and caption load under the Pages project path');
+  assert.equal(artwork.loaded, 35, 'all original artwork and 29 reference-matched layers load under the Pages project path');
   assert.deepEqual(artwork.coats, ['moon', 'clover', 'hazel', 'pepper'], 'each original rabbit has its supplied coat');
   assert.equal(artwork.native, 114, 'sprites decode at native pixel scale rather than the enlarged export');
   assert.equal(artwork.room, 858, 'the live comparison uses the supplied empty room');
   assert.match(artwork.frame, /card_selected\.png/, 'the selected card uses the gold artwork');
+  await verifyRabbitEffectArtwork(page);
   assert.equal(await page.locator('[data-subject]').count(), 4, 'only individual rabbits are selectable');
   const firstId = initial.experiments.rabbits[0].id, secondId = initial.experiments.rabbits[1].id;
   await selectRabbit(firstId); await page.locator('[data-action="move-rabbit"]').click();

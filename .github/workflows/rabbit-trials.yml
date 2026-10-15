@@ -4,12 +4,14 @@ on:
     paths:
       - 'src/game/**'
       - 'scripts/rabbit-browser-test.mjs'
+      - 'scripts/rabbit-artwork-browser-check.mjs'
       - 'public/game.css'
       - 'public/toon.css'
       - 'public/rabbit-trials.css'
       - 'public/assets/rabbit-trials/**'
       - 'public/fonts/**'
       - 'tests/rabbit-recovery-motion.test.mjs'
+      - 'tests/rabbit-appearance.test.mjs'
       - '.github/workflows/rabbit-trials.yml'
   push:
     branches: [codex/rabbit-potion-trials]
@@ -27,7 +29,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: node --test tests/rabbit-colony.test.mjs tests/creature-visuals.test.mjs tests/game-experiments.test.mjs tests/rabbit-recovery-motion.test.mjs
+      - run: node --test tests/rabbit-colony.test.mjs tests/creature-visuals.test.mjs tests/game-experiments.test.mjs tests/rabbit-recovery-motion.test.mjs tests/rabbit-appearance.test.mjs
       - run: npm run build
       - run: npm run e2e
       - run: npx playwright install --with-deps chromium --only-shell
