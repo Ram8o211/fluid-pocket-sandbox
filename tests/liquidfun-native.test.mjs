@@ -140,7 +140,11 @@ test('an inverted immiscible heavy layer sinks through the lighter native fluid'
   b.pour(1, 30, { 1: 100 }); b.pour(5, 30, { 5: 100 });
   const ps = b.engine.ps;
   for (let i = 0; i < ps.count; i++) {
-    ps.x[i] = -.72 + (i % 20) * .072; ps.y[i] = -1 + Math.floor(i / 20) * .072;
+    // Native parcels occupy more area now: seed an inverted layer at about
+    // one particle diameter spacing, not the old overlapping .072 grid.
+    const spacing = b.engine.liquidFun.definition.radius * 1.88;
+    ps.x[i] = (i % 20 - 9.5) * spacing;
+    ps.y[i] = -.97 + Math.floor(i / 20) * spacing;
     ps.vx[i] = ps.vy[i] = 0;
     ps.reactionPotential[i] = 0; ps.boilingTemperature[i] = 1.2;
   }
