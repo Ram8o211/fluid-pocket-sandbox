@@ -29,7 +29,10 @@ export class ReactionEngine {
       if(this.radii.length<ps.capacity)this.radii=new Float32Array(ps.capacity);
       let maxRadius=0,gas=false,minPotential=Infinity,maxPotential=-Infinity,minTemperature=Infinity,maxTemperature=-Infinity;
       for(let i=0;i<ps.count;i++){
-        this.radii[i]=effectiveParticleRadius(ps,i,grid.dimensionMode==='2D');maxRadius=Math.max(maxRadius,this.radii[i]);gas=gas||ps.phase[i]===Phase.GAS;
+        // Native water contacts a solid at its actual pressure radius. Using
+        // the smaller display/grain radius leaves an invisible chemistry gap:
+        // touching, stirred powder could never hydrate or infuse the water.
+        this.radii[i]=grid.dimensionMode==='2D'&&ps.phase[i]===Phase.LIQUID&&ps.nativeLiquidRadius>0?ps.nativeLiquidRadius:effectiveParticleRadius(ps,i,grid.dimensionMode==='2D');maxRadius=Math.max(maxRadius,this.radii[i]);gas=gas||ps.phase[i]===Phase.GAS;
         minPotential=Math.min(minPotential,ps.reactionPotential[i]);maxPotential=Math.max(maxPotential,ps.reactionPotential[i]);
         minTemperature=Math.min(minTemperature,ps.temperature[i]);maxTemperature=Math.max(maxTemperature,ps.temperature[i]);
       }
