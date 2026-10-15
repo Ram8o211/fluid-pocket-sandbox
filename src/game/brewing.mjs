@@ -67,6 +67,9 @@ export class BrewingSession {
     // heat and colour; otherwise heavy liquids cannot pass light layers.
     // Contact pairs per particle stay similar while the particle count halves.
     this.engine.rules.interactionRadiusScale = .5 * Math.sqrt(PARTICLE_ML / .25);
+    // Vapour condensation depends on density per support area: a liquid-only
+    // resolution optimization must not change its saturation thresholds.
+    this.engine.rules.gasInteractionRadiusScale = .5;
     this.engine.grid.cellSize = .15;
     this.engine.grid.configure(this.engine.env.box);
     this.previousPhases = new Int32Array(PARTICLE_CAPACITY);
