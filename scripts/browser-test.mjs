@@ -46,7 +46,30 @@ async function room(id){await page.locator(id).click();}
 async function dose(amount){await page.locator(`[data-dose="${amount}"]`).click();}
 async function pourRecipe(recipe){
   for(const portion of recipe.portions){await page.locator(`[data-ingredient="${portion.ingredientId}"]`).click();let remaining=portion.ml;while(remaining){const amount=[40,20,10,5].find(v=>v<=remaining);assert.ok(amount);await dose(amount);await page.locator(portion.crushed?'#grindBtn':'#pourBtn').click();remaining-=amount;}}
-  if(recipe.stir){const box=await page.locator('#stirBtn').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(recipe.ticks*25+200);await page.mouse.up();}
+  const stirFor = async ticks => {
+    if (ticks <= 0) return;
+    if (recipe.stir) {
+      const box = await page.locator('#stirBtn').boundingBox();
+      await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+      await page.mouse.down();
+    }
+    await page.waitForTimeout(ticks * 25 + 150);
+    if (recipe.stir) await page.mouse.up();
+  };
+  const setFlame = async power => {
+    await page.locator('#heatBtn').click();
+    await page.locator('#thermalPower').evaluate((el, value) => {
+      el.value = String(Math.round(value * 100));
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, power);
+    await page.locator('[data-action="close"]').click();
+  };
+  if(recipe.heat && recipe.thermalTicks) {
+    await setFlame(recipe.heat);
+    await stirFor(recipe.thermalTicks);
+    await setFlame(0);
+    await stirFor(recipe.ticks - recipe.thermalTicks);
+  } else await stirFor(recipe.ticks);
 }
 async function compileCurrent(name,sandbox=false){
   const state=await (sandbox?readSandbox():readSave()),report=state.experiments.records[0];
