@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-controlled-pour-43';
+const CACHE = 'alchemist-shop-rabbit-animation-44';
 const CORE = [
   './',
   './index.html',
@@ -9,6 +9,8 @@ const CORE = [
   './public/rabbit-trials.css',
   './src/game/RabbitAssets.mjs',
   './src/game/RabbitAppearance.mjs',
+  './src/game/RabbitArtGeometry.mjs',
+  './src/game/RabbitArtRenderer.mjs',
   './public/assets/rabbit-trials/effects/sprites/acid/acid_t01.png',
   './public/assets/rabbit-trials/effects/sprites/acid/acid_t02.png',
   './public/assets/rabbit-trials/effects/sprites/acid/acid_t03.png',
