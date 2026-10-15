@@ -12,6 +12,7 @@ import { propertyDescription } from './potion.mjs';
 import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
 import { icon, bottleSprite, ingredientSprite, naturalLandscapeSprite, experimentSubjectSprite, portraitSprite, workshopBackground } from './art.mjs';
+import { hudIcon, hudAsset } from './hud.mjs';
 import { resourceStatus, gatherIngredient, tendGarden, gardenStamina } from './gathering.mjs';
 import { runExperiment, splitPotionSample, currentExperimentReport } from './experiments.mjs';
 import { returnVialToCauldron, potionRecord } from './potionTransfer.mjs';
@@ -132,25 +133,26 @@ function startNew() {
 }
 function renderAll() {
   if (!state) return;
-  $('coins').innerHTML = `${icon('coin')}<span>${isSandbox() ? '∞' : Math.floor(state.coins)}</span>`;
-  $('reputation').innerHTML = `${icon('star')}${isSandbox() ? 'Sandbox' : `Reputation ${state.reputation}`}`;
+  $('coins').innerHTML = `${hudIcon('coin')}<span>${isSandbox() ? '∞' : Math.floor(state.coins)}</span>`;
+  $('reputation').innerHTML = `${hudIcon('star')}<span>${isSandbox() ? 'Sandbox' : `Reputation ${state.reputation}`}</span>`;
   $('orderPanel').hidden = isSandbox(); $('sandboxNotice').hidden = !isSandbox();
-  $('settingsBtn').innerHTML = icon('settings'); $('skipTutorial').innerHTML = icon('close');
+  $('settingsBtn').innerHTML = hudIcon('settings'); $('skipTutorial').innerHTML = icon('close');
   $('worldLabel').textContent = `World: ${state.seed}`;
   const order = state.order;
-  $('customerPortrait').src = portraitSprite(order.customer.portraitSeed);
+  $('customerPortrait').src = order.customer.name === 'Elara' ? hudAsset('portrait') : portraitSprite(order.customer.portraitSeed);
   $('customerName').textContent = order.customer.name; $('customerRole').textContent = order.customer.role;
   $('orderNumber').textContent = `COMMISSION ${state.completed + 1} · ${order.volume} ML`;
-  $('orderBudget').innerHTML = `${order.budget} ${icon('coin')}`;
+  $('orderBudget').innerHTML = `${order.budget} ${hudIcon('coin')}`;
   $('customerDialogue').textContent = order.customer.dialogue;
   const requirementRow = r => `<div class="requirement${r.comparison === 'maximum' ? ' unwanted-effect' : ''}">${r.property === 'color' ? `<span class="colour-swatch" style="background:${escape(r.target)}"></span>` : icon(r.property === 'temperature' || r.property === 'fire' ? 'flame' : r.property === 'freeze' || r.property === 'stability' ? 'frost' : EFFECT_PROPERTIES.includes(r.property) || r.property === 'potency' ? 'star' : 'measure')}<div><span class="req-label">${PROPERTIES[r.property].label.toUpperCase()}${r.comparison === 'maximum' ? ' · LIMIT' : r.hard ? ' · REQUIRED' : ''}</span><span class="req-target">${escape(requirementDescription(r))}</span></div></div>`;
   const wanted = order.requirements.filter(r => r.comparison !== 'maximum'), limits = order.requirements.filter(r => r.comparison === 'maximum');
   $('requirements').innerHTML = wanted.map(requirementRow).join('') + (limits.length ? `<details class="order-limits"><summary>Unwanted effects · ${limits.length} limits</summary><div class="requirements">${limits.map(requirementRow).join('')}</div></details>` : '');
   $('orderClue').textContent = order.clue;
-  for (const [id, sprite, label] of [['measureBtn', 'flask', 'Potion ID'], ['inventoryBtn', 'inventory', 'Ingredients'], ['bookBtn', 'book', 'Recipe book'], ['upgradesBtn', 'guild', 'Guild']]) $(id).innerHTML = icon(sprite) + `<span>${label}</span>`;
-  $('natureBtn').innerHTML = `${icon('leaf')}<span>Garden</span>`;
-  $('experimentsBtn').innerHTML = `${icon('flask')}<span>Trials</span>`;
-  $('complaintsBtn').innerHTML = `${icon('coin')}<span>Returns ${(state.complaints || []).filter(c=>c.status==='pending').length || ''}</span>`;
+  for (const [id, sprite, label] of [['measureBtn', 'flask', 'Potion ID'], ['inventoryBtn', 'inventory', 'Ingredients'], ['bookBtn', 'book', 'Recipe book']]) $(id).innerHTML = hudIcon(sprite) + `<span>${label}</span>`;
+  $('upgradesBtn').innerHTML = icon('guild') + '<span>Guild</span>';
+  $('natureBtn').innerHTML = `${hudIcon('leaf')}<span>Garden</span>`;
+  $('experimentsBtn').innerHTML = `${hudIcon('trials')}<span>Trials</span>`;
+  $('complaintsBtn').innerHTML = `${hudIcon('coin')}<span>Returns ${(state.complaints || []).filter(c=>c.status==='pending').length || ''}</span>`;
   renderRack(); renderTools(); updateHUD(); updateTutorial();
   document.body.dataset.gameState = state.stage;
 }
@@ -235,14 +237,14 @@ function syncSandboxInspector() {
 
 function renderRack() {
   const rack = $('ingredientRack'), scroll = rack.scrollLeft, ingredients = availableIngredients(state.world, state.equipment);
-  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${ingredientSprite(i)}" alt=""><span>${escape(i.name)}</span><small>${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
+  rack.innerHTML = ingredients.map(i => `<button class="ingredient-card${i.id === selected ? ' selected' : ''}" data-ingredient="${i.id}" aria-label="Select ${escape(i.name)}, ${i.form || 'liquid'}" aria-pressed="${i.id === selected}"><img src="${i.solvent ? hudAsset('water') : ingredientSprite(i)}" alt="" draggable="false"><span>${escape(i.name)}</span><small>${isSandbox() ? '∞' : Math.floor(state.inventory[i.id] || 0)}</small><small class="ingredient-effects">${describeEffects(i.material).slice(0, 2).map(e => `${escape(e.label)} ${Math.round(e.value * 100)}%`).join(' · ') || 'Neutral solvent'}</small></button>`).join('');
   rack.scrollLeft = scroll;
   const ingredient = ingredients.find(i => i.id === selected) || ingredients[0]; selected = ingredient.id;
   $('selectedName').textContent = ingredient.name + (ingredient.form && ingredient.form !== 'liquid' ? ` · ${ingredient.form}` : '');
   $('doseUnit').textContent = ingredientUnit(ingredient) === 'ml' ? 'ml' : 'qty';
   const action = ingredient.form && ingredient.form !== 'liquid' ? 'Add' : 'Pour';
-  $('pourBtn').innerHTML = `${icon('vial')}${action} ${dose}${ingredientUnit(ingredient) === 'ml' ? ' ml' : ' whole'}`;
-  if (ingredient.form === 'powder') $('pourBtn').innerHTML = `${icon('vial')}Add ${dose} powder`;
+  $('pourBtn').innerHTML = `${hudIcon('vial')}${action} ${dose}${ingredientUnit(ingredient) === 'ml' ? ' ml' : ' whole'}`;
+  if (ingredient.form === 'powder') $('pourBtn').innerHTML = `${hudIcon('vial')}Add ${dose} powder`;
   $('pourBtn').setAttribute('aria-label', `${action} ${dose} ${ingredientUnit(ingredient)} of ${ingredient.name}`);
   $('pourBtn').disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
   $('grindBtn').hidden = !rawIngredient(ingredient);
@@ -251,14 +253,14 @@ function renderRack() {
   syncSandboxInspector();
 }
 function renderTools() {
-  $('heatBtn').innerHTML = `${icon('flame')}<span>Flame <small>${brew.heat ? `${Math.round(brew.heat * 100)}%` : 'OFF'}</small></span>`;
+  $('heatBtn').innerHTML = `${hudIcon('flame')}<span>Flame <small>${brew.heat ? `${Math.round(brew.heat * 100)}%` : 'OFF'}</small></span>`;
   $('heatBtn').classList.toggle('active', brew.heat > 0); $('heatBtn').setAttribute('aria-label', `Adjust flame, ${Math.round(brew.heat * 100)} percent`);
-  $('coolBtn').innerHTML = `${icon('frost')}<span>Frost <small>${brew.cool ? `${Math.round(brew.cool * 100)}%` : 'OFF'}</small></span>`;
+  $('coolBtn').innerHTML = `${hudIcon('frost')}<span>Frost <small>${brew.cool ? `${Math.round(brew.cool * 100)}%` : 'OFF'}</small></span>`;
   $('coolBtn').classList.toggle('cold', brew.cool > 0); $('coolBtn').setAttribute('aria-label', `Adjust cooling, ${Math.round(brew.cool * 100)} percent`);
-  $('stirBtn').innerHTML = `${icon('spoon')}<span>Stir <small>HOLD</small></span>`;
-  $('crushBtn').innerHTML = `${icon('spoon')}<span>Pestle <small>CRUSH</small></span>`;
+  $('stirBtn').innerHTML = `${hudIcon('spoon')}<span>Stir <small>HOLD</small></span>`;
+  $('crushBtn').innerHTML = `${hudIcon('pestle')}<span>Pestle <small>CRUSH</small></span>`;
   $('crushBtn').classList.toggle('active', tool === 'pestle'); $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle'));
-  $('cleanBtn').innerHTML = `${icon('clean')}<span>Clean <small>CAULDRON</small></span>`;
+  $('cleanBtn').innerHTML = `${hudIcon('clean')}<span>Clean <small>CAULDRON</small></span>`;
   for (const id of ['heatBtn', 'coolBtn', 'stirBtn', 'crushBtn', 'cleanBtn']) $(id).disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
 }
 function updateHUD() {
@@ -268,7 +270,8 @@ function updateHUD() {
   $('volume').textContent = isSandbox() ? `${Math.round(volume)} ml liquid · ${Math.round(brew.occupiedVolume)} / ${brew.capacity}` : `${Math.round(volume)} / ${state.order.volume} ml`;
   $('labStatus').textContent = state.pendingBottle ? 'VIAL READY' : state.stage === 'sale' ? 'COMMISSION COMPLETE' : condensing ? `SEALED · ${steam.toFixed(1)} ML STEAM` : `SEALED CAULDRON · ${brew.capacity} ML`;
   $('labHint').textContent = state.pendingBottle ? isSandbox() ? 'Test your vial in the experiments room' : 'Test the potion or serve your customer' : condensing ? brew.heat ? 'Steam is trapped · turn off Flame to condense' : 'Steam is condensing · Frost helps it return faster' : brew.engine.ps.count ? brew.heat ? 'Warmth helps ground ingredients blend with water' : brew.cool ? 'Frost cools the brew and condenses trapped steam' : 'Grind plants and stones · stir with plenty of water' : 'Start with water · grind a little plant or stone';
-  $('bottleBtn').innerHTML = `${icon(state.stage === 'sale' ? 'arrow' : 'vial')}${state.stage === 'sale' ? 'Next customer' : state.pendingBottle ? isSandbox() ? 'Inspect vial' : 'Review & sell' : condensing ? 'Wait for condensation' : `Bottle ${isSandbox() ? dose : state.order.volume} ml`}`;
+  const bottleMarkup = `${state.stage === 'sale' ? icon('arrow') : hudIcon('vial')}${state.stage === 'sale' ? 'Next customer' : state.pendingBottle ? isSandbox() ? 'Inspect vial' : 'Review & sell' : condensing ? 'Wait for condensation' : `Bottle ${isSandbox() ? dose : state.order.volume} ml`}`;
+  if ($('bottleBtn').innerHTML !== bottleMarkup) $('bottleBtn').innerHTML = bottleMarkup;
   $('bottleBtn').disabled = state.stage !== 'sale' && !state.pendingBottle && (volume < 1 || condensing);
   $('bottleBtn').title = condensing ? 'Cool the trapped steam back into liquid before bottling.' : '';
   $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle')); $('crushBtn').classList.toggle('active', tool === 'pestle');
