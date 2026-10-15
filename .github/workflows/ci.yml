@@ -26,6 +26,8 @@ jobs:
         run: npm run test:rabbits:browser
       - name: Native LiquidFun particle integrity and full-cauldron stress
         run: npm run test:liquidfun
+      - name: GPU fluid surfaces, steam interaction and context recovery
+        run: npm run test:fluids:browser
       - uses: actions/upload-artifact@v4
         if: always()
         with:

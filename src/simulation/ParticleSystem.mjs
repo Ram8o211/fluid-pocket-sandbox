@@ -5,6 +5,8 @@ import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 const PARTICLE_ARRAYS=['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted','x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
 
 export class ParticleSystem {
+  // Ephemeral native solver geometry; recomputed after every volume change.
+  nativeLiquidRadius = 0;
   constructor(capacity=1800){
     this.capacity=capacity; this.count=0;this.packingScale=1;this.volumePacking=false;
     this.arcaneThreshold=new Float32Array(capacity);this.magicDecayTemperature=new Float32Array(capacity);this.arcaneCharge=new Float32Array(capacity);this.arcaneConverted=new Float32Array(capacity);

@@ -5,7 +5,7 @@ import { Phase } from '../simulation/Phase.mjs';
 import { clamp } from '../simulation/math.mjs';
 import { measurePotion } from './potion.mjs';
 import { CAPACITY_ML, FIXED_STEP, ROOM_TEMPERATURE, ROOM_DENSITY } from './contracts.mjs';
-import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSupport, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
+import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSupport, cauldronGasWallPressure, PARTICLE_CAPACITY, PARTICLE_ML } from './cauldron.mjs';
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 import { LiquidFunFluid } from './LiquidFunFluid.mjs';
@@ -35,8 +35,11 @@ export class BrewingSession {
     this.engine.env.gasBuoyancyUsesMaterialDensity = true;
     this.engine.env.gasContactScale = 1.7;
     this.engine.env.gasContactStrength = 1.2;
-    this.engine.env.gasConstraintVelocityShare = .22;
-    this.engine.env.gasThermalMotion = 2.2;
+    this.engine.env.gasConstraintVelocityShare = .1;
+    this.engine.env.gasThermalMotion = .28;
+    this.engine.env.gasDrag = .9;
+    this.engine.env.gasFlowCoupling = 2.5;
+    this.engine.env.gasWallPressure = cauldronGasWallPressure;
     this.engine.solid.compactFreezing = true;
     this.engine.rules.evaporationRate = .22;
     this.engine.rules.combustionRate = .22;
@@ -142,7 +145,8 @@ export class BrewingSession {
     const dx = point.x - sx, dy = point.y - sy, lengthSquared = dx * dx + dy * dy;
     let affected = 0;
     for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] !== Phase.LIQUID && !(ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] >= .55)) continue;
+      if (ps.phase[i] !== Phase.LIQUID && ps.phase[i] !== Phase.GAS &&
+          !(ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] >= .55)) continue;
       const projection = lengthSquared > 1e-8
         ? clamp(((ps.x[i] - sx) * dx + (ps.y[i] - sy) * dy) / lengthSquared, 0, 1)
         : 1;

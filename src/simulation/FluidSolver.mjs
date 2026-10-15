@@ -137,6 +137,25 @@ export class FluidSolver {
     if(d<rest){const q=(rest-d)/rest,rep=q*q*(.018+.03*(1-ps.viscosity[liquid]))*mobility*soft*2;if(rep>0)separatePair(ps,solid,liquid,nxFromSolid,nyFromSolid,nzFromSolid,rep,planar);}
     if(ps.materialId[solid]!==ps.materialId[liquid]&&Math.abs(ps.miscibility[solid]-ps.miscibility[liquid])>=warmedMiscibility(ps,solid,liquid,rules.miscibilityThreshold,rules))this.sortDensityContact(ps,solid,liquid,nxFromSolid,nyFromSolid,nzFromSolid,d,rest,gravity,mobility,planar,interactionScale);
   }
+  exchangeGasFlow(ps,i,j,d,dt,planar,strength){
+    if(!strength)return;
+    const reach=particlePairRestDistance(ps,i,j,planar)*1.8;
+    if(d>=reach)return;
+    // Local viscous momentum transport, shared by vapour/vapour and
+    // vapour/liquid contacts. Gas remains compressible and buoyant, while a
+    // stirred liquid entrains nearby steam instead of passing through it.
+    const amount=1-Math.exp(-strength*dt*(1-d/reach));
+    const gasI=ps.phase[i]===Phase.GAS,gasJ=ps.phase[j]===Phase.GAS;
+    const mi=Math.max(.00001,ps.mass[i]*(gasI?ps.density[i]/Math.max(.04,ps.baseDensity[i]):1));
+    const mj=Math.max(.00001,ps.mass[j]*(gasJ?ps.density[j]/Math.max(.04,ps.baseDensity[j]):1));
+    let wi=mj/(mi+mj),wj=1-wi;
+    if(ps.phase[i]===Phase.SOLID){wi=0;wj=1;}
+    if(ps.phase[j]===Phase.SOLID){wi=1;wj=0;}
+    const dx=(ps.vx[j]-ps.vx[i])*amount,dy=(ps.vy[j]-ps.vy[i])*amount;
+    const dz=planar?0:(ps.vz[j]-ps.vz[i])*amount;
+    ps.vx[i]+=dx*wi;ps.vy[i]+=dy*wi;ps.vz[i]+=dz*wi;
+    ps.vx[j]-=dx*wj;ps.vy[j]-=dy*wj;ps.vz[j]-=dz*wj;
+  }
   enforceHardPacking(ps,grid,searchRadius,planar,externalLiquids=false){
     grid.forEachPair(ps,searchRadius,(i,j)=>{
       if(externalLiquids&&ps.phase[i]===Phase.LIQUID&&ps.phase[j]===Phase.LIQUID)return;
@@ -167,7 +186,8 @@ export class FluidSolver {
         const amplitude=env.gasThermalMotion*Math.sqrt(dt)*clamp(ps.temperature[i]+.25,.3,1.2);
         ps.vx[i]+=kick(1)*amplitude;ps.vy[i]+=kick(2)*amplitude;if(!planar)ps.vz[i]+=kick(3)*amplitude;
       }
-      const damping=Math.exp(-dt*(ps.phase[i]===Phase.GAS?.15:.025));ps.vx[i]*=damping;ps.vy[i]*=damping;ps.vz[i]*=damping;
+      if(ps.phase[i]===Phase.GAS)env.gasWallPressure?.(ps,i,dt);
+      const damping=Math.exp(-dt*(ps.phase[i]===Phase.GAS?(env.gasDrag??.15):.025));ps.vx[i]*=damping;ps.vy[i]*=damping;ps.vz[i]*=damping;
       const speed2=ps.vx[i]*ps.vx[i]+ps.vy[i]*ps.vy[i]+(planar?0:ps.vz[i]*ps.vz[i]);if(speed2>maxV*maxV){const k=maxV/Math.sqrt(speed2);ps.vx[i]*=k;ps.vy[i]*=k;if(!planar)ps.vz[i]*=k;}
       hasPowder=hasPowder||isPowder(ps,i);maxDisplacement=Math.max(maxDisplacement,Math.min(maxV,Math.sqrt(speed2))*dt);
       if(nativeLiquid)continue;
@@ -197,11 +217,13 @@ export class FluidSolver {
         // Vapour parcels represent overlapping gas volumes, not hard spheres.
         // Only very close contacts separate, with a time-scaled soft response.
         if(pi===Phase.GAS&&pj===Phase.GAS){
+          this.exchangeGasFlow(ps,i,j,d,dt/Math.max(1,iterations),planar,env.gasFlowCoupling);
           const contact=particlePairRestDistance(ps,i,j,planar)*(env.gasContactScale??.55);
           if(d<contact){const q=1-d/contact,amount=q*q*(env.gasContactStrength??.12)*dt/Math.max(1,iterations);separatePair(ps,i,j,nx,ny,nz,amount,planar);}
           this.gasCounts[i]=Math.min(65535,this.gasCounts[i]+pairStride);this.gasCounts[j]=Math.min(65535,this.gasCounts[j]+pairStride);return;
         }
         if(pi===Phase.GAS||pj===Phase.GAS){
+          this.exchangeGasFlow(ps,i,j,d,dt/Math.max(1,iterations),planar,env.gasFlowCoupling);
           const gas=pi===Phase.GAS?i:j,sign=pi===Phase.GAS?-1:1,contact=particlePairRestDistance(ps,i,j,planar)*.7;
           if(d<contact){const q=1-d/contact,spread=q*q*.24*dt/Math.max(1,iterations);ps.x[gas]+=nx*spread*sign;ps.y[gas]+=ny*spread*sign;if(!planar)ps.z[gas]+=nz*spread*sign;}return;
         }

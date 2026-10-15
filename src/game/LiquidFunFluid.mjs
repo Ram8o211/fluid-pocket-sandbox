@@ -1,5 +1,5 @@
 import { Phase } from '../simulation/Phase.mjs';
-import { CAULDRON_INTERIOR, PARTICLE_ML } from './cauldron.mjs';
+import { CAULDRON_NATIVE_INTERIOR, PARTICLE_ML } from './cauldron.mjs';
 
 /**
  * Adapter for Google's actual LiquidFun 1.1.0 Emscripten-generated JavaScript.
@@ -22,8 +22,8 @@ export class LiquidFunFluid {
     // Upstream lfjs fixture bindings resolve this global for their lookup.
     runtime.world = this.world;
     const pot = this.world.CreateBody(new runtime.b2BodyDef());
-    for (let i = 0; i < CAULDRON_INTERIOR.length; i++) {
-      const a = CAULDRON_INTERIOR[i], b = CAULDRON_INTERIOR[(i + 1) % CAULDRON_INTERIOR.length];
+    for (let i = 0; i < CAULDRON_NATIVE_INTERIOR.length; i++) {
+      const a = CAULDRON_NATIVE_INTERIOR[i], b = CAULDRON_NATIVE_INTERIOR[(i + 1) % CAULDRON_NATIVE_INTERIOR.length];
       const edge = new runtime.b2EdgeShape();
       edge.Set(new runtime.b2Vec2(a[0], a[1]), new runtime.b2Vec2(b[0], b[1]));
       pot.CreateFixtureFromShape(edge, 0);
@@ -107,16 +107,18 @@ export class LiquidFunFluid {
   step(ps, dt, gravity) {
     if (this.disposed) throw new Error('LiquidFun session has been disposed.');
     this.r.world = this.world;
+    this.particlesPS = ps;
     this.synchronize(ps);
     this.world.SetGravity(new this.r.b2Vec2(gravity.x, gravity.y));
     const indices = this.indices, count = indices.length;
-    if (!count) { this.frames++; return; }
+    if (!count) { ps.nativeLiquidRadius = 0; this.frames++; return; }
     // A partial vial drains mass from every parcel without removing indices.
     // Native systems have one radius: scale it by mean parcel area so the
     // remaining liquid shrinks physically as well as in the inventory/renderer.
     let volume = 0;
     for (const i of indices) volume += ps.mixtureAmount?.[i] ?? PARTICLE_ML;
     const radius = this.definition.radius * Math.sqrt(Math.max(.0001, volume / count) / PARTICLE_ML);
+    ps.nativeLiquidRadius = radius;
     if (typeof this.system.SetRadius === 'function' && Math.abs(radius - this.system.radius) > .000001)
       this.system.SetRadius(radius);
     let { position, velocity } = this.buffers(count);
@@ -128,7 +130,15 @@ export class LiquidFunFluid {
       position[j] = ps.x[i]; position[j + 1] = ps.y[i];
       velocity[j] = ps.vx[i]; velocity[j + 1] = ps.vy[i];
     }
-    this.world.Step(dt, 6, 3);
+    // The 40 Hz game/chemistry clock is too coarse for native pressure in a
+    // full bowl. Integrate the SAME elapsed time in small native steps; fast
+    // spoon strokes get extra CFL headroom without changing their impulse.
+    let maxSpeed = 0;
+    for (const i of indices) maxSpeed = Math.max(maxSpeed, Math.hypot(ps.vx[i], ps.vy[i]));
+    this.substeps = Math.min(4, Math.max(1, Math.ceil(dt * 80 - 1e-8),
+      Math.ceil(maxSpeed * dt / Math.max(.001, radius * 1.5))));
+    for (let substep = 0; substep < this.substeps; substep++)
+      this.world.Step(dt / this.substeps, 6, 3);
     ({ position, velocity } = this.buffers(count));
     for (let k = 0; k < count; k++) {
       const i = indices[k], j = k * 2;
@@ -149,6 +159,7 @@ export class LiquidFunFluid {
     this.frames++;
   }
   reset() {
+    if (this.particlesPS) this.particlesPS.nativeLiquidRadius = 0;
     this.indices.length = 0;
     this.world.DestroyParticleSystem(this.system);
     this.system = this.world.CreateParticleSystem(this.definition);
@@ -163,6 +174,7 @@ export class LiquidFunFluid {
     } else this.world.DestroyParticleSystem(this.system);
     if (this.r.world === this.world) this.r.world = null;
     this.indices.length = 0;
+    if (this.particlesPS) this.particlesPS.nativeLiquidRadius = 0;
     this.disposed = true;
   }
 }

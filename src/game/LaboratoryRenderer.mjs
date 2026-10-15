@@ -5,6 +5,7 @@ import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
 import { mixedMagicGlow, particleMagicAuras, paintParticleMagicLights } from './magicLight.mjs';
 import { paintMaterialParticles } from './MaterialRaster.mjs';
+import { FluidSurfaceGPU } from './FluidSurfaceGPU.mjs';
 
 const MAGIC_GLOW_LIMIT = 160;
 
@@ -17,6 +18,8 @@ export class LaboratoryRenderer extends PlanarRenderer {
     this.glowSprites = new Map();
     this.magicX = new Float32Array(MAGIC_GLOW_LIMIT); this.magicY = new Float32Array(MAGIC_GLOW_LIMIT);
     this.magicColor = new Array(MAGIC_GLOW_LIMIT); this.magicIntensity = new Float32Array(MAGIC_GLOW_LIMIT);
+    this.fluidGPU = FluidSurfaceGPU.create(canvas.ownerDocument);
+    this.materialColor = (ps, i, out) => this.particleColor(ps, i, out);
     this.magicCount = 0; this.resize(true);
   }
   resize() {
@@ -182,6 +185,17 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.restore();
   }
   drawFluid(ctx, t) {
+    const ps = this.sim.ps;
+    this.magicAuras = particleMagicAuras(ps, this.sim.reactions?.mixtures);
+    if (this.fluidGPU?.render(ps, t, this.materialColor, this.colorScratch,
+        this.magicAuras, this.graphics?.effectsScale ?? 1, this.quality === 'eco' ? 20 : 40)) {
+      this.drawCount = ps.count;
+      this.glowingParticleCount = this.fluidGPU.stats.glowingParticles;
+      this.materialBackend = 'webgl2';
+      ctx.globalAlpha = 1; this.fluidGPU.composite(ctx, t);
+      return;
+    }
+    this.materialBackend = 'canvas';
     if (!this.matterLayer) {
       this.matterLayer = this.canvas.ownerDocument.createElement('canvas');
       this.matterContext = this.matterLayer.getContext('2d');
@@ -190,16 +204,19 @@ export class LaboratoryRenderer extends PlanarRenderer {
       this.matterLayer.width = t.w; this.matterLayer.height = t.h;
       this.matterPixels = this.matterContext.createImageData(t.w, t.h);
     }
-    const ps = this.sim.ps;
     this.drawCount = paintMaterialParticles(ps, t, this.matterPixels.data,
-      (ps, i, out) => this.particleColor(ps, i, out), this.colorScratch);
+      this.materialColor, this.colorScratch);
     // The broad animated halos remain sampled for speed; this raster pass
     // lights every actual particle with its live (or homogeneous) mixture magic.
-    this.magicAuras = particleMagicAuras(ps, this.sim.reactions?.mixtures);
     this.glowingParticleCount = paintParticleMagicLights(ps, t, this.matterPixels.data,
       this.magicAuras, this.graphics?.effectsScale ?? 1);
     this.matterContext.putImageData(this.matterPixels, 0, 0);
     ctx.globalAlpha = 1; ctx.drawImage(this.matterLayer, 0, 0);
+  }
+  dispose() {
+    this.fluidGPU?.dispose();
+    this.glowSprites?.clear();
+    this.matterLayer = this.matterContext = this.matterPixels = this.magicAuras = null;
   }
 }
 

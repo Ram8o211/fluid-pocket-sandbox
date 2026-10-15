@@ -22,7 +22,18 @@ const PLANES = CAULDRON_INTERIOR.map(([x, y], i) => {
   return { x, y, nx: dy / length, ny: -dx / length };
 });
 
+// Native particle contacts and the game boundary use this same inset. Shifting
+// only one collider makes pressure push parcels into a different wall every
+// tick, especially after partial bottling changes the native radius.
+export const CAULDRON_NATIVE_INTERIOR = Object.freeze(CAULDRON_INTERIOR.map(([x, y], i) => {
+  const a = PLANES[(i + PLANES.length - 1) % PLANES.length], b = PLANES[i];
+  const scale = WALL_CLEARANCE / (1 + a.nx * b.nx + a.ny * b.ny);
+  return Object.freeze([x + (a.nx + b.nx) * scale, y + (a.ny + b.ny) * scale]);
+}));
+
 export function cauldronParticlePadding(ps, i) {
+  if (ps.phase[i] === Phase.LIQUID && ps.nativeLiquidRadius > 0)
+    return ps.nativeLiquidRadius + WALL_CLEARANCE;
   return effectiveParticleRadius(ps, i, true) + WALL_CLEARANCE;
 }
 
@@ -41,6 +52,23 @@ export function cauldronBottomContact(ps, i) {
     contact = Math.max(contact, Math.max(0, Math.min(1, 1 - gap / .10)));
   }
   return contact;
+}
+
+// A compressible gas has a pressure gradient at a sealed wall, before its
+// parcel centres hit the collision plane. Pressure follows concentration and
+// temperature; it balances buoyancy without artificial lid restitution or
+// large random kicks. It is integrated once per physics tick.
+export function cauldronGasWallPressure(ps, i, dt) {
+  const padding = cauldronParticlePadding(ps, i);
+  const reach = Math.max(.12, effectiveParticleRadius(ps, i, true) * 6.6);
+  const pressure = 2 * Math.min(12, Math.max(.2, ps.localGasDensity[i])) *
+    Math.max(.3, Math.min(1.2, ps.temperature[i] + .25));
+  for (const p of PLANES) {
+    const gap = (ps.x[i] - p.x) * p.nx + (ps.y[i] - p.y) * p.ny - padding;
+    const q = Math.max(0, Math.min(1, 1 - gap / reach));
+    ps.vx[i] += p.nx * q * q * pressure * dt;
+    ps.vy[i] += p.ny * q * q * pressure * dt;
+  }
 }
 
 export function confineCauldronParticle(ps, i) {
@@ -71,8 +99,9 @@ export function confineCauldronParticle(ps, i) {
         const granular = isPowder(ps,i);
         // Liquid and granular contacts are inelastic: the old 3% liquid
          // restitution repeatedly re-injected energy at the floor.
-         // Gas keeps its small rebound so steam retains vertical thickness.
-         const rebound = granular || ps.phase[i] === Phase.LIQUID ? 1 : 1.03;
+         // Vapour pressure provides thickness; lid collisions must not inject
+         // fresh kinetic energy into either phase.
+         const rebound = 1;
         ps.vx[i] -= p.nx * normalSpeed * rebound;
         ps.vy[i] -= p.ny * normalSpeed * rebound;
         if (granular) {

@@ -91,6 +91,45 @@ test('settled native liquids have no sustained pool bounce and still respond to 
   } finally { b.dispose(); }
 });
 
+test('a full native bowl settles after fast spoon strokes and a partial volume change', () => {
+  const b = brew(), ps = b.engine.ps;
+  b.equipment.cauldron = 2;
+  try {
+    b.pour(1, 440, { 1: 500 });
+    for (let tick = 0; tick < 80; tick++) {
+      const x = Math.sin(tick * .25) * 1.5;
+      b.stir({ x, y: -.4 }, { x: 6, y: 3 }, .025, { x: -x, y: -.5 });
+      b.step();
+    }
+    const mass = ps.totalMass();
+    const measure = () => {
+      for (let tick = 0; tick < 400; tick++) b.step();
+      const levels = [], surfaces = [], speeds = [];
+      for (let tick = 0; tick < 160; tick++) {
+        b.step();
+        const ys = Array.from(ps.y.subarray(0, ps.count)).sort((a, b) => a - b);
+        levels.push(ys.reduce((a, y) => a + y, 0) / ps.count);
+        surfaces.push(ys[Math.floor(ps.count * .95)]);
+        let squared = 0;
+        for (let i = 0; i < ps.count; i++) squared += ps.vx[i] ** 2 + ps.vy[i] ** 2;
+        speeds.push(Math.sqrt(squared / ps.count));
+      }
+      const span = a => Math.max(...a) - Math.min(...a);
+      assert.ok(span(levels) < .008, `bulk heave after release: ${span(levels)}`);
+      assert.ok(span(surfaces) < .035, `surface heave after release: ${span(surfaces)}`);
+      assert.ok(Math.max(...speeds) < .14, `residual RMS speed: ${Math.max(...speeds)}`);
+      assert.ok(b.engine.liquidFun.substeps >= 2, 'keep pressure integration faster than the game clock');
+    };
+    measure();
+    assert.equal(ps.totalMass(), mass);
+    b.bottle(200); b.pour(1, 70, { 1: 100 });
+    measure();
+    assert.ok(Math.abs(b.occupiedVolume - 310) < .001);
+    for (let i = 0; i < ps.count; i++)
+      assert.ok(insideCauldron(ps.x[i], ps.y[i], cauldronParticlePadding(ps, i)));
+  } finally { b.dispose(); }
+});
+
 test('material viscosity and wet dough still resist relative motion with the native backend', () => {
   const relativeSpeed = (viscosity, powderContent = 0) => {
     const b = brew(), ps = b.engine.ps;

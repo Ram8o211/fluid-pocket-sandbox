@@ -5,6 +5,8 @@ import { Phase } from '../simulation/Phase.mjs';
 // Each ImageData owns reusable density/colour scratch. Resizing replaces the
 // pixel buffer, allowing the old scratch to be collected with it.
 const liquidRasters = new WeakMap();
+// Shared by the canvas fallback and GPU surface reconstruction.
+export const LIQUID_SURFACE = Object.freeze({ radius: 2.1, cutoff: .25, edge: .25 });
 
 function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
   let raster = liquidRasters.get(pixels);
@@ -28,7 +30,7 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
     // Distant splashes stay separate; physical radius, mass and mixing never
     // change. Subpixel centres avoid a square footprint jumping each frame.
     const x = t.cx + ps.x[i] * t.scale, y = t.cy - ps.y[i] * t.scale;
-    const radius = Math.max(1.25, effectiveParticleRadius(ps, i, true) * t.scale * 1.85);
+    const radius = Math.max(1.25, effectiveParticleRadius(ps, i, true) * t.scale * LIQUID_SURFACE.radius);
     const inverseRadius2 = 1 / (radius * radius);
     const top = Math.max(0, Math.ceil(y - radius - .5)), bottom = Math.min(t.h - 1, Math.floor(y + radius - .5));
     const left = Math.max(0, Math.ceil(x - radius - .5)), right = Math.min(t.w - 1, Math.floor(x + radius - .5));
@@ -53,10 +55,11 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
     // Opaque interiors, a narrow softened contour, and local weighted colour
     // replace per-particle noise and overlapping square outlines. This does
     // not average separated ingredients across the whole cauldron.
-    const alpha = Math.min(1, Math.max(0, (density - .28) / .28));
+    const alpha = Math.min(1, Math.max(0, (density - LIQUID_SURFACE.cutoff) / LIQUID_SURFACE.edge));
     if (alpha === 0) continue;
     const texel = raster.touched[n], above = texel >= t.w ? raster.field[index - t.w * 4] : 0;
-    const shine = Math.max(0, Math.min(.18, (density - above) * .16));
+    const contour = Math.max(0, Math.min(1, (.8 - above) / .45));
+    const shine = Math.max(0, Math.min(.18, (density - above) * .16)) * contour;
     const shade = .94 + shine;
     pixels[index] = raster.field[index + 1] / density * shade;
     pixels[index + 1] = raster.field[index + 2] / density * shade;

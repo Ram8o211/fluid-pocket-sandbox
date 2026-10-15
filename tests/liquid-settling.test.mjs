@@ -81,8 +81,12 @@ test('vapour retains upward buoyancy while the liquid settling correction is ena
   brew.pour(1, 1, { 1: 10 }); ps.count = 1;
   ps.x[0] = 0; ps.y[0] = -.5; ps.vx[0] = ps.vy[0] = 0;
   ps.temperature[0] = .5; ps.boilingTemperature[0] = .15; ps.setPhase(0, Phase.GAS);
-  ticks(brew, 40);
-  assert.equal(ps.phase[0], Phase.GAS); assert.ok(ps.y[0] > -.4); assert.ok(ps.vy[0] > 0); bowl(brew);
+  ticks(brew, 10);
+  assert.equal(ps.phase[0], Phase.GAS); assert.ok(ps.y[0] > -.5); assert.ok(ps.vy[0] > 0);
+  ticks(brew, 30);
+  // Once it reaches the sealed lid, pressure may arrest or reverse its
+  // instantaneous velocity. It must remain buoyant and confined, not rebound.
+  assert.equal(ps.phase[0], Phase.GAS); assert.ok(ps.y[0] > -.4); bowl(brew);
 });
 
 test('neutral shop fluids still conduct charge without mechanical electrical repulsion', () => {
