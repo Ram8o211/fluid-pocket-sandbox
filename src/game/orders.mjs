@@ -199,7 +199,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
     role: STORY_ROLES[Math.floor(rng() * STORY_ROLES.length)], portraitSeed: Math.floor(rng() * 0xffffffff),
     dialogue: narrative + ' I need a reliable potion, with no dangerous side effects.' };
   const clue = 'Study the known garden essences and their activation temperatures. Test a spare dose on your familiars, then write your potion ID from their response.';
-  return { id: world.seed + '-' + completed, conceptVersion: 2, customer, requirements, volume, difficulty,
+  return { id: world.seed + '-' + completed, conceptVersion: 3, customer, requirements, volume, difficulty,
     budget: Math.round(43 + difficulty * 14 + wanted.length * 6 + rng() * 8), witness: recipe, clue,
     targetDescriptions: Object.fromEntries(requirements.map(r => [r.property,
       r.comparison === 'maximum' ? 'At most 1.2% ' + EFFECT_DEFINITIONS[r.property].label.toLowerCase()
