@@ -78,10 +78,22 @@ try {
   assert.ok(await page.locator('#grindBtn').isVisible(), 'raw ingredients still offer grinding');
   await page.locator('[data-ingredient="1"]').click();
   await page.locator('[data-dose="20"]').click();
-  await page.locator('#pourBtn').click();
+  // A touch inside the real canvas pours at that coordinate; dragging later
+  // must still use the spoon instead of pouring an unwanted second dose.
+  const cauldron = page.locator('#labCanvas');
+  const touchArea = await cauldron.boundingBox();
+  await cauldron.tap({ position: { x: touchArea.width * .55, y: touchArea.height * .54 } });
   await page.waitForTimeout(250);
-  assert.ok(await page.locator('#bottleBtn').isEnabled(), 'real liquid enables bottling');
+  assert.ok(await page.locator('#bottleBtn').isEnabled(), 'tapping the cauldron pours liquid');
   assert.match(await page.locator('#volume').textContent(), /20 \/ 60 ml/);
+  await page.mouse.move(touchArea.x + touchArea.width * .48, touchArea.y + touchArea.height * .58);
+  await page.mouse.down();
+  await page.mouse.move(touchArea.x + touchArea.width * .56, touchArea.y + touchArea.height * .58, { steps: 5 });
+  await page.mouse.up();
+  assert.match(await page.locator('#volume').textContent(), /20 \/ 60 ml/, 'dragging stirs without adding a dose');
+  await page.locator('[data-dose="5"]').click();
+  await page.locator('#pourBtn').click();
+  assert.match(await page.locator('#volume').textContent(), /25 \/ 60 ml/, 'automatic button pouring still works');
   await page.locator('#crushBtn').click();
   assert.equal(await page.locator('#crushBtn').getAttribute('aria-pressed'), 'true');
   const stir = await page.locator('#stirBtn').boundingBox();
