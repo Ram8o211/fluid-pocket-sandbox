@@ -1,0 +1,434 @@
+{
+  "version": 2,
+  "design_source": "User-approved Rabbit Trials combination matrix (1792079270408.png)",
+  "size": [
+    256,
+    192
+  ],
+  "baseline_y": 180,
+  "effect_types": {
+    "body_replace": [
+      "strength",
+      "transformation",
+      "acid",
+      "fire"
+    ],
+    "overlays": [
+      "poison",
+      "healing",
+      "love"
+    ],
+    "excluded": [
+      "bubbles",
+      "sparkles"
+    ]
+  },
+  "intensity_tiers": {
+    "0": "unaffected",
+    "1": "subtle",
+    "2": "moderate",
+    "3": "strong",
+    "4": "extreme"
+  },
+  "reference_constraints": [
+    "Strength is muscular rabbit, no fantastical species switch",
+    "Transformation is pale spiky quadrupedal rabbit, never a deer, fox, or horned animal; no crystals",
+    "Acid shows green chemical corrosion/lesions on fur and body",
+    "Fire shows blackened fur with orange scorched fissures and possible flames",
+    "Poison green fumes, Healing green crosses/leaves, Love pink hearts"
+  ],
+  "composition": {
+    "draw_order": [
+      "one_body_sprite",
+      "optional_poison",
+      "optional_healing",
+      "optional_love"
+    ],
+    "anchors": [
+      128,
+      180
+    ],
+    "multi_body_effects": "Not encoded: game must resolve interactions/precedence explicitly; never replace simultaneous effects implicitly"
+  },
+  "magnitude_mapping": "Use gameplay thresholds, not invented numeric values. These are four visual bins.",
+  "source_caveat": "Tier 4 and base sprites crop the approved matrix itself. Intermediate tiers use a matching new visual approximation; check their silhouettes before shipping. All sprites are static, not animation sequences.",
+  "assets": [
+    {
+      "id": "base",
+      "effect": "base",
+      "tier": 0,
+      "kind": "base",
+      "file": "sprites/base/base.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix"
+    },
+    {
+      "id": "strength_t01",
+      "effect": "strength",
+      "tier": 1,
+      "kind": "full-body",
+      "file": "sprites/strength/strength_t01.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "strength_t02",
+      "effect": "strength",
+      "tier": 2,
+      "kind": "full-body",
+      "file": "sprites/strength/strength_t02.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "strength_t03",
+      "effect": "strength",
+      "tier": 3,
+      "kind": "full-body",
+      "file": "sprites/strength/strength_t03.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "strength_t04",
+      "effect": "strength",
+      "tier": 4,
+      "kind": "full-body",
+      "file": "sprites/strength/strength_t04.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix"
+    },
+    {
+      "id": "transformation_t01",
+      "effect": "transformation",
+      "tier": 1,
+      "kind": "full-body",
+      "file": "sprites/transformation/transformation_t01.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "transformation_t02",
+      "effect": "transformation",
+      "tier": 2,
+      "kind": "full-body",
+      "file": "sprites/transformation/transformation_t02.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "transformation_t03",
+      "effect": "transformation",
+      "tier": 3,
+      "kind": "full-body",
+      "file": "sprites/transformation/transformation_t03.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "transformation_t04",
+      "effect": "transformation",
+      "tier": 4,
+      "kind": "full-body",
+      "file": "sprites/transformation/transformation_t04.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix"
+    },
+    {
+      "id": "acid_t01",
+      "effect": "acid",
+      "tier": 1,
+      "kind": "full-body",
+      "file": "sprites/acid/acid_t01.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "user-approved base rabbit with subtle body damage markings"
+    },
+    {
+      "id": "acid_t02",
+      "effect": "acid",
+      "tier": 2,
+      "kind": "full-body",
+      "file": "sprites/acid/acid_t02.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "acid_t03",
+      "effect": "acid",
+      "tier": 3,
+      "kind": "full-body",
+      "file": "sprites/acid/acid_t03.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "acid_t04",
+      "effect": "acid",
+      "tier": 4,
+      "kind": "full-body",
+      "file": "sprites/acid/acid_t04.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix"
+    },
+    {
+      "id": "fire_t01",
+      "effect": "fire",
+      "tier": 1,
+      "kind": "full-body",
+      "file": "sprites/fire/fire_t01.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "user-approved base rabbit with subtle body damage markings"
+    },
+    {
+      "id": "fire_t02",
+      "effect": "fire",
+      "tier": 2,
+      "kind": "full-body",
+      "file": "sprites/fire/fire_t02.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "fire_t03",
+      "effect": "fire",
+      "tier": 3,
+      "kind": "full-body",
+      "file": "sprites/fire/fire_t03.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "reference-aligned tier preview"
+    },
+    {
+      "id": "fire_t04",
+      "effect": "fire",
+      "tier": 4,
+      "kind": "full-body",
+      "file": "sprites/fire/fire_t04.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix"
+    },
+    {
+      "id": "poison_t01",
+      "effect": "poison",
+      "tier": 1,
+      "kind": "overlay",
+      "file": "sprites/overlays/poison/poison_t01.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "poison_t02",
+      "effect": "poison",
+      "tier": 2,
+      "kind": "overlay",
+      "file": "sprites/overlays/poison/poison_t02.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "poison_t03",
+      "effect": "poison",
+      "tier": 3,
+      "kind": "overlay",
+      "file": "sprites/overlays/poison/poison_t03.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "poison_t04",
+      "effect": "poison",
+      "tier": 4,
+      "kind": "overlay",
+      "file": "sprites/overlays/poison/poison_t04.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "healing_t01",
+      "effect": "healing",
+      "tier": 1,
+      "kind": "overlay",
+      "file": "sprites/overlays/healing/healing_t01.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "healing_t02",
+      "effect": "healing",
+      "tier": 2,
+      "kind": "overlay",
+      "file": "sprites/overlays/healing/healing_t02.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "healing_t03",
+      "effect": "healing",
+      "tier": 3,
+      "kind": "overlay",
+      "file": "sprites/overlays/healing/healing_t03.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "healing_t04",
+      "effect": "healing",
+      "tier": 4,
+      "kind": "overlay",
+      "file": "sprites/overlays/healing/healing_t04.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "love_t01",
+      "effect": "love",
+      "tier": 1,
+      "kind": "overlay",
+      "file": "sprites/overlays/love/love_t01.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "love_t02",
+      "effect": "love",
+      "tier": 2,
+      "kind": "overlay",
+      "file": "sprites/overlays/love/love_t02.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "love_t03",
+      "effect": "love",
+      "tier": 3,
+      "kind": "overlay",
+      "file": "sprites/overlays/love/love_t03.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    },
+    {
+      "id": "love_t04",
+      "effect": "love",
+      "tier": 4,
+      "kind": "overlay",
+      "file": "sprites/overlays/love/love_t04.png",
+      "canvas": [
+        256,
+        192
+      ],
+      "baseline_y": 180,
+      "origin": "approved matrix, isolated colored particles"
+    }
+  ]
+}

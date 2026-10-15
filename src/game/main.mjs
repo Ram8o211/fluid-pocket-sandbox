@@ -529,7 +529,7 @@ function updateRabbitRoom() {
   $('remainsLoot').textContent=rabbit.remainsRecovered?'Ingredients recovered. The body is cleared; its trial history stays in the notebook.':`Recover once: ${loot.map(d=>`${d.quantity} ${reagents[d.ingredientId]}${d.ingredientId===18?' ml':' measures'}`).join(' · ')}. Grind bones before brewing.`;
   const recover=$('sheetContent').querySelector('[data-action="recover-rabbit"]');recover.disabled=rabbit.stats.alive||rabbit.remainsRecovered;recover.textContent=rabbit.remainsRecovered?'Already recovered':'Recover ingredients';
   for(const r of state.experiments.rabbits){const card=$('sheetContent').querySelector(`[data-subject="${r.id}"]`);if(card){card.querySelector('small').textContent=rabbitCondition(r);card.querySelector('span:nth-of-type(2)').textContent=`${r.age} · ${r.sex==='female'?'♀':'♂'} · ${r.location}`;card.classList.toggle('rabbit-dead',!r.stats.alive);
-    const portrait=card.querySelector('canvas'),signature=`${rabbitArtworkVersion()}:${r.age}:${r.stats.growth}:${r.stats.health}:${r.stats.alive}:${r.trials}:${Object.values(r.exposure).join(',')}`;
+    const portrait=card.querySelector('canvas'),signature=`${rabbitArtworkVersion()}:${r.age}:${r.stats.growth}:${r.stats.health}:${r.stats.alive}:${r.trials}:${Number(r.activeFireUntil)>Date.now()}:${Object.values(r.exposure).join(',')}`;
     if(portrait.dataset.signature!==signature){const ctx=portrait.getContext('2d');ctx.clearRect(0,0,80,60);drawRabbit(ctx,r,40,57,48,0);portrait.dataset.signature=signature;}
   }}
   $('colonyJournal').innerHTML=(state.experiments.events||[]).slice(0,12).map(e=>`<li>${escape(e.message||e.text||e.description||e.type)}</li>`).join('')||'<li>The colony is quiet.</li>';
