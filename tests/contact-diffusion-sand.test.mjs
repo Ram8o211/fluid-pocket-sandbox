@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BrewingSession } from '../src/game/brewing.mjs';
+import { PARTICLE_ML } from '../src/game/cauldron.mjs';
 import { generateLiquidWorld as generateWorld } from './helpers/liquid-world.mjs';
 import { ParticleSystem } from '../src/simulation/ParticleSystem.mjs';
 import { SpatialGrid } from '../src/simulation/SpatialGrid.mjs';
@@ -127,9 +128,9 @@ test('assisted stirring kneads a poured powder-and-liquid batch through the real
   const b=new BrewingSession(generateWorld('mobile-acceptance').ingredients);b.pour(10,20,{10:100});
   for(let i=0;i<90;i++)b.step();b.pour(1,20,{1:100});for(let i=0;i<100;i++)b.step();
   const ps=b.engine.ps,mass=ps.totalMass(),dry=[...ps.mass.subarray(0,ps.count)].reduce((s,m,i)=>s+m*ps.powderContent[i],0);
-  assert.equal(ps.phaseCounts()[Phase.SOLID],80);assert.ok([...ps.powderContent.subarray(0,80)].every(p=>p===1));
+  assert.equal(ps.phaseCounts()[Phase.SOLID],20/PARTICLE_ML);assert.ok([...ps.powderContent.subarray(0,20/PARTICLE_ML)].every(p=>p===1));
   for(let i=0;i<240;i++){b.assistStir();b.step();}
-  assert.ok(ps.phaseCounts()[Phase.LIQUID]>80,'normal assisted stirring must actually form liquid dough');
+  assert.ok(ps.phaseCounts()[Phase.LIQUID]>20/PARTICLE_ML,'normal assisted stirring must actually form liquid dough');
   assert.ok([...ps.powderContent.subarray(0,ps.count)].some((p,i)=>p>.27&&p<.935&&ps.phase[i]===Phase.LIQUID));
   near(ps.totalMass(),mass,.001);near([...ps.mass.subarray(0,ps.count)].reduce((s,m,i)=>s+m*ps.powderContent[i],0),dry,.001);
 });
