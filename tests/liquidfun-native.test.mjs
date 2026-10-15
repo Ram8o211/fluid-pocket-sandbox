@@ -305,3 +305,26 @@ test('native solid bodies track crushing, save restore, melting and cleaning wit
     b.clean(); assert.equal(backend.world.bodies.length, 1, 'only the permanent cauldron may remain');
   } finally { b.dispose(); }
 });
+
+test('native floating powder infuses a stirred brew entered through split doses after cleaning', () => {
+  const b = new BrewingSession(generateWorld('mobile-magical-garden').ingredients);
+  b.engine.liquidFun = new LiquidFunFluid(runtime);
+  try {
+    for (const initialTicks of [0, 7, 21]) {
+      b.clean();
+      for (let tick = 0; tick < initialTicks; tick++) b.step();
+      for (const [id, ml] of [[1, 40], [1, 40], [1, 10], [1, 5], [3, 10], [3, 5]]) {
+        b.pour(id, ml, { [id]: 100 }, { crushed: id === 3 });
+        for (let tick = 0; tick < 4; tick++) b.step();
+      }
+      for (let tick = 0; tick < 440; tick++) {
+        b.setThermal(tick < 340 ? .7 : 0); b.assistStir(); b.step();
+      }
+      b.takeSample(5);
+      const sample = b.bottle(80);
+      assert.ok(sample.love >= .08, `native powder did not infuse at timing offset ${initialTicks}: ${sample.love}`);
+      assert.notEqual(sample.color, b.ingredients.find(i => i.id === 1).material.color, 'the bottled liquid must acquire pigment from the crushed ingredient');
+      assert.ok(Math.abs(sample.volume - 80) < .001);
+    }
+  } finally { b.dispose(); }
+});

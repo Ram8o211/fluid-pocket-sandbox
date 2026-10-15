@@ -24,7 +24,7 @@ test('stirred powder exchanges solvent at the real native fluid contact radius',
   const ps=new ParticleSystem(2),grid=new SpatialGrid(2),reactions=transport();
   grid.setDimensionMode('2D');ps.packingScale=.6;ps.volumePacking=true;ps.nativeLiquidRadius=.055;
   ps.add({x:0,y:0,z:0,mass:.5},material(1,'#0000ff'),Phase.LIQUID);
-  ps.add({x:.105,y:0,z:0,mass:.5},material(2,'#ff0000',{meltingTemperature:.7}),Phase.SOLID);
+  ps.add({x:.135,y:0,z:0,mass:.5},material(2,'#ff0000',{meltingTemperature:.7}),Phase.SOLID);
   ps.stirActivity[0]=ps.stirActivity[1]=1;
   grid.rebuild(ps,{width:5,height:5,depth:3});
   reactions.step(ps,grid,rules,.025);

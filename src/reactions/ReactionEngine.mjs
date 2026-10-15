@@ -45,7 +45,15 @@ export class ReactionEngine {
       if(materialId[i]===materialId[j] && !this.mixtures)return;
       const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],d2=dx*dx+dy*dy+dz*dz;if(d2>r2)return;
       const distance=Math.sqrt(d2),contact=saturate(1-distance/radius),potentialDelta=Math.abs(ps.reactionPotential[i]-ps.reactionPotential[j]);
-      const scale=ps.packingScale??1,mixingReach=!this.mixtures||ps.phase[i]===Phase.GAS||ps.phase[j]===Phase.GAS?radius:Math.min(radius,clamp(this.radii[i]+this.radii[j],.07*scale,.44*scale)*(isPowder(ps,i)||isPowder(ps,j)?1.12:1.6));
+      const scale=ps.packingScale??1;
+      let mixingReach=!this.mixtures||ps.phase[i]===Phase.GAS||ps.phase[j]===Phase.GAS?radius:Math.min(radius,clamp(this.radii[i]+this.radii[j],.07*scale,.44*scale)*(isPowder(ps,i)||isPowder(ps,j)?1.12:1.6));
+      // LiquidFun's particle/body kernel reaches one particle DIAMETER from
+      // the fixture surface. Stable native contact can therefore lie beyond
+      // the sum of the drawn radii, especially for light floating powders.
+      if(this.mixtures&&ps.nativeLiquidRadius>0){
+        const solid=isPowder(ps,i)&&ps.phase[j]===Phase.LIQUID?i:isPowder(ps,j)&&ps.phase[i]===Phase.LIQUID?j:-1;
+        if(solid>=0)mixingReach=Math.max(mixingReach,Math.min(radius,this.radii[solid]+ps.nativeLiquidRadius*2+.005));
+      }
       const mixingContact=distance<=mixingReach?contact:0;
       const mixtureCompatibility=this.mixtures ? (rules.baseMixingRate>0&&mixingContact>0 ? this.mixtures.contact(ps,i,j,mixingContact,rules.miscibilityThreshold,dt,rules) : 0) : undefined;
       if(materialId[i]===materialId[j]||isCoherentSolid(ps,i)||isCoherentSolid(ps,j))return;
