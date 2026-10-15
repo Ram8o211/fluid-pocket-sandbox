@@ -33,6 +33,7 @@ function boil(brew, inventory) {
 test('fine particles preserve ml, cost and mass and are much smaller than the old droplets', () => {
   const { world, brew, inventory } = setup(); brew.pour(1, 40, inventory);
   const ps = brew.engine.ps;
+  assert.equal(PARTICLE_ML, .5, 'new brews use two parcels per ml');
   assert.equal(ps.count, 40 / PARTICLE_ML); close(brew.liquidVolume, 40);
   close(ps.totalMass(), world.ingredients[0].material.density * 40);
   close(brew.cost.ingredients, world.ingredients[0].price * 40); assert.equal(inventory[1], 560);
@@ -50,14 +51,15 @@ test('all phases collide by their full radius with the lid, floor, walls and cor
       ps.setPhase(i, phase);
     }
     const mass = ps.totalMass(); brew.confineCauldron(); contained(brew); close(ps.totalMass(), mass);
-    assert.equal(ps.count, 40); assert.equal(brew.history.evaporated, 0);
+    assert.equal(ps.count, 10 / PARTICLE_ML); assert.equal(brew.history.evaporated, 0);
   }
 });
 
 test('maximum-capacity fluid remains visibly contained under sustained stirring', () => {
   const { brew, inventory } = setup(); brew.pour(1, 220, inventory); brew.pour(2, 220, inventory);
   const mass = brew.engine.ps.totalMass();
-  assert.equal(brew.engine.ps.count, 1760);
+  assert.equal(brew.engine.ps.count, 440 / PARTICLE_ML);
+  assert.equal(brew.engine.ps.count, 880, 'full batch runs with half the old particle budget');
   for (let i = 0; i < 120; i++) { brew.assistStir(); brew.step(); contained(brew); }
   close(brew.engine.ps.totalMass(), mass, .01);
 });
@@ -130,9 +132,9 @@ test('legacy large-particle saves refine once while preserving all sampled prope
   legacy.particles.mass.fill(world.ingredients[0].material.density);
   legacy.particles.particleRadius.fill(.19);
   const restored = new BrewingSession(world.ingredients); restored.restore(legacy);
-  assert.equal(restored.engine.ps.count, 20); close(restored.liquidVolume, 5);
+  assert.equal(restored.engine.ps.count, 5 / PARTICLE_ML); close(restored.liquidVolume, 5);
   close(restored.inspect().density, world.ingredients[0].material.density); close(restored.inspect().temperature, .33);
   assert.equal(restored.inspect().color, brew.inspect().color); contained(restored);
   const again = new BrewingSession(world.ingredients); again.restore(restored.snapshot());
-  assert.equal(again.engine.ps.count, 20); close(again.liquidVolume, 5);
+  assert.equal(again.engine.ps.count, 5 / PARTICLE_ML); close(again.liquidVolume, 5);
 });
