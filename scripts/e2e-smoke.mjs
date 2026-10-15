@@ -17,6 +17,8 @@ try {
   }
   const manifest = JSON.parse(await readFile('public/manifest.webmanifest', 'utf8'));
   if (manifest.start_url !== '../' || manifest.scope !== '../') throw new Error('PWA paths must stay project-relative');
-  for (const file of [...required, 'src/game/rabbits.mjs', 'src/game/RabbitRenderer.mjs', 'src/game/RabbitMotion.mjs', 'public/toon.css', 'public/fonts/guild-pixel.woff']) { const result = await fetch(base + file); if (!result.ok) throw new Error('Missing asset ' + file); await access('dist/' + file); }
+  const trials = JSON.parse(await readFile('public/assets/rabbit-trials/manifest.json', 'utf8'));
+  const trialAssets = trials.assets.map(asset => 'public/assets/rabbit-trials/' + asset.path);
+  for (const file of [...required, 'src/game/rabbits.mjs', 'src/game/RabbitRenderer.mjs', 'src/game/RabbitMotion.mjs', 'src/game/RabbitAssets.mjs', 'public/toon.css', 'public/rabbit-trials.css', 'public/fonts/guild-pixel.woff', ...trialAssets]) { const result = await fetch(base + file); if (!result.ok) throw new Error('Missing asset ' + file); await access('dist/' + file); }
   console.log('Static smoke OK: game, original sandbox, and source/dist assets work under a Pages project path.');
 } finally { server.kill('SIGTERM'); }

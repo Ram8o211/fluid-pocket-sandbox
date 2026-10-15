@@ -1,0 +1,323 @@
+/* Supplied Rabbit Trials artwork. All labels and controls remain live HTML.
+   Runtime images are native-size; nine-slice corners stay on the pixel grid. */
+.sheet.rabbit-room {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/panel_details.png');
+  --trial-slice: 24;
+  --trial-border: 8px;
+  width: calc(100% - 16px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #091b29;
+  color: #ecdfc8;
+  box-shadow: 0 8px 40px #0009;
+  scrollbar-color: #e2b663 #1b2e3b;
+}
+.rabbit-room .sheet-header, .rabbit-room .sheet-footer,
+.rabbit-room .rabbit-detail-panel, .rabbit-room .rabbit-selector button,
+.rabbit-room .trial-comparison, .rabbit-room .trial-feedback,
+.rabbit-room .rabbit-notebook, .rabbit-room .colony-overview,
+.rabbit-room button, .rabbit-room #rabbitCondition {
+  border: var(--trial-border) solid transparent;
+  border-image: var(--trial-frame) var(--trial-slice) fill / var(--trial-border) / 0 stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  image-rendering: pixelated;
+}
+.rabbit-room .sheet-header {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/header_main.png');
+  --trial-slice: 22;
+  min-height: 68px;
+  margin: 4px 4px 0;
+  padding: 0 2px;
+  gap: 4px;
+  position: relative;
+}
+.rabbit-room .sheet-header h2 {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  color: #ffda94;
+  font-size: clamp(24px, 3.5vw, 29px);
+  font-weight: bold;
+  text-transform: uppercase;
+  text-shadow: 2px 2px #08131f;
+}
+.rabbit-room .trial-title-rabbit { width: 48px; height: 40px; object-fit: contain; flex-shrink: 0; }
+.rabbit-room button {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_default.png');
+  --trial-slice: 21;
+  --trial-border: 7px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 4px 6px;
+  font-weight: normal;
+  color: #f7e9d5;
+  transition: transform .08s;
+}
+.rabbit-room button:hover:not(:disabled) {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_hover.png');
+  background: none;
+}
+.rabbit-room button:active:not(:disabled), .rabbit-room button[aria-pressed=true]:not([data-subject]) {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_pressed.png');
+  box-shadow: none;
+  background: none;
+}
+.rabbit-room button:disabled {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_disabled.png');
+  opacity: .68;
+  filter: none;
+}
+.rabbit-room button.primary {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_primary.png');
+  color: #102c31;
+  background: none;
+  box-shadow: none;
+}
+.rabbit-room button.primary:hover:not(:disabled) {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_primary.png');
+  color: #041c24;
+}
+.rabbit-room button.primary:disabled {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_disabled.png');
+  color: #e1decc;
+}
+.rabbit-room button.danger-button, .rabbit-room button.cull-active {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_danger.png');
+  background: none !important;
+  border-color: transparent !important;
+  color: #ffeadb !important;
+  box-shadow: none !important;
+}
+.rabbit-room button.danger-button:hover:not(:disabled), .rabbit-room button.cull-active:hover:not(:disabled) {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_danger_hover.png');
+}
+.rabbit-room .sheet-header .icon-button {
+  --trial-frame: url('./assets/rabbit-trials/03_buttons/button_close.png');
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  padding: 4px;
+}
+.rabbit-room .sheet-header .icon-button svg { display: none; }
+.rabbit-room .sheet-header .icon-button::before {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 24px;
+  background: url('./assets/rabbit-trials/04_icons/close_x.png') center / contain no-repeat;
+}
+.sheet.rabbit-room .sheet-body { padding: 8px; scrollbar-gutter: stable; background: #091b29; }
+.rabbit-room-layout { gap: 12px; }
+.rabbit-room .rabbit-selector {
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  gap: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: #e6b969 #342e30;
+}
+.rabbit-room .rabbit-selector::-webkit-scrollbar { height: 6px; }
+.rabbit-room .rabbit-selector::-webkit-scrollbar-track { background: url('./assets/rabbit-trials/02_ui_frames/scrollbar_horizontal_track.png') center / 100% 100%; }
+.rabbit-room .rabbit-selector::-webkit-scrollbar-thumb { background: url('./assets/rabbit-trials/02_ui_frames/scrollbar_horizontal_gold.png') center / 100% 100%; }
+.rabbit-room .rabbit-selector button {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/card_default.png');
+  --trial-slice: 22;
+  --trial-border: 8px;
+  flex: 0 0 112px;
+  min-height: 146px;
+  padding: 2px 0 4px;
+  gap: 3px;
+  justify-content: flex-start;
+  background: none;
+}
+.rabbit-room .rabbit-selector button.active {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/card_selected.png');
+  color: #fff0b7;
+  border-color: transparent;
+}
+.rabbit-room .rabbit-selector .rabbit-card-glyph {
+  display: block;
+  width: 88px;
+  height: 66px;
+  background: none;
+  border: 0;
+  opacity: 1;
+}
+.rabbit-room .rabbit-card-glyph canvas { width: 88px; height: 66px; }
+.rabbit-room .rabbit-selector strong { color: #ffe4a1; font-size: 15px; line-height: 1.2; }
+.rabbit-room .rabbit-selector span { font-size: 10px; color: #d1d5d7; }
+.rabbit-room .rabbit-selector small { max-width: 92px; font-size: 11px; color: #d5df8d; }
+.rabbit-room .rabbit-selector .rabbit-dead { opacity: .75; }
+.rabbit-room .rabbit-detail-panel { padding: 4px 6px 6px; position: relative; }
+.rabbit-room .sheet-header::after, .rabbit-room .rabbit-detail-panel::before,
+.rabbit-room .rabbit-detail-panel::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: url('./assets/rabbit-trials/02_ui_frames/gold_corner_ornament.png') center / contain no-repeat;
+  pointer-events: none;
+}
+.rabbit-room .sheet-header::after, .rabbit-room .rabbit-detail-panel::before { top: -7px; left: -7px; }
+.rabbit-room .rabbit-detail-panel::after { bottom: -7px; right: -7px; transform: rotate(180deg); }
+.rabbit-room .rabbit-detail-heading { gap: 6px; align-items: start; }
+.rabbit-room .rabbit-detail-heading h3 { font-size: 25px !important; color: #ffe0a0; text-transform: uppercase; overflow-wrap: anywhere; }
+.rabbit-room #rabbitCondition {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/status_tag.png');
+  --trial-slice: 20;
+  --trial-border: 5px;
+  max-width: 54%;
+  padding: 1px 5px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #e4e68c;
+}
+.rabbit-room #rabbitContext { color: #c4c9cc; margin: 4px 0 10px; font-size: 11px; }
+.rabbit-room .trial-comparison {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/panel_comparison.png');
+  --trial-slice: 24;
+  --trial-border: 5px;
+  position: relative;
+  overflow: hidden;
+}
+.rabbit-room .trial-stage-labels {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  align-items: start;
+  pointer-events: none;
+  z-index: 1;
+}
+.rabbit-room .trial-stage-labels > span {
+  border: 5px solid transparent;
+  border-image: url('./assets/rabbit-trials/02_ui_frames/viewport_tab.png') 20 fill / 5px;
+  padding: 3px 0;
+  font-size: 10px;
+  line-height: 1.2;
+  color: #ffdda3;
+}
+.rabbit-room .trial-stage-labels > span:first-child { flex: 0 0 30%; }
+.rabbit-room .trial-stage-labels > span:last-child { flex: 0 1 48%; margin: 0 auto; }
+.rabbit-room #creatureCanvas {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  border: 0;
+  background: #152e42;
+  box-shadow: none;
+}
+.rabbit-room .trial-playback { margin-top: 6px; gap: 5px; }
+.rabbit-room .trial-playback button { font-size: 11px; padding: 4px 1px; }
+.rabbit-room .trial-feedback {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/panel_instructions.png');
+  --trial-slice: 22;
+  --trial-border: 6px;
+  min-height: 60px;
+  padding: 6px 6px 6px 35px;
+  position: relative;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #d1dfa6;
+}
+.rabbit-room .trial-feedback::before {
+  position: absolute;
+  content: '';
+  width: 24px;
+  height: 28px;
+  left: 4px;
+  top: calc(50% - 14px);
+  background: url('./assets/rabbit-trials/04_icons/book_open.png') center / contain no-repeat;
+}
+.rabbit-room .rabbit-actions { gap: 6px; margin: 8px 0 0; }
+.rabbit-room .rabbit-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; }
+.rabbit-room [data-action=move-rabbit]::before, .rabbit-room [data-action=cull-rabbit]::before,
+.rabbit-room [data-test]::before {
+  content: '';
+  display: inline-block;
+  width: 22px;
+  height: 26px;
+  flex: 0 0 22px;
+  background: url('./assets/rabbit-trials/04_icons/cage.png') center / contain no-repeat;
+}
+.rabbit-room [data-action=cull-rabbit]::before { background-image: url('./assets/rabbit-trials/04_icons/rabbit_skull.png'); }
+.rabbit-room [data-test]::before { background-image: url('./assets/rabbit-trials/04_icons/potion_blue.png'); }
+.rabbit-room .rabbit-notebook, .rabbit-room .colony-overview { --trial-border: 6px; padding: 0 8px; margin-top: 8px !important; }
+.rabbit-room summary { color: #edce90; }
+.rabbit-room .trial-actions { gap: 6px; margin-top: 8px; }
+.rabbit-room .trial-vial-link { width: 100%; margin-top: 6px; }
+.rabbit-room .colony-alerts { background: #16313d; color: #c7d8b6; border-color: #47616a; font-size: 11px; }
+.rabbit-room .colony-alerts.danger-alert { background: #582d42; color: #ffdbc5; }
+.rabbit-room .colony-toolbar { gap: 6px; }
+.rabbit-room .colony-help { color: #bdc9c7; }
+.rabbit-room #rabbitPenCanvas { box-shadow: none; border-color: #406074; }
+.rabbit-room .sheet-footer {
+  --trial-frame: url('./assets/rabbit-trials/02_ui_frames/panel_dose.png');
+  --trial-slice: 22;
+  margin: 4px;
+  padding: 4px 6px max(4px, env(safe-area-inset-bottom));
+}
+.rabbit-room .trial-controls { grid-template-columns: 144px minmax(0, 1fr); gap: 6px; }
+.rabbit-room .trial-controls label { gap: 6px; font-size: 12px; color: #f9e5c1; position: relative; }
+.rabbit-room .trial-controls label::before {
+  content: '';
+  width: 18px;
+  height: 26px;
+  flex: 0 0 18px;
+  background: url('./assets/rabbit-trials/04_icons/potion_amber.png') center / contain no-repeat;
+}
+.rabbit-room .trial-controls label::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  right: 12px;
+  top: calc(50% - 6px);
+  background: url('./assets/rabbit-trials/04_icons/chevron_down.png') center / contain no-repeat;
+  pointer-events: none;
+}
+.rabbit-room .trial-controls select {
+  min-width: 78px;
+  min-height: 48px;
+  border: 6px solid transparent !important;
+  border-image: url('./assets/rabbit-trials/02_ui_frames/dose_dropdown.png') 20 fill / 6px !important;
+  box-shadow: none;
+  appearance: none;
+  padding: 2px 19px 2px 4px;
+  background: url('./assets/rabbit-trials/04_icons/chevron_down.png') right 0 center / 16px 16px no-repeat !important;
+  color: #ffe6b3 !important;
+  font-size: 16px;
+}
+.rabbit-room #trialDose option { background: #152d40; color: #ffe6b3; }
+.rabbit-room .trial-controls [data-test] { display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 48px; font-size: 12px; padding: 2px 4px; }
+.rabbit-room .trial-dose-status { color: #bdc9ce; font-size: 10px; margin-top: 5px; }
+.rabbit-room .trial-dose-status #trialRest { color: #c0d696; }
+@media (max-width: 759px) {
+  .sheet.rabbit-room { width: calc(100% - 8px); height: calc(100dvh - 8px - env(safe-area-inset-top)); max-height: calc(100dvh - 8px - env(safe-area-inset-top)); }
+  .sheet.rabbit-room .sheet-body { padding: 6px; scrollbar-gutter: auto; }
+  .rabbit-room .rabbit-selector button { flex-basis: 104px; min-height: 138px; }
+  .rabbit-room .rabbit-selector .rabbit-card-glyph, .rabbit-room .rabbit-card-glyph canvas { width: 80px; height: 60px; }
+  .rabbit-room .sheet-footer { padding-left: 4px; padding-right: 4px; }
+}
+@media (max-width: 359px) {
+  .rabbit-room .sheet-header h2 { font-size: 20px; gap: 2px; }
+  .rabbit-room .trial-title-rabbit { width: 32px; height: 36px; }
+  .rabbit-room .rabbit-detail-panel { padding-left: 1px; padding-right: 1px; }
+  .rabbit-room .rabbit-actions button { gap: 2px; font-size: 10px; }
+  .rabbit-room .trial-playback button { font-size: 10px; }
+  .rabbit-room .trial-controls { grid-template-columns: 109px minmax(0, 1fr); gap: 3px; }
+  .rabbit-room .trial-controls label { gap: 3px; font-size: 11px; }
+  .rabbit-room .trial-controls label::before { display: none; }
+  .rabbit-room .trial-controls select { min-width: 72px; }
+  .rabbit-room .trial-controls [data-test] { font-size: 11px; gap: 2px; }
+  .rabbit-room .trial-controls [data-test]::before { width: 17px; flex-basis: 17px; }
+}
+@media (max-height: 480px) and (min-width: 600px) {
+  .rabbit-room .sheet-header { min-height: 52px; }
+  .rabbit-room .trial-title-rabbit { height: 30px; }
+  .rabbit-room .rabbit-selector button { min-height: 128px; }
+}

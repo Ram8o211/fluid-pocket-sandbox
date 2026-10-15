@@ -99,7 +99,32 @@ try {
   })));
   assert.ok(textures.every(texture => texture.loaded && texture.rendering === 'pixelated'),
     `all supplied icons load with crisp rendering: ${JSON.stringify(textures)}`);
+  await page.locator('#experimentsBtn').click();
+  await page.evaluate(async () => { await (await import('./src/game/RabbitAssets.mjs')).loadRabbitArtwork(); });
+  assert.match(await page.locator('#trialDose').evaluate(el => getComputedStyle(el).borderImageSource), /dose_dropdown\.png/);
+  for (const viewport of [{ width: 393, height: 852 }, { width: 320, height: 568 }, { width: 1280, height: 950 }]) {
+    await page.setViewportSize(viewport);
+    assert.ok(await page.locator('.rabbit-room .sheet-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'trial panels fit without horizontal clipping');
+    const dose = await page.locator('[data-test]').boundingBox();
+    assert.ok(dose.height >= 44 && dose.y >= 0 && dose.y + dose.height <= viewport.height, 'the dose action stays visible');
+    const session = await page.context().newCDPSession(page);
+    const { data } = await session.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    await writeFile(`test-results/trials-redesign-${viewport.width}.png`, Buffer.from(data, 'base64'));
+    await session.detach();
+  }
+  // A first visit installs the complete import graph and the new art. Reopening
+  // the saved shop offline must not depend on a second online cache warm-up.
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForFunction(() => navigator.serviceWorker.controller);
+  await page.context().setOffline(true);
+  await page.reload(); await page.waitForSelector('body[data-game-ready=true]');
+  await page.locator('#continueBtn').click(); await page.waitForSelector('body[data-game-state=brewing]');
+  await page.locator('#experimentsBtn').click();
+  const offlineArtwork = await page.evaluate(async () => {
+    const art = await import('./src/game/RabbitAssets.mjs'); await art.loadRabbitArtwork(); return art.rabbitArtworkVersion();
+  });
+  assert.equal(offlineArtwork, 6, 'the offline saved shop loads all rabbit coats, the room and caption');
   assert.deepEqual(errors, []);
   assert.deepEqual(missing, []);
-  console.log('HUD OK: five viewport sizes, live quantities/selection/disabled states, brewing tools, all seven rooms, no missing textures or browser errors.');
+  console.log('HUD OK: five viewport sizes, live controls, all rooms, responsive trial artwork, offline saved-shop reload, no missing textures or browser errors.');
 } finally { await browser?.close(); server?.kill('SIGTERM'); }

@@ -1,5 +1,6 @@
 import { TestingRenderer } from './TestingRenderer.mjs';
 import { RabbitColonyRenderer, drawRabbit } from './RabbitRenderer.mjs';
+import { loadRabbitArtwork, rabbitArtworkVersion } from './RabbitAssets.mjs';
 import { rabbitById, advanceRabbits, buyRabbit, moveRabbit, cullRabbit, rabbitRemains, recoverRabbitIngredients } from './rabbits.mjs';
 import { findPotionId, compilePotionId } from './potionId.mjs';
 import { startNegotiation, counterOffer, acceptCustomerOffer, certificationCost, certifyPotion, certificateFor, advanceComplaints, resolveComplaint } from './commerce.mjs';
@@ -84,6 +85,9 @@ function sheet(title, content, footer = '') {
   $('sheet').classList.toggle('rabbit-room', title === 'Rabbit trials');
   assist = false; pointer = null; stopPour();
   $('sheetContent').innerHTML = `<header class="sheet-header"><h2 id="sheetTitle">${escape(title)}</h2><button class="icon-button" data-action="close" aria-label="Close panel">${icon('close')}</button></header><div class="sheet-body"><output id="panelNotice" class="panel-notice" role="status" hidden></output>${content}</div>${footer ? `<div class="sheet-footer">${footer}</div>` : ''}`;
+  if (title === 'Rabbit trials') {
+    $('sheetTitle').insertAdjacentHTML('afterbegin', '<img class="trial-title-rabbit" src="./public/assets/rabbit-trials/01_rabbits/portrait_moon.png" alt="" aria-hidden="true">');
+  }
   if (!$('sheet').open) $('sheet').showModal();
   if (previous) {
     if ($('colonyOverview')) $('colonyOverview').open = previous.colony;
@@ -441,20 +445,24 @@ function rabbitTrialNotes(reports) {
   return reports.map(r=>`<article class="rabbit-trial-note"><strong>${escape(r.subjectName)} · ${r.volume.toFixed(1)} ml · ${r.beforeRabbit?.age || 'adult'} · ${r.beforeRabbit?.location || 'pen'}</strong><p>${r.beforeRabbit?.trials ? `Previously exposed: ${r.beforeRabbit.trials} earlier doses.` : r.beforeRabbit?.age==='baby'?'Fresh baby · fragile baseline.':'Fresh adult baseline.'}</p><ul>${r.observations.map(o=>`<li>${escape(o)}</li>`).join('')}</ul></article>`).join('');
 }
 function showExperiments() {
+  loadRabbitArtwork();
   advanceRabbits(state);
   const subject=selectedRabbit(); selectedSubject=subject.id;
   const available=state.pendingBottle?.volume || brew.liquidVolume;
   const living=state.experiments.rabbits.filter(r=>r.stats.alive).length,price=isSandbox()?0:state.equipment.densimeter?6:8;
   sheet('Rabbit trials',`<div class="rabbit-room-layout"><section class="rabbit-workbench" aria-label="Selected rabbit and potion trial">
     <div id="rabbitSelector" class="subject-selector rabbit-selector" aria-label="Choose a rabbit">${state.experiments.rabbits.map(c=>`<button type="button" data-subject="${c.id}" class="${c.id===selectedSubject?'active':''} ${!c.stats.alive?'rabbit-dead':''}" aria-pressed="${c.id===selectedSubject}" aria-label="${cullMode?'Cull':'Select'} ${escape(c.name)}, ${c.age}, ${c.location}, ${escape(rabbitCondition(c))}"><span class="rabbit-card-glyph"><canvas data-rabbit-portrait="${c.id}" width="80" height="60" aria-hidden="true"></canvas></span><strong>${escape(c.name)}</strong><span>${c.age} · ${c.sex==='female'?'♀':'♂'} · ${c.location}</span><small>${escape(rabbitCondition(c))}</small></button>`).join('')}</div>
+    <section class="rabbit-detail-panel" aria-label="Rabbit condition and trial playback">
     <div class="rabbit-detail-heading"><h3 id="rabbitName">${escape(subject.name)}</h3><span id="rabbitCondition"></span></div>
     <p id="rabbitContext" class="quiet"></p>
-    <div class="trial-stage-labels"><span>Before dose</span><span id="trialViewLabel">Current condition</span></div>
+    <div class="trial-comparison"><div class="trial-stage-labels"><span>Before dose</span><span id="trialViewLabel">Current condition</span></div>
     <canvas id="creatureCanvas" width="640" height="350" aria-label="Pixel art rabbit, comparing the condition before and after this dose"></canvas>
+    </div>
     <div class="trial-playback"><button type="button" data-action="untreated" aria-pressed="false">Before dose</button><button type="button" data-action="replay-trial">Replay dose</button><button type="button" data-action="pause-trial" aria-pressed="false">Pause view</button></div>
     <output id="trialFeedback" class="trial-feedback" role="status" aria-live="polite"></output>
     <div class="rabbit-actions"><button type="button" data-action="move-rabbit">Isolate in cage</button><button type="button" class="danger-button" data-action="cull-rabbit">Cull ${escape(subject.name)}</button></div>
     <section id="rabbitRecovery" class="rabbit-recovery" aria-label="Recover potion ingredients from remains" hidden><p id="remainsLoot"></p><button type="button" class="secondary" data-action="recover-rabbit">Recover ingredients</button></section>
+    </section>
     <details id="rabbitNotebook" class="rabbit-notebook"><summary>Trial observations</summary><div id="rabbitTrialNotes"></div></details>
     <div class="trial-actions"><button type="button" class="primary" data-action="potion-id">Write potion ID</button><button type="button" class="secondary" id="trialReturn" data-action="close">Back to brewing</button></div>
     <button type="button" class="trial-vial-link" data-action="review-vial"${!state.pendingBottle?' hidden':''}>Back to vial</button>
@@ -522,8 +530,8 @@ function updateRabbitRoom() {
   $('remainsLoot').textContent=rabbit.remainsRecovered?'Ingredients recovered. The body is cleared; its trial history stays in the notebook.':`Recover once: ${loot.map(d=>`${d.quantity} ${reagents[d.ingredientId]}${d.ingredientId===18?' ml':' measures'}`).join(' · ')}. Grind bones before brewing.`;
   const recover=$('sheetContent').querySelector('[data-action="recover-rabbit"]');recover.disabled=rabbit.stats.alive||rabbit.remainsRecovered;recover.textContent=rabbit.remainsRecovered?'Already recovered':'Recover ingredients';
   for(const r of state.experiments.rabbits){const card=$('sheetContent').querySelector(`[data-subject="${r.id}"]`);if(card){card.querySelector('small').textContent=rabbitCondition(r);card.querySelector('span:nth-of-type(2)').textContent=`${r.age} · ${r.sex==='female'?'♀':'♂'} · ${r.location}`;card.classList.toggle('rabbit-dead',!r.stats.alive);
-    const portrait=card.querySelector('canvas'),signature=`${r.age}:${r.stats.growth}:${r.stats.health}:${r.stats.alive}:${r.trials}:${Object.values(r.exposure).join(',')}`;
-    if(portrait.dataset.signature!==signature){const ctx=portrait.getContext('2d');ctx.clearRect(0,0,80,60);drawRabbit(ctx,r,40,58,48,0);portrait.dataset.signature=signature;}
+    const portrait=card.querySelector('canvas'),signature=`${rabbitArtworkVersion()}:${r.age}:${r.stats.growth}:${r.stats.health}:${r.stats.alive}:${r.trials}:${Object.values(r.exposure).join(',')}`;
+    if(portrait.dataset.signature!==signature){const ctx=portrait.getContext('2d');ctx.clearRect(0,0,80,60);drawRabbit(ctx,r,40,57,48,0);portrait.dataset.signature=signature;}
   }}
   $('colonyJournal').innerHTML=(state.experiments.events||[]).slice(0,12).map(e=>`<li>${escape(e.message||e.text||e.description||e.type)}</li>`).join('')||'<li>The colony is quiet.</li>';
 }

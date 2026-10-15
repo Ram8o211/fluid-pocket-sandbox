@@ -1,0 +1,1347 @@
+{
+  "name": "Rabbit Trials UI Asset Pack",
+  "based_on": "user-approved Rabbit Trials generated mockup",
+  "repository_target": "Ram8o211/fluid-pocket-sandbox",
+  "asset_count": 71,
+  "assets": [
+    {
+      "path": "01_rabbits/rabbit_moon_card.png",
+      "size_px": [
+        114,
+        95
+      ],
+      "base_size_px": [
+        114,
+        95
+      ],
+      "pixel_scale": 1,
+      "source": "foreground extracted from screenshot",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 17917,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/rabbit_clover_card.png",
+      "size_px": [
+        117,
+        96
+      ],
+      "base_size_px": [
+        117,
+        96
+      ],
+      "pixel_scale": 1,
+      "source": "foreground extracted from screenshot",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 18579,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/rabbit_hazel_card.png",
+      "size_px": [
+        115,
+        96
+      ],
+      "base_size_px": [
+        115,
+        96
+      ],
+      "pixel_scale": 1,
+      "source": "foreground extracted from screenshot",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 17885,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/rabbit_moon_before.png",
+      "size_px": [
+        152,
+        133
+      ],
+      "base_size_px": [
+        152,
+        133
+      ],
+      "pixel_scale": 1,
+      "source": "foreground extracted from screenshot",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 32095,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/rabbit_moon_current.png",
+      "size_px": [
+        241,
+        226
+      ],
+      "base_size_px": [
+        241,
+        226
+      ],
+      "pixel_scale": 1,
+      "source": "foreground extracted from screenshot",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 74498,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/rabbit_pepper_card.png",
+      "size_px": [
+        117,
+        96
+      ],
+      "base_size_px": [
+        117,
+        96
+      ],
+      "pixel_scale": 1,
+      "source": "reconstructed full variant from partially visible screenshot",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 17950,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/portrait_moon.png",
+      "size_px": [
+        170,
+        124
+      ],
+      "base_size_px": [
+        170,
+        124
+      ],
+      "pixel_scale": 1,
+      "source": "composited from sprite",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 13787,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/portrait_clover.png",
+      "size_px": [
+        170,
+        124
+      ],
+      "base_size_px": [
+        170,
+        124
+      ],
+      "pixel_scale": 1,
+      "source": "composited from sprite",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 14448,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/portrait_hazel.png",
+      "size_px": [
+        170,
+        124
+      ],
+      "base_size_px": [
+        170,
+        124
+      ],
+      "pixel_scale": 1,
+      "source": "composited from sprite",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 13745,
+      "has_alpha": true
+    },
+    {
+      "path": "01_rabbits/portrait_pepper.png",
+      "size_px": [
+        170,
+        124
+      ],
+      "base_size_px": [
+        170,
+        124
+      ],
+      "pixel_scale": 1,
+      "source": "composited from sprite",
+      "transparent": true,
+      "anchor": "bottom-center",
+      "bytes": 13805,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/header_main.png",
+      "size_px": [
+        910,
+        138
+      ],
+      "base_size_px": [
+        910,
+        138
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 1133,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/card_default.png",
+      "size_px": [
+        225,
+        307
+      ],
+      "base_size_px": [
+        225,
+        307
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 1066,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/card_selected.png",
+      "size_px": [
+        225,
+        307
+      ],
+      "base_size_px": [
+        225,
+        307
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 1059,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/panel_details.png",
+      "size_px": [
+        903,
+        905
+      ],
+      "base_size_px": [
+        903,
+        905
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        24,
+        24,
+        24,
+        24
+      ],
+      "bytes": 4883,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/panel_comparison.png",
+      "size_px": [
+        858,
+        431
+      ],
+      "base_size_px": [
+        858,
+        431
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        24,
+        24,
+        24,
+        24
+      ],
+      "bytes": 2537,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/panel_instructions.png",
+      "size_px": [
+        865,
+        113
+      ],
+      "base_size_px": [
+        865,
+        113
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 997,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/panel_dose.png",
+      "size_px": [
+        904,
+        208
+      ],
+      "base_size_px": [
+        904,
+        208
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 1491,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/header_section.png",
+      "size_px": [
+        876,
+        50
+      ],
+      "base_size_px": [
+        876,
+        50
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "bytes": 688,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/status_tag.png",
+      "size_px": [
+        209,
+        56
+      ],
+      "base_size_px": [
+        209,
+        56
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "bytes": 514,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/viewport_tab.png",
+      "size_px": [
+        310,
+        57
+      ],
+      "base_size_px": [
+        310,
+        57
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "bytes": 603,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/caption_plaque.png",
+      "size_px": [
+        300,
+        46
+      ],
+      "base_size_px": [
+        300,
+        46
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 516,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/dose_dropdown.png",
+      "size_px": [
+        171,
+        85
+      ],
+      "base_size_px": [
+        171,
+        85
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "bytes": 608,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/carousel_mask.png",
+      "size_px": [
+        916,
+        336
+      ],
+      "base_size_px": [
+        916,
+        336
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 2168,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/empty_frame_overlay.png",
+      "size_px": [
+        860,
+        500
+      ],
+      "base_size_px": [
+        860,
+        500
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bytes": 2864,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/scrollbar_horizontal_gold.png",
+      "size_px": [
+        700,
+        14
+      ],
+      "base_size_px": [
+        700,
+        14
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": false,
+      "bytes": 201,
+      "has_alpha": false
+    },
+    {
+      "path": "02_ui_frames/scrollbar_horizontal_track.png",
+      "size_px": [
+        360,
+        14
+      ],
+      "base_size_px": [
+        360,
+        14
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": false,
+      "bytes": 180,
+      "has_alpha": false
+    },
+    {
+      "path": "02_ui_frames/scrollbar_vertical_thumb.png",
+      "size_px": [
+        15,
+        280
+      ],
+      "base_size_px": [
+        15,
+        280
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": false,
+      "bytes": 193,
+      "has_alpha": false
+    },
+    {
+      "path": "02_ui_frames/scrollbar_vertical_track.png",
+      "size_px": [
+        16,
+        280
+      ],
+      "base_size_px": [
+        16,
+        280
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": false,
+      "bytes": 208,
+      "has_alpha": false
+    },
+    {
+      "path": "02_ui_frames/comparison_divider_dashed_gold.png",
+      "size_px": [
+        6,
+        423
+      ],
+      "base_size_px": [
+        6,
+        423
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 153,
+      "has_alpha": true
+    },
+    {
+      "path": "02_ui_frames/instruction_left_accent.png",
+      "size_px": [
+        13,
+        103
+      ],
+      "base_size_px": [
+        13,
+        103
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": false,
+      "bytes": 118,
+      "has_alpha": false
+    },
+    {
+      "path": "02_ui_frames/gold_corner_ornament.png",
+      "size_px": [
+        28,
+        28
+      ],
+      "base_size_px": [
+        28,
+        28
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 199,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_default.png",
+      "size_px": [
+        330,
+        106
+      ],
+      "base_size_px": [
+        330,
+        106
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 725,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_hover.png",
+      "size_px": [
+        330,
+        106
+      ],
+      "base_size_px": [
+        330,
+        106
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 736,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_pressed.png",
+      "size_px": [
+        330,
+        106
+      ],
+      "base_size_px": [
+        330,
+        106
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 714,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_disabled.png",
+      "size_px": [
+        330,
+        106
+      ],
+      "base_size_px": [
+        330,
+        106
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 709,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_danger.png",
+      "size_px": [
+        410,
+        103
+      ],
+      "base_size_px": [
+        410,
+        103
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 747,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_danger_hover.png",
+      "size_px": [
+        410,
+        103
+      ],
+      "base_size_px": [
+        410,
+        103
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 771,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_primary.png",
+      "size_px": [
+        510,
+        108
+      ],
+      "base_size_px": [
+        510,
+        108
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 795,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_small.png",
+      "size_px": [
+        190,
+        72
+      ],
+      "base_size_px": [
+        190,
+        72
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 590,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_close.png",
+      "size_px": [
+        104,
+        113
+      ],
+      "base_size_px": [
+        104,
+        113
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 603,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_wide.png",
+      "size_px": [
+        430,
+        108
+      ],
+      "base_size_px": [
+        430,
+        108
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 765,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_compact.png",
+      "size_px": [
+        178,
+        75
+      ],
+      "base_size_px": [
+        178,
+        75
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 593,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_tab_active.png",
+      "size_px": [
+        252,
+        55
+      ],
+      "base_size_px": [
+        252,
+        55
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 538,
+      "has_alpha": true
+    },
+    {
+      "path": "03_buttons/button_tab_inactive.png",
+      "size_px": [
+        252,
+        55
+      ],
+      "base_size_px": [
+        252,
+        55
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn from screenshot style",
+      "transparent": true,
+      "nine_slice_px": [
+        21,
+        21,
+        21,
+        21
+      ],
+      "contains_text": false,
+      "bytes": 546,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/potion_blue.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 370,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/potion_amber.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 370,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/potion_poison.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 370,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/potion_pink.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 370,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/close_x.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 366,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/chevron_down.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 289,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/rabbit_skull.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 389,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/rabbit_head.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 388,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/cage.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 292,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/book_open.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 325,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/gold_spark.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 368,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/clover_plant.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 291,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/flower_blue.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 306,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/flower_white.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 303,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/herbs_bunch.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 360,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/gold_coin.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 524,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/female_symbol.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 244,
+      "has_alpha": true
+    },
+    {
+      "path": "04_icons/male_symbol.png",
+      "size_px": [
+        48,
+        48
+      ],
+      "base_size_px": [
+        48,
+        48
+      ],
+      "pixel_scale": 1,
+      "source": "hand-redrawn pixel art",
+      "transparent": true,
+      "anchor": "center",
+      "bytes": 302,
+      "has_alpha": true
+    },
+    {
+      "path": "05_environment/tile_stone_brick_wall.png",
+      "size_px": [
+        144,
+        96
+      ],
+      "base_size_px": [
+        144,
+        96
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": false,
+      "bytes": 445,
+      "has_alpha": false
+    },
+    {
+      "path": "05_environment/tile_inspection_grid_overlay.png",
+      "size_px": [
+        112,
+        112
+      ],
+      "base_size_px": [
+        112,
+        112
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 288,
+      "has_alpha": true
+    },
+    {
+      "path": "05_environment/tile_grass_ground.png",
+      "size_px": [
+        144,
+        50
+      ],
+      "base_size_px": [
+        144,
+        50
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": false,
+      "bytes": 884,
+      "has_alpha": false
+    },
+    {
+      "path": "05_environment/foliage_herb_bundle.png",
+      "size_px": [
+        100,
+        72
+      ],
+      "base_size_px": [
+        100,
+        72
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 617,
+      "has_alpha": true
+    },
+    {
+      "path": "05_environment/shelf_five_bottles.png",
+      "size_px": [
+        240,
+        98
+      ],
+      "base_size_px": [
+        240,
+        98
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 661,
+      "has_alpha": true
+    },
+    {
+      "path": "05_environment/arched_night_window.png",
+      "size_px": [
+        190,
+        225
+      ],
+      "base_size_px": [
+        190,
+        225
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 1448,
+      "has_alpha": true
+    },
+    {
+      "path": "05_environment/hanging_herbs.png",
+      "size_px": [
+        125,
+        147
+      ],
+      "base_size_px": [
+        125,
+        147
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 1544,
+      "has_alpha": true
+    },
+    {
+      "path": "05_environment/trial_room_background_empty.png",
+      "size_px": [
+        858,
+        429
+      ],
+      "base_size_px": [
+        858,
+        429
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn room, contains no rabbits",
+      "transparent": false,
+      "bytes": 16975,
+      "has_alpha": false
+    },
+    {
+      "path": "05_environment/rabbit_ground_shadow.png",
+      "size_px": [
+        215,
+        22
+      ],
+      "base_size_px": [
+        215,
+        22
+      ],
+      "pixel_scale": 1,
+      "source": "redrawn",
+      "transparent": true,
+      "bytes": 216,
+      "has_alpha": true
+    }
+  ]
+}
