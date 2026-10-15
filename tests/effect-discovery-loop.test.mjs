@@ -15,7 +15,7 @@ import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
 function prepare(state) {
   const brew = new BrewingSession(state.world.ingredients, state.equipment), recipe = state.order.witness;
   for (const portion of recipe.portions) brew.pour(portion.ingredientId, portion.ml, state.inventory, { crushed: Boolean(portion.crushed) });
-  for (let tick = 0; tick < recipe.ticks; tick++) { if (tick > 20) brew.assistStir(); brew.step(); }
+  for (let tick = 0; tick < recipe.ticks; tick++) { brew.setThermal(tick < recipe.thermalTicks ? recipe.heat : 0, tick < recipe.thermalTicks ? recipe.cool : 0); if (recipe.stir && tick > 20) brew.assistStir(); brew.step(); }
   return brew;
 }
 
