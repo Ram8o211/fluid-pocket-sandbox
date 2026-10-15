@@ -327,7 +327,9 @@ export class BrewingSession {
       if (ps.mixtureAmount[i] <= 0) throw new Error('Invalid saved mixture amount.');
     }
     if (saved.particles.powderContent === undefined) for (let i=0;i<ps.count;i++) ps.powderContent[i]=ps.phase[i]===Phase.SOLID&&ps.solidSubdivision[i]>=.55?1:0;
-    if (saved.particleMl !== PARTICLE_ML) this.refineLegacyParticles();
+    // Preserve heterogeneous .25 ml parcels from earlier versions as-is.
+    // Only truly coarse pre-parcel saves require splitting.
+    if (saved.particleMl == null || saved.particleMl > PARTICLE_ML) this.refineLegacyParticles();
     ps.px.set(ps.x); ps.py.set(ps.y);
     ps.stirActivity.fill(0); // Reload never supplies new spoon work.
     ps.grainRest.fill(0);
