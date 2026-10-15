@@ -12,6 +12,7 @@ import { saveShop, loadShop, encodeSave, decodeSave, SANDBOX_SAVE_KEY } from './
 import { propertyDescription } from './potion.mjs';
 import { FIXED_STEP, PROPERTIES } from './contracts.mjs';
 import { LaboratoryRenderer } from './LaboratoryRenderer.mjs';
+import { insideCauldron } from './cauldron.mjs';
 import { icon, bottleSprite, ingredientSprite, naturalLandscapeSprite, experimentSubjectSprite, portraitSprite, workshopBackground } from './art.mjs';
 import { hudIcon, hudAsset } from './hud.mjs';
 import { resourceStatus, gatherIngredient, tendGarden, gardenStamina } from './gathering.mjs';
@@ -279,6 +280,8 @@ function updateHUD() {
   $('bottleBtn').title = condensing ? 'Cool the trapped steam back into liquid before bottling.' : '';
   $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle')); $('crushBtn').classList.toggle('active', tool === 'pestle');
   if (tool === 'pestle' && !state.pendingBottle && !condensing) $('labHint').textContent = 'Tap or drag the pestle on raw or frozen matter';
+  else if (!state.pendingBottle && state.stage === 'brewing' && !condensing && !brew.heat && !brew.cool)
+    $('labHint').textContent = 'Tap the cauldron to pour here · drag to stir';
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
   if (sandboxInspectorOpen && sandboxInspectorTab === 'mixture' && performance.now() - lastSandboxInspection > 750) renderSandboxInspector();
 }
@@ -305,9 +308,9 @@ function advanceTutorial() {
   if (state.tutorial === 3 && brew.history.stirred > 1) state.tutorial = 4;
   updateTutorial();
 }
-function pour(crushed = false) {
+function pour(crushed = false, point = null) {
   if (!state || state.pendingBottle || state.stage !== 'brewing' || $('sheet').open) return;
-  const ml = brew.pour(selected, dose, state.inventory, { crushed: crushed === true, infinite: isSandbox() });
+  const ml = brew.pour(selected, dose, state.inventory, { crushed: crushed === true, infinite: isSandbox(), point });
   if (!ml) { stopPour(); notify(brew.occupiedVolume >= brew.capacity - 1 ? 'The cauldron is full. Bottle or clean it.' : 'This ingredient is depleted. Gather more in the Wild garden.'); return; }
   audio.play('pour'); renderRack(); updateHUD(); advanceTutorial(); persist();
 }
@@ -626,25 +629,47 @@ function bindUI() {
   window.addEventListener('pointerup', event => {
     if (!dragged || !brew) return; const drag = dragged; dragged = null;
     const r = $('labCanvas').getBoundingClientRect();
-    if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 20 && event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom) { selected = drag.id; pour(); }
+    if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 20 && event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom) {
+      const point = renderer.screenToWorld(event.clientX, event.clientY);
+      if (insideCauldron(point.x, point.y)) { selected = drag.id; pour(false, point); }
+    }
   });
   window.addEventListener('pointercancel', () => { dragged = null; assist = false; pointer = null; stopPour(); });
   $('labCanvas').onpointerdown = event => {
-    if (!brew || state.pendingBottle || state.stage !== 'brewing') return;
+    if (!brew || !state || state.pendingBottle || state.stage !== 'brewing' || $('sheet').open || pointer) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.preventDefault(); $('labCanvas').setPointerCapture(event.pointerId);
-    pointer = { id: event.pointerId, point: renderer.screenToWorld(event.clientX, event.clientY), time: performance.now() };
-    if (tool === 'pestle') brew.crush(pointer.point);
-    renderer.tool = tool; renderer.spoon = pointer.point;
+    const point = renderer.screenToWorld(event.clientX, event.clientY);
+    pointer = { id: event.pointerId, point, time: performance.now(),
+      startX: event.clientX, startY: event.clientY, moved: false };
+    if (tool === 'pestle') { brew.crush(point); renderer.tool = tool; renderer.spoon = point; }
   };
   $('labCanvas').onpointermove = event => {
     if (!pointer || pointer.id !== event.pointerId) return;
-    const now = performance.now(), point = renderer.screenToWorld(event.clientX, event.clientY), dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
+    const now = performance.now(), point = renderer.screenToWorld(event.clientX, event.clientY);
+    const distance = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
+    // A tap deposits the selected dose; a deliberate drag continues to stir
+    // (or crush with the pestle). Tiny touch jitter must not stir the pool.
+    if (!pointer.moved && distance < 10 && tool !== 'pestle') return;
+    const dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
     if (tool === 'pestle') brew.crush(point);
     else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt, pointer.point);
-    renderer.tool = tool;
-    renderer.spoon = point; pointer = { id: event.pointerId, point, time: now }; advanceTutorial();
+    renderer.tool = tool; renderer.spoon = point;
+    pointer = { ...pointer, point, time: now, moved: true }; advanceTutorial();
   };
-  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('labCanvas').addEventListener(event, () => { pointer = null; if (renderer) renderer.spoon = null; });
+  $('labCanvas').addEventListener('pointerup', event => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    if (tool !== 'pestle' && !pointer.moved &&
+        Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) < 10) {
+      const point = renderer.screenToWorld(event.clientX, event.clientY);
+      if (insideCauldron(point.x, point.y)) pour(false, point);
+    }
+    pointer = null; if (renderer) renderer.spoon = null;
+  });
+  for (const type of ['pointercancel', 'lostpointercapture']) $('labCanvas').addEventListener(type, event => {
+    if (pointer?.id === event.pointerId) pointer = null;
+    if (renderer) renderer.spoon = null;
+  });
   $('labCanvas').onkeydown = event => {
     if (!brew || state.pendingBottle || state.stage !== 'brewing') return;
     if (event.code === 'Space') { event.preventDefault(); assist = true; }
