@@ -179,7 +179,7 @@ export class FluidSurfaceGPU {
     gl.bindTexture(gl.TEXTURE_2D, field.texture);
     gl.drawArrays(gl.TRIANGLES, 0, 3); this.stats.drawCalls++;
   }
-  render(ps, t, particleColor, scratch, auras, effectsScale = 1, resolution = 40) {
+  render(ps, t, particleColor, scratch, auras, effectsScale = 1, resolution = 40, rawSolids = null) {
     if (!this.available || this.disposed) return false;
     const gl = this.gl, scale = Math.min(t.scale, resolution);
     try { this.resize(Math.ceil(4.7 * scale) + 4, Math.ceil(2.4 * scale) + 4); }
@@ -196,6 +196,7 @@ export class FluidSurfaceGPU {
     this.stats.drawCalls = this.stats.uploadedBytes = this.stats.glowingParticles = 0;
     this.stats.particles = ps.count;
     for (let i = 0; i < ps.count; i++) {
+      if (ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55 && rawSolids?.has(ps.materialId[i])) continue;
       const phase = ps.phase[i], group = this.groups[phase === Phase.LIQUID ? 0 : phase === Phase.GAS ? 1 : 2];
       const n = group.count++ * STRIDE, data = group.data;
       particleColor(ps, i, scratch);

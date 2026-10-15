@@ -190,7 +190,7 @@ export class FluidSolver {
       const scale=ps.packingScale??1,rest=this.cachePs===ps?clamp(this.radii[i]+this.radii[j],.07*scale,.44*scale):particlePairRestDistance(ps,i,j,planar);if(d2>=rest*rest)return;const d=Math.sqrt(d2),normalLength=d2>1e-12?d:Math.hypot(dx,dy,dz),amount=(rest-d)*.995;separatePair(ps,i,j,dx/normalLength,dy/normalLength,planar?0:dz/normalLength,amount,planar);
     });
   }
-  step(ps,grid,gravity,env,rules,dt,iterations=2,profile=null,collideBoundary=null,externalLiquids=false,integrateLiquids=null){
+  step(ps,grid,gravity,env,rules,dt,iterations=2,profile=null,collideBoundary=null,externalLiquids=false,integrateLiquids=null,externalSolids=false){
     const maxV=env.maxVelocity,planar=env.dimensionMode==='2D',interactionScale=clamp(rules.interactionRadiusScale??1,.4,1);let searchRadius=clamp(profile?.fluidRadius??this.neighborRadius,.40,this.neighborRadius)*interactionScale*(ps.packingScale??1),hasPowder=false,maxDisplacement=0;
     const pairStride=Math.max(1,profile?.fluidPairStride||1),pairPhase=this.pairPhase++%pairStride;this.reverseSweep=!this.reverseSweep;this.ensureScratch(ps);let hasHard=false,maxRadius=0;
     for(let i=0;i<ps.count;i++){
@@ -200,6 +200,7 @@ export class FluidSolver {
       // The official LiquidFun solver integrates liquid motion, gravity,
       // viscosity and surface tension; legacy contacts still serve dry matter.
       const nativeLiquid=externalLiquids&&ps.phase[i]===Phase.LIQUID;
+      if(externalSolids&&ps.phase[i]===Phase.SOLID)continue;
       if(!nativeLiquid&&ps.phase[i]!==Phase.GAS){if(!isPowder(ps,i)||!ps.grainRest[i]){ps.vx[i]+=gravity.x*dt;ps.vy[i]+=gravity.y*dt;if(!planar)ps.vz[i]+=gravity.z*dt;}}else if(planar)ps.vz[i]=0;
       if(ps.phase[i]===Phase.GAS&&env.gasThermalMotion){
         // Deterministic thermal agitation breaks the perfectly flat lid layer.
@@ -237,6 +238,9 @@ export class FluidSolver {
         // dropping a zero-distance pair lets the liquid tunnel into the pile.
         if(d2<=1e-12){if(!externalLiquids)return;dx=ps.px[j]-ps.px[i];dy=ps.py[j]-ps.py[i];dz=planar?0:ps.pz[j]-ps.pz[i];if(dx*dx+dy*dy+dz*dz<=1e-12)dx=1;}
         const d=Math.sqrt(d2),normalLength=d2>1e-12?d:Math.hypot(dx,dy,dz),nx=dx/normalLength,ny=dy/normalLength,nz=planar?0:dz/normalLength,pi=ps.phase[i],pj=ps.phase[j];
+        // Native bodies already solved these contacts together with pressure.
+        // A second positional solver would push the fluid back into itself.
+        if(externalSolids&&pi!==Phase.GAS&&pj!==Phase.GAS&&(pi===Phase.SOLID||pj===Phase.SOLID))return;
         // Vapour parcels represent overlapping gas volumes, not hard spheres.
         // Only very close contacts separate, with a time-scaled soft response.
         if(pi===Phase.GAS&&pj===Phase.GAS){
@@ -263,7 +267,7 @@ export class FluidSolver {
         if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar,interactionScale);return;}
         if(pi===Phase.LIQUID&&pj===Phase.SOLID)this.solveSolidLiquidPair(ps,j,i,-nx,-ny,-nz,d,gravity,rules,planar,interactionScale);
       },pairStride,(pairPhase+it)%pairStride,forceGranularPair);
-      if(hasHard){grid.rebuild(ps,env.box);const scale=ps.packingScale??1;this.enforceHardPacking(ps,grid,Math.min(searchRadius,clamp(maxRadius*2,.07*scale,.44*scale)),planar,externalLiquids);}
+      if(hasHard&&!externalSolids){grid.rebuild(ps,env.box);const scale=ps.packingScale??1;this.enforceHardPacking(ps,grid,Math.min(searchRadius,clamp(maxRadius*2,.07*scale,.44*scale)),planar,externalLiquids);}
       for(let i=0;i<ps.count;i++)ps.localGasDensity[i]=ps.phase[i]===Phase.GAS?clamp(.18+this.gasCounts[i]*.075,0,1.8):0;
       this.collideBox(ps,env.box,planar);
       collideBoundary?.();

@@ -1,9 +1,10 @@
 import { Phase } from '../simulation/Phase.mjs';
 import { CAULDRON_NATIVE_INTERIOR, PARTICLE_ML } from './cauldron.mjs';
+import { LiquidFunSolids } from './LiquidFunSolids.mjs';
 
 /**
  * Adapter for Google's actual LiquidFun 1.1.0 Emscripten-generated JavaScript.
- * LiquidFun owns only the hydrodynamic position/velocity solve for liquids.
+ * LiquidFun owns hydrodynamics and the solid bodies touching those liquids.
  * The game's ParticleSystem remains authoritative for identity, quantities,
  * thermal state, phases, reactions, magical effects, glow and saved potions.
  * The old 3D sandbox does not need to load this separate 2D cauldron engine.
@@ -19,6 +20,7 @@ export class LiquidFunFluid {
     // The upstream wrapper allocates these two scratch buffers per world but
     // provides no JS destructor. Remember them for explicit session disposal.
     this.scratchPointers = [runtime._transBuf?.byteOffset, runtime._vec2Buf?.byteOffset];
+    this.scratchBuffers = { transform: runtime._transBuf, vector: runtime._vec2Buf };
     // Upstream lfjs fixture bindings resolve this global for their lookup.
     runtime.world = this.world;
     const pot = this.world.CreateBody(new runtime.b2BodyDef());
@@ -46,6 +48,7 @@ export class LiquidFunFluid {
     this.definition.staticPressureStrength = .28;
     this.definition.staticPressureIterations = 6;
     this.system = this.world.CreateParticleSystem(this.definition);
+    this.solids = new LiquidFunSolids(runtime, this.world);
     this.indices = [];
     this.frames = 0;
     this.rebuilds = 0;
@@ -107,18 +110,19 @@ export class LiquidFunFluid {
   step(ps, dt, gravity) {
     if (this.disposed) throw new Error('LiquidFun session has been disposed.');
     this.r.world = this.world;
+    this.r._transBuf = this.scratchBuffers.transform; this.r._vec2Buf = this.scratchBuffers.vector;
     this.particlesPS = ps;
     this.synchronize(ps);
+    this.solids.synchronize(ps);
     this.world.SetGravity(new this.r.b2Vec2(gravity.x, gravity.y));
     const indices = this.indices, count = indices.length;
-    if (!count) { ps.nativeLiquidRadius = 0; this.frames++; return; }
     // A partial vial drains mass from every parcel without removing indices.
     // Native systems have one radius: scale it by mean parcel area so the
     // remaining liquid shrinks physically as well as in the inventory/renderer.
     let volume = 0;
     for (const i of indices) volume += ps.mixtureAmount?.[i] ?? PARTICLE_ML;
-    const radius = this.definition.radius * Math.sqrt(Math.max(.0001, volume / count) / PARTICLE_ML);
-    ps.nativeLiquidRadius = radius;
+    const radius = count ? this.definition.radius * Math.sqrt(Math.max(.0001, volume / count) / PARTICLE_ML) : this.definition.radius;
+    ps.nativeLiquidRadius = count ? radius : 0;
     if (typeof this.system.SetRadius === 'function' && Math.abs(radius - this.system.radius) > .000001)
       this.system.SetRadius(radius);
     let { position, velocity } = this.buffers(count);
@@ -135,10 +139,13 @@ export class LiquidFunFluid {
     // spoon strokes get extra CFL headroom without changing their impulse.
     let maxSpeed = 0;
     for (const i of indices) maxSpeed = Math.max(maxSpeed, Math.hypot(ps.vx[i], ps.vy[i]));
+    for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.SOLID)
+      maxSpeed = Math.max(maxSpeed, Math.hypot(ps.vx[i], ps.vy[i]));
     this.substeps = Math.min(4, Math.max(1, Math.ceil(dt * 80 - 1e-8),
       Math.ceil(maxSpeed * dt / Math.max(.001, radius * 1.5))));
     for (let substep = 0; substep < this.substeps; substep++)
       this.world.Step(dt / this.substeps, 6, 3);
+    this.solids.readback(ps);
     ({ position, velocity } = this.buffers(count));
     for (let k = 0; k < count; k++) {
       const i = indices[k], j = k * 2;
@@ -159,6 +166,8 @@ export class LiquidFunFluid {
     this.frames++;
   }
   reset() {
+    this.r.world = this.world;
+    this.solids.reset();
     if (this.particlesPS) this.particlesPS.nativeLiquidRadius = 0;
     this.indices.length = 0;
     this.world.DestroyParticleSystem(this.system);
@@ -167,6 +176,8 @@ export class LiquidFunFluid {
   }
   dispose() {
     if (this.disposed) return;
+    this.r.world = this.world;
+    this.solids.reset();
     const module = this.r.Module;
     if (typeof module?._b2World_Delete === 'function') {
       module._b2World_Delete(this.world.ptr);

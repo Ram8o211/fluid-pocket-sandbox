@@ -251,3 +251,57 @@ test('witness simulations and replaced sessions release their native worlds', ()
     runtime.Module._b2World_Delete = realDelete; runtime.Module._free = realFree;
   }
 });
+
+test('raw and crushed solids contact native water without pressure explosions or sustained agitation', () => {
+  for (const [id, crushed] of [[2, false], [4, false], [5, false], [2, true], [4, true], [11, false]]) {
+    const b = new BrewingSession(generateWorld('solid-contact-report').ingredients);
+    b.engine.liquidFun = new LiquidFunFluid(runtime);
+    try {
+      b.pour(1, 80, { 1: 100 });
+      for (let tick = 0; tick < 240; tick++) b.step();
+      b.pour(id, 20, { [id]: 100 }, { crushed, point: { x: 0, y: -.6 } });
+      const ps = b.engine.ps, mass = ps.totalMass();
+      let peak = 0, lateRMS = 0;
+      for (let tick = 0; tick < 500; tick++) {
+        b.step();
+        let speed2 = 0, count = 0;
+        for (let i = 0; i < ps.count; i++) {
+          assert.ok(insideCauldron(ps.x[i], ps.y[i], cauldronParticlePadding(ps, i)));
+          if (ps.phase[i] !== Phase.LIQUID) continue;
+          const squared = ps.vx[i] ** 2 + ps.vy[i] ** 2;
+          peak = Math.max(peak, Math.sqrt(squared)); speed2 += squared; count++;
+        }
+        if (tick > 360) lateRMS = Math.max(lateRMS, Math.sqrt(speed2 / count));
+      }
+      assert.ok(peak < 3, `${id}/${crushed}: contact launched liquid at ${peak}`);
+      assert.ok(lateRMS < .08, `${id}/${crushed}: continuing agitation ${lateRMS}`);
+      assert.equal(ps.totalMass(), mass);
+      assert.equal(b.occupiedVolume, 100);
+      assert.equal(nativeCount(b.engine.liquidFun), 160);
+      assert.equal(b.engine.liquidFun.solids.bodies.size, crushed || id === 11 ? 40 : 1);
+    } finally { b.dispose(); }
+  }
+});
+
+test('native solid bodies track crushing, save restore, melting and cleaning without stale colliders', () => {
+  const b = brew(), ps = b.engine.ps, backend = b.engine.liquidFun;
+  try {
+    b.pour(4, 10, { 4: 100 });
+    b.step();
+    assert.equal(backend.solids.bodies.size, 1, 'a dry solid still falls in the native world');
+    const mass = ps.totalMass(), before = ps.y[0];
+    b.step(); assert.ok(ps.y[0] < before, 'dry solids must receive gravity exactly once');
+    b.crush({ x: ps.x[0], y: ps.y[0] }); b.step();
+    assert.ok(backend.solids.bodies.size > 1, 'crushed fragments replace the original collider');
+    const snapshot = b.snapshot(); b.clean();
+    assert.equal(backend.solids.bodies.size, 0);
+    b.restore(snapshot); b.step();
+    assert.equal(ps.totalMass(), mass);
+    assert.ok(backend.solids.bodies.size > 1);
+    for (let i = 0; i < ps.count; i++) { ps.setPhase(i, Phase.LIQUID); ps.meltingTemperature[i] = 0; ps.temperature[i] = .33; }
+    b.step();
+    assert.equal(backend.solids.bodies.size, 0);
+    assert.equal(nativeCount(backend), ps.count);
+    b.clean(); assert.equal(backend.world.bodies.length, 1, 'only the permanent cauldron may remain');
+  } finally { b.dispose(); }
+});
