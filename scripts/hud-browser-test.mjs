@@ -38,7 +38,22 @@ try {
     }
     assert.ok((await page.locator('#labCanvas').boundingBox()).height >= 65, 'live cauldron keeps its touch area');
   }
+  // Check that short phones fold only the ingredient cards and that choosing a
+  // card returns focus to the cauldron without disabling the brewing toolbar.
+  await page.setViewportSize({ width: 320, height: 568 });
+  const rackToggle = page.locator('#ingredientRackToggle');
+  assert.ok(await rackToggle.isVisible(), 'short phones expose the ingredient picker');
+  assert.equal(await page.locator('#ingredientRack').isVisible(), false, 'cards begin folded for a larger cauldron');
+  await rackToggle.click();
+  assert.equal(await rackToggle.getAttribute('aria-expanded'), 'true');
+  assert.ok(await page.locator('#ingredientRack').isVisible(), 'all ingredients remain selectable');
+  await page.locator('[data-ingredient="1"]').click();
+  assert.equal(await rackToggle.getAttribute('aria-expanded'), 'false', 'ingredient selection returns focus to the cauldron');
+  assert.ok(await page.locator('#pourBtn').isVisible(), 'pouring is still accessible');
   await page.setViewportSize({ width: 393, height: 852 });
+  const stage = await page.locator('.laboratory').boundingBox();
+  const request = await page.locator('#orderPanel').boundingBox();
+  assert.ok(stage.height > request.height * 1.5, 'the brewing area dominates a standard phone');
   await page.locator('#skipTutorial').click();
   await page.waitForTimeout(3400);
   for (const viewport of [{ width: 393, height: 852 }, { width: 320, height: 568 }, { width: 1280, height: 950 }]) {
