@@ -179,7 +179,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
     const recipe = {
       portions: [{ ingredientId: solvent.id, ml: volume + 15 }, ...parts.map(portion)],
       volume, ticks: count > 1 ? 480 : 440, thermalTicks: count > 1 ? 375 : 340,
-      heat: .52, cool: 0, reserveTrial: true, stir: true,
+      heat: .7, cool: 0, reserveTrial: true, stir: true,
       crush: parts.some(ingredient => ingredient.crushable)
     };
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -187,7 +187,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
         recipe.ticks += 160;
         recipe.thermalTicks += 130;
         recipe.heat = parts.every(i => i.material.arcaneThreshold < 0) ? 0 : .7;
-        recipe.cool = recipe.heat ? 0 : .8;
+        recipe.cool = recipe.heat ? 0 : .7;
       }
       let sample;
       try { sample = simulateWitness(world, recipe, equipment); } catch { continue; }
