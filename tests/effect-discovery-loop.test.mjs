@@ -111,7 +111,7 @@ test('old untouched commissions migrate, while an in-progress brew and bottle re
   delete state.order.conceptVersion;
   state.order.requirements = [{ property: 'color', target: '#a8dfe8', tolerance: .15, weight: 1, hard: false }];
   const upgraded = decodeSave(encodeSave(state, brew));
-  assert.equal(upgraded.order.conceptVersion, 2);
+  assert.equal(upgraded.order.conceptVersion, 3);
   brew.pour(1, 80, state.inventory);
   assert.deepEqual(decodeSave(encodeSave(state, brew)).order, state.order);
   state.pendingBottle = brew.bottle(60); state.stage = 'inspection';
