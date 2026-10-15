@@ -172,6 +172,7 @@ export function generateOrder(world, completed = 0, equipment = {}) {
     sample = simulateWitness(world, recipe, equipment);
   }
   if (sample.volume < volume - .001) throw new Error('Could not validate an effect commission.');
+  /** @type {import('./contracts.mjs').Requirement[]} */
   const requirements = wanted.map(property => ({
     property, target: Math.max(targetBand[0], Math.min(targetBand[1], sample[property])),
     tolerance: .02, weight: 3, hard: false,
