@@ -90,10 +90,15 @@ try {
   await page.locator('#cleanBtn').click();
   await page.locator('[data-action="confirm-clean"]').click();
   assert.ok(await page.locator('#bottleBtn').isDisabled(), 'cleaning resets the bottle state');
+  // Cleaning rerenders the HUD. Even cached image elements need a decoding turn;
+  // wait for the actual load condition rather than racing the browser in CI.
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('#shop .hud-icon'))
+    .every(img => img.complete && img.naturalWidth > 0));
   const textures = await page.locator('#shop .hud-icon').evaluateAll(icons => icons.map(img => ({
-    loaded: img.complete && img.naturalWidth > 0, rendering: getComputedStyle(img).imageRendering
+    src: img.getAttribute('src'), loaded: img.complete && img.naturalWidth > 0, rendering: getComputedStyle(img).imageRendering
   })));
-  assert.ok(textures.every(texture => texture.loaded && texture.rendering === 'pixelated'), 'all supplied icons load with crisp rendering');
+  assert.ok(textures.every(texture => texture.loaded && texture.rendering === 'pixelated'),
+    `all supplied icons load with crisp rendering: ${JSON.stringify(textures)}`);
   assert.deepEqual(errors, []);
   assert.deepEqual(missing, []);
   console.log('HUD OK: five viewport sizes, live quantities/selection/disabled states, brewing tools, all seven rooms, no missing textures or browser errors.');
