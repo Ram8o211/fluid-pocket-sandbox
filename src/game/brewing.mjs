@@ -98,6 +98,10 @@ export class BrewingSession {
   pour(ingredientId, requestedMl, inventory, { crushed = false, infinite = false } = {}) {
     const ingredient = this.ingredients.find(i => i.id === ingredientId);
     if (!ingredient || !Number.isFinite(requestedMl) || requestedMl <= 0) return 0;
+    // A recovered reagent can join this pinned world while a brew is already
+    // open. Register it on first use without recreating or losing the potion.
+    if (!this.engine.materials.has(ingredientId)) this.engine.registerMaterial({ ...ingredient.material,
+      particleRadius: clamp(ingredient.material.particleRadius, .10, .11) });
     const ps = this.engine.ps;
     const quantity = Math.max(0, Math.floor(Math.min(requestedMl, infinite ? Infinity : inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, (ps.capacity - ps.count) * PARTICLE_ML) + .00001));
     if (!quantity) return 0;

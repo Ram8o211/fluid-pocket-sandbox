@@ -1,6 +1,6 @@
 import { TestingRenderer } from './TestingRenderer.mjs';
 import { RabbitColonyRenderer, drawRabbit } from './RabbitRenderer.mjs';
-import { rabbitById, advanceRabbits, buyRabbit, moveRabbit, cullRabbit } from './rabbits.mjs';
+import { rabbitById, advanceRabbits, buyRabbit, moveRabbit, cullRabbit, rabbitRemains, recoverRabbitIngredients } from './rabbits.mjs';
 import { findPotionId, compilePotionId } from './potionId.mjs';
 import { startNegotiation, counterOffer, acceptCustomerOffer, certificationCost, certifyPotion, certificateFor, advanceComplaints, resolveComplaint } from './commerce.mjs';
 import { generateWorld, availableIngredients, seedNumber } from './world.mjs';
@@ -381,7 +381,7 @@ async function moveToNext() {
   catch (err) { if (button) button.disabled = false; notify(err.message); }
 }
 function showInventory() {
-  const rows = availableIngredients(state.world,state.equipment).map(i=>`<article class="mini-card stock-card"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(i.name)}</h3><p>${isSandbox()?'∞':Math.floor(state.inventory[i.id]||0)} ${ingredientUnit(i)}</p><p>${escape(i.lore)}</p>${effectRows(i.material,true)}<p class="quiet">Activation temperature: ${sandboxActivationLabel(i.material.arcaneThreshold)}. Mixing ingredients changes this temperature.</p><button class="primary" data-garden-node="${state.foraging.nodes.find(n=>n.ingredientId===i.id)?.id}">Visit garden bed</button>${!isSandbox()?`<button data-restock="${i.id}">Village parcel · 20 · ${i.solvent?0:Math.ceil(i.price*100+8)} coins</button>`:''}</article>`).join('');
+  const rows = availableIngredients(state.world,state.equipment).map(i=>`<article class="mini-card stock-card"><img src="${ingredientSprite(i)}" alt=""><h3>${escape(i.name)}</h3><p>${isSandbox()?'∞':Math.floor(state.inventory[i.id]||0)} ${ingredientUnit(i)}</p><p>${escape(i.lore)}</p>${effectRows(i.material,true)}<p class="quiet">Activation temperature: ${sandboxActivationLabel(i.material.arcaneThreshold)}. Mixing ingredients changes this temperature.</p>${i.recoverOnly?'<button class="primary" data-action="experiments">Visit rabbit trials</button>':`<button class="primary" data-garden-node="${state.foraging.nodes.find(n=>n.ingredientId===i.id)?.id}">Visit garden bed</button>`}${!isSandbox()&&!i.recoverOnly?`<button data-restock="${i.id}">Village parcel · 20 · ${i.solvent?0:Math.ceil(i.price*100+8)} coins</button>`:''}</article>`).join('');
   sheet('Known ingredients',`<div class="mini-pages">${rows}</div><p class="swipe-cue">Swipe ingredients →</p>${!isSandbox()?'<button data-action="loan">Emergency guild loan</button>':''}`);
 }
 function resourceText(status) {
@@ -417,6 +417,7 @@ function finishHarvest() {
   renderRack();persist();audio.play();showNature(nodeId);notify(`Harvested ${result.quantity}${result.wasted?` · ${result.wasted} lost`:''}.`);
 }
 function rabbitCondition(rabbit) {
+  if (rabbit.remainsRecovered) return 'Remains recovered';
   if (!rabbit.stats.alive) return rabbit.deathAppearance === 'dissolved' ? 'Dissolved' : rabbit.deathAppearance === 'charred' ? 'Carbonized' : `Dead · ${rabbit.causeOfDeath || 'exposure'}`;
   if (rabbit.dangerous) return 'Dangerous · isolate or cull';
   if (rabbit.stats.health < 35) return 'Critical condition';
@@ -450,6 +451,7 @@ function showExperiments() {
     <div class="trial-playback"><button type="button" data-action="untreated" aria-pressed="false">Before dose</button><button type="button" data-action="replay-trial">Replay dose</button><button type="button" data-action="pause-trial" aria-pressed="false">Pause view</button></div>
     <output id="trialFeedback" class="trial-feedback" role="status" aria-live="polite"></output>
     <div class="rabbit-actions"><button type="button" data-action="move-rabbit">Isolate in cage</button><button type="button" class="danger-button" data-action="cull-rabbit">Cull ${escape(subject.name)}</button></div>
+    <section id="rabbitRecovery" class="rabbit-recovery" aria-label="Recover potion ingredients from remains" hidden><p id="remainsLoot"></p><button type="button" class="secondary" data-action="recover-rabbit">Recover ingredients</button></section>
     <details id="rabbitNotebook" class="rabbit-notebook"><summary>Trial observations</summary><div id="rabbitTrialNotes"></div></details>
     <div class="trial-actions"><button type="button" class="primary" data-action="potion-id">Write potion ID</button><button type="button" class="secondary" id="trialReturn" data-action="close">Back to brewing</button></div>
     <button type="button" class="trial-vial-link" data-action="review-vial"${!state.pendingBottle?' hidden':''}>Back to vial</button>
@@ -459,7 +461,7 @@ function showExperiments() {
     <canvas id="rabbitPenCanvas" width="640" height="350" aria-label="Shared rabbit pen and isolation cage. The rabbit buttons also select or cull a rabbit."></canvas></details>
     <div id="colonyAlerts" class="colony-alerts" role="status"></div>
     <div class="colony-toolbar"><button type="button" data-action="buy-rabbit"${living>=state.experiments.capacity||!isSandbox()&&state.coins<price?' disabled':''}>Buy adult · ${price} coins</button><button type="button" data-action="cull-tool" class="${cullMode?'cull-active':''}" aria-pressed="${cullMode}">Cull tool ${cullMode?'ON':'OFF'}</button></div>
-    <p class="colony-help">Cull tool: tap a rabbit to remove it immediately.</p>
+    <p class="colony-help">Rabbits hop, sniff and graze inside the fence. Select a fallen rabbit to recover a small harvest for your potions.</p>
     <details><summary>Colony journal</summary><ol id="colonyJournal" class="colony-journal"></ol></details>
     </section></div>`,
     `<div id="experimentReport" class="trial-controls"><label for="trialDose">Dose <select id="trialDose">${[2,5,10,20].map(v=>`<option value="${v}"${testDose===v?' selected':''}>${v} ml</option>`).join('')}</select></label><button type="button" class="primary" data-test="${subject.id}">Give dose · ${escape(subject.name)}</button></div><div class="trial-dose-status"><span id="trialQuantity">${available.toFixed(1)} ml available</span><span id="trialRest" role="status"></span></div>`);
@@ -512,6 +514,10 @@ function updateRabbitRoom() {
   $('colonyAlerts').classList.toggle('danger-alert',danger.length>0);
   const buy=$('sheetContent').querySelector('[data-action="buy-rabbit"]'),price=isSandbox()?0:state.equipment.densimeter?6:8;buy.disabled=alive.length>=state.experiments.capacity||!isSandbox()&&state.coins<price;
   for(const action of ['move-rabbit','cull-rabbit'])$('sheetContent').querySelector(`[data-action="${action}"]`).disabled=!rabbit.stats.alive;
+  $('rabbitRecovery').hidden=rabbit.stats.alive;
+  const loot=rabbitRemains(rabbit),reagents= {15:'Rabbit Bone',16:'Moon Fur',17:'Cinder Ash',18:'Strange Ichor'};
+  $('remainsLoot').textContent=rabbit.remainsRecovered?'Ingredients recovered. The body is cleared; its trial history stays in the notebook.':`Recover once: ${loot.map(d=>`${d.quantity} ${reagents[d.ingredientId]}${d.ingredientId===18?' ml':' measures'}`).join(' · ')}. Grind bones before brewing.`;
+  const recover=$('sheetContent').querySelector('[data-action="recover-rabbit"]');recover.disabled=rabbit.stats.alive||rabbit.remainsRecovered;recover.textContent=rabbit.remainsRecovered?'Already recovered':'Recover ingredients';
   for(const r of state.experiments.rabbits){const card=$('sheetContent').querySelector(`[data-subject="${r.id}"]`);if(card){card.querySelector('small').textContent=rabbitCondition(r);card.querySelector('span:nth-of-type(2)').textContent=`${r.age} · ${r.sex==='female'?'♀':'♂'} · ${r.location}`;card.classList.toggle('rabbit-dead',!r.stats.alive);
     const portrait=card.querySelector('canvas'),signature=`${r.age}:${r.stats.growth}:${r.stats.health}:${r.stats.alive}:${r.trials}:${Object.values(r.exposure).join(',')}`;
     if(portrait.dataset.signature!==signature){const ctx=portrait.getContext('2d');ctx.clearRect(0,0,80,60);drawRabbit(ctx,r,40,58,48,0);portrait.dataset.signature=signature;}
@@ -669,6 +675,7 @@ function bindUI() {
       case 'buy-rabbit': {const rabbit=buyRabbit(state);selectedSubject=rabbit.id;showUntreated=false;renderAll();persist();showExperiments();notify(`${rabbit.name} has joined the pen.`);break;}
       case 'move-rabbit': {const rabbit=selectedRabbit();moveRabbit(state,rabbit.id,rabbit.location==='cage'?'pen':'cage');persist();refreshRabbitTrial();break;}
       case 'cull-rabbit': cullRabbit(state,selectedRabbit().id);showUntreated=false;persist();refreshRabbitTrial();break;
+      case 'recover-rabbit': {const recovered=recoverRabbitIngredients(state,selectedRabbit().id);renderAll();persist();refreshRabbitTrial();notify(`Recovered ${recovered.map(d=>`${d.quantity} ${d.ingredient.name}`).join(', ')}. Ready in your ingredient rack.`);break;}
       case 'cull-tool': cullMode=!cullMode;button.textContent=`Cull tool ${cullMode?'ON':'OFF'}`;button.classList.toggle('cull-active',cullMode);button.setAttribute('aria-pressed',String(cullMode));refreshRabbitTrial();break;
       case 'untreated': showUntreated=!showUntreated;button.textContent=showUntreated?'After dose':'Before dose';button.setAttribute('aria-pressed',String(showUntreated));$('trialViewLabel').textContent=showUntreated?'Before dose':'After dose';break;
       case 'replay-trial': testingRenderer?.replay();showUntreated=false;$('trialViewLabel').textContent='After dose';$('sheetContent').querySelector('[data-action="untreated"]').textContent='Before dose';$('sheetContent').querySelector('[data-action="untreated"]').setAttribute('aria-pressed','false');$('sheetContent').querySelector('[data-action="pause-trial"]').textContent='Pause';$('sheetContent').querySelector('[data-action="pause-trial"]').setAttribute('aria-pressed','false');break;

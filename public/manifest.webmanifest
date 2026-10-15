@@ -6,7 +6,7 @@
   "scope": "../",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#29212f",
-  "theme_color": "#29212f",
+  "background_color": "#202d43",
+  "theme_color": "#202d43",
   "icons": [{"src":"./icons/alchemist.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
 }

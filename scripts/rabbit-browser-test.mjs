@@ -133,6 +133,15 @@ try {
   const culled = await readState();
   assert.equal(rabbit(culled, firstId).stats.alive, false, 'culling in the pen is immediate');
   assert.equal(await page.locator(`[data-test="${firstId}"]`).isDisabled(), true, 'dead rabbits cannot be dosed');
+  const remains = await page.locator('#remainsLoot').textContent();
+  assert.match(remains,/Recover once:/);
+  const beforeRecovery = await readState();
+  await page.locator('[data-action="recover-rabbit"]').click();
+  const recovered = await readState();
+  assert.equal(rabbit(recovered,firstId).remainsRecovered,true,'one harvest clears the remains');
+  assert.equal(await page.locator('[data-action="recover-rabbit"]').isDisabled(),true,'a body cannot yield duplicate stock');
+  assert.equal(recovered.experiments.records.length,beforeRecovery.experiments.records.length,'harvesting preserves trial history');
+  assert.ok(recovered.world.ingredients.some(i=>i.recoverOnly&&(recovered.inventory[i.id]||0)>0),'real potion ingredients enter the rack');
   const purchased = await buy();
   assert.equal(rabbit(await readState(), firstId).stats.alive, false, 'a purchase never revives the old rabbit');
   assert.notEqual(purchased.id, firstId);
@@ -192,6 +201,7 @@ try {
   await page.locator('[data-action="cull-tool"]').click(); await selectRabbit(male.id);
   assert.equal(rabbit(await readState(), male.id).stats.alive, false, 'the cull tool also removes the isolated danger immediately');
   await page.locator('[data-action="cull-tool"]').click();
+  await page.locator('[data-action="recover-rabbit"]').click();
   while (alive(await readState()).length < 12) await buy();
   assert.equal(await page.locator('[data-action="buy-rabbit"]').isDisabled(), true, 'the living colony has a hard capacity');
   for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }, { width: 1280, height: 950 }]) {
@@ -301,6 +311,14 @@ try {
     const session = await phone.newCDPSession(mobile);
     const capture = await session.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     await writeFile(`test-results/rabbit-touch-${viewport.width}x${viewport.height}.png`, Buffer.from(capture.data, 'base64'));
+    await mobile.locator('[data-action="cull-rabbit"]').tap();
+    await mobile.locator('[data-action="recover-rabbit"]').scrollIntoViewIfNeeded();
+    const recoveryBounds=await mobile.locator('[data-action="recover-rabbit"]').boundingBox();
+    assert.ok(recoveryBounds.width>=44&&recoveryBounds.height>=44,'recovery is a real thumb target');
+    await mobile.locator('[data-action="recover-rabbit"]').tap();
+    const salvaged=await mobile.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')));
+    assert.equal(rabbit(salvaged,mobileId).remainsRecovered,true,'touch recovery persists');
+    assert.equal(await mobile.locator('[data-action="recover-rabbit"]').isDisabled(),true,'touch cannot recover a body twice');
     await session.detach(); await phone.close(); page = null;
   }
   assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
