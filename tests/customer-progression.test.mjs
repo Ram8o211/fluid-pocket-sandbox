@@ -14,7 +14,9 @@ test('early commissions require 8–15% magic and tightly cap every unwanted eff
       assert.ok(wanted.length, 'each commission must demand an effect');
       assert.ok(wanted.every(r => r.target >= .08 && r.target <= .15), 'early desired range is 8–15%');
       assert.ok(unwanted.every(r => r.target + r.tolerance <= .015 && r.hard), 'unwanted limit at most 1.5%');
-      const outcome = assessPotion(simulateWitness(world, order.witness, {cauldron:1, reagents:3}), order);
+      const sample = simulateWitness(world, order.witness, {cauldron:1, reagents:3});
+      const outcome = assessPotion(sample, order);
+      console.log('EARLY WITNESS', seed, completed, JSON.stringify(wanted.map(r=>[r.property,r.target,sample[r.property]])), 'limits', JSON.stringify(unwanted.filter(r=>sample[r.property]>r.target+r.tolerance).map(r=>[r.property,sample[r.property]])), 'quality',outcome.quality);
       assert.deepEqual(outcome.hardFailures, [], 'the validated witness must not violate minimum effects or side-effect ceilings');
       assert.ok(outcome.quality >= 80, 'early witnesses must work in the real cauldron');
     }
@@ -28,7 +30,9 @@ test('later commissions increase wanted effect thresholds without easing unwante
     const order = generateOrder(world, completed, equipment);
     assert.ok(order.requirements.some(r => r.comparison === 'target' && r.target > .15));
     assert.ok(order.requirements.filter(r => r.comparison === 'maximum').every(r => r.target + r.tolerance <= .015));
-    const result = assessPotion(simulateWitness(world, order.witness, equipment), order);
+    const sample = simulateWitness(world, order.witness, equipment);
+    const result = assessPotion(sample, order);
+    console.log('LATE WITNESS',completed,JSON.stringify(order.requirements.filter(r=>r.comparison==='target').map(r=>[r.property,r.target,sample[r.property]])), 'hard',result.hardFailures);
     assert.equal(result.hardFailures.length, 0, 'the high-level target remains achievable');
     assert.ok(result.quality >= 80, 'powerful commissions have a simulated witness');
   }
