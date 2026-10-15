@@ -1,0 +1,186 @@
+/* Individual, cleaned Alchemist Shop textures. Nine-slice borders keep corners
+   intact; the live canvas and every gameplay hit target retain their contracts. */
+.shop-shell {
+  --hud-frame: url('./hud/frame-wide.png');
+  background: #081b2b;
+  border: 0;
+  box-shadow: none;
+  gap: 5px;
+  padding: calc(5px + env(safe-area-inset-top)) 6px calc(5px + env(safe-area-inset-bottom));
+  color: #fff3d8;
+  scrollbar-color: #bc945c #102a3b;
+}
+.shop-shell .hud-icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+  vertical-align: middle;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.shop-header, .order-panel, .lab-caption, .ingredient-title,
+.ingredient-card, .brew-tools .tool-button, .dose-selector button,
+.brew-actions button, .shop-navigation button, .shop-totals > span,
+.shop-header #settingsBtn, .laboratory, .ingredient-panel .grind-button {
+  border: 8px solid transparent;
+  border-image: var(--hud-frame) 12 fill / 8px / 0 stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  image-rendering: pixelated;
+}
+.shop-shell button { transition: transform .08s; }
+.shop-shell button:disabled { opacity: .68; filter: none; }
+.shop-shell button:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.shop-shell button:focus-visible { outline: 2px solid #ffe39c; outline-offset: -4px; }
+.shop-header { flex: 0 0 64px; min-height: 64px; gap: 5px; padding: 0 2px; }
+.shop-header .brand-button { min-width: 0; flex: 1; padding: 0 6px; min-height: 44px; }
+.brand-small { font-size: 8px; letter-spacing: 1px; color: #ffd17d; white-space: nowrap; }
+.shop-header .brand-button strong { font-size: 28px; line-height: 1.15; text-transform: uppercase; }
+.shop-totals { flex: 0 0 101px; gap: 2px; align-items: stretch; margin-left: 0; }
+.shop-totals > span {
+  --hud-frame: url('./hud/frame-counter.png');
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 23px; padding: 0; border-width: 5px;
+  border-image-width: 5px; font-size: 13px; line-height: 1;
+}
+.shop-totals .hud-icon { width: 16px; height: 16px; margin-right: 3px; }
+.shop-totals .reputation { font-size: 8px; color: #fff0ca; white-space: nowrap; }
+.shop-header #settingsBtn { --hud-frame: url('./hud/frame-card.png'); width: 44px; height: 44px; min-height: 44px; padding: 0; flex-shrink: 0; }
+.shop-header #settingsBtn .hud-icon { width: 26px; height: 26px; }
+.order-panel { --hud-frame: url('./hud/frame-parchment.png'); padding: 3px 6px; color: #5a3735; }
+.order-panel .customer-line { gap: 8px; }
+.order-panel .customer-line > img {
+  width: 48px; height: 48px; padding: 3px; border: 4px solid transparent;
+  border-image: url('./hud/frame-selected.png') 12 fill / 4px;
+  background: #231e33; box-shadow: none; object-fit: contain;
+}
+.order-panel .customer-heading .eyebrow { font-size: 8px; letter-spacing: .6px; color: #8a5538; }
+.order-panel .customer-heading h2 { color: #40253a; font-size: 17px; margin: 3px 0 0; text-transform: uppercase; }
+.order-panel .order-price small { font-size: 8px; color: #593638; }
+.order-panel .order-price strong { font-size: 20px; color: #48253a; }
+.order-panel .order-price .hud-icon { width: 18px; height: 18px; }
+.order-panel .customer-dialogue { font-size: 11px; line-height: 1.4; color: #6d4539; margin: 5px 0 2px; -webkit-line-clamp: 1; }
+.order-panel > .requirements { margin-top: 4px; }
+.order-panel .requirement { background: #ffe8b4; border-color: #dfb477; }
+.laboratory { --hud-frame: url('./hud/frame-scene.png'); padding: 0; min-height: 190px; border-width: 5px; border-image-width: 5px; }
+.lab-caption { --hud-frame: url('./hud/frame-wide.png'); min-height: 28px; padding: 1px 4px; border-width: 6px; border-image-width: 6px; font-size: 9px; color: #ffd28a; align-items: center; gap: 4px; }
+.lab-caption #volume { font-size: 11px; color: #fff8dc; white-space: nowrap; }
+.laboratory canvas { image-rendering: pixelated; }
+.lab-hint { background: #10293b; color: #b9d3d6; padding: 3px; font-size: 8px; }
+.brew-tools { background: #081b2b; border: 0; padding: 4px 0 0; gap: 4px; overflow: visible; }
+.brew-tools .tool-button {
+  --hud-frame: url('./hud/frame-tool.png');
+  flex: 1 1 0; min-width: 0; min-height: 65px; padding: 1px 0;
+  gap: 3px; font-size: 11px; color: #fff1d7; border-width: 6px; border-image-width: 6px;
+}
+.brew-tools .hud-icon { width: 25px; height: 25px; }
+.brew-tools .tool-button small { font-size: 8px; line-height: 1.25; color: #d5af75; }
+.brew-tools .tool-button.active, .brew-tools .tool-button.cold,
+.brew-tools .tool-button[aria-pressed=true] { --hud-frame: url('./hud/frame-selected.png'); color: #fff2bc; }
+.ingredient-panel { background: #081b2b; border: 0; box-shadow: none; min-width: 0; }
+.ingredient-title { min-height: 44px; padding: 0 3px; gap: 5px; border-width: 6px; border-image-width: 6px; }
+.ingredient-title > div:first-child { min-width: 0; }
+.ingredient-title strong { color: #fff2db; font-size: 12px; line-height: 1.3; margin: 0; overflow: hidden; text-overflow: ellipsis; max-height: 32px; }
+.dose-selector { gap: 3px; flex-shrink: 0; }
+.dose-selector button { --hud-frame: url('./hud/frame-tool.png'); min-width: 36px; min-height: 44px; padding: 0; font-size: 13px; color: #fff0d7; border-width: 5px; border-image-width: 5px; }
+.dose-selector button.active { --hud-frame: url('./hud/frame-dose-selected.png'); color: #fff6cc; }
+.dose-selector span { color: #f2e5c8; font-size: 10px; }
+.ingredient-rack { gap: 4px; padding: 4px 0; scrollbar-width: thin; scrollbar-color: #b28b53 #102738; }
+.ingredient-card {
+  --hud-frame: url('./hud/frame-card.png');
+  flex: 0 0 calc((100% - 12px) / 4); width: auto; height: 88px;
+  min-height: 88px; max-height: 88px; justify-content: center;
+  padding: 1px; border-width: 7px; border-image-width: 7px; color: #fff4db;
+}
+.ingredient-card.selected, .ingredient-card[aria-pressed=true] { --hud-frame: url('./hud/frame-selected.png'); }
+.ingredient-card img { width: 24px; height: 30px; object-fit: contain; filter: none; }
+.ingredient-card span { font-size: 9px; line-height: 1.15; margin-top: 3px; min-height: 20px; max-height: 22px; overflow: hidden; overflow-wrap: anywhere; }
+.ingredient-card small { font-size: 9px; margin-top: 1px; color: #f1e7cd; }
+.ingredient-panel:has(.grind-button:not([hidden])) .ingredient-title { padding-right: 122px; }
+.ingredient-panel .grind-button { --hud-frame: url('./hud/frame-primary.png'); top: 0; right: 0; width: 120px; color: #412b30; border-width: 6px; border-image-width: 6px; font-size: 10px; padding: 2px; }
+.brew-actions { grid-template-columns: 1fr 1fr; gap: 5px; margin: 0; }
+.brew-actions button { --hud-frame: url('./hud/frame-primary.png'); min-height: 48px; padding: 2px 0; border-width: 8px; font-size: 12px; font-weight: 700; gap: 6px; color: #382334; }
+.brew-actions .hud-icon { width: 20px; height: 25px; }
+.brew-actions button:disabled { --hud-frame: url('./hud/frame-disabled.png'); opacity: 1; color: #284958; }
+.brew-actions button:disabled .hud-icon { opacity: .5; }
+.shop-navigation { border: 0; padding: 0 0 3px; gap: 4px; scrollbar-width: thin; scrollbar-color: #b28b53 #102738; }
+.shop-navigation button { --hud-frame: url('./hud/frame-card.png'); flex: 0 0 calc((100% - 16px) / 5); min-width: 0; min-height: 65px; height: 65px; padding: 1px 0; gap: 4px; font-size: 10px; color: #fff1d8; border-width: 6px; border-image-width: 6px; }
+.shop-navigation button .hud-icon { width: 27px; height: 29px; }
+.shop-navigation button span { line-height: 1.05; }
+.shop-navigation button:hover:not(:disabled), .ingredient-card:hover:not(:disabled) { --hud-frame: url('./hud/frame-selected.png'); }
+.shop-shell .toast { border: 4px solid transparent; border-image: url('./hud/frame-parchment.png') 12 fill / 4px; color: #5a3735; background: none; }
+@media (max-height: 760px) {
+  .shop-shell { gap: 3px; }
+  .shop-header { flex-basis: 54px; min-height: 54px; }
+  .shop-header .brand-button strong { font-size: 23px; }
+  .shop-totals > span { border-width: 4px; border-image-width: 4px; min-height: 20px; }
+  .shop-totals .hud-icon { width: 13px; height: 13px; }
+  .order-panel { padding-top: 1px; padding-bottom: 1px; }
+  .order-panel .customer-line > img { width: 36px; height: 36px; }
+  .order-panel .customer-heading h2 { font-size: 14px; margin-top: 1px; }
+  .order-panel > .requirements { display: none; }
+  .order-panel .customer-dialogue { font-size: 10px; margin-top: 3px; }
+  .laboratory { min-height: 158px; }
+  .lab-caption { min-height: 24px; font-size: 8px; }
+  .brew-tools .tool-button { min-height: 51px; font-size: 10px; gap: 1px; }
+  .brew-tools .hud-icon { width: 20px; height: 20px; }
+  .brew-tools .tool-button small { font-size: 7px; }
+  .ingredient-card { min-height: 69px; height: 69px; max-height: 69px; border-width: 5px; border-image-width: 5px; }
+  .ingredient-card img { width: 19px; height: 23px; }
+  .ingredient-card span { font-size: 8px; min-height: 18px; max-height: 19px; margin-top: 1px; }
+  .ingredient-card small { font-size: 8px; }
+  .brew-actions button { min-height: 44px; font-size: 11px; }
+  .shop-navigation button { height: 54px; min-height: 54px; font-size: 9px; gap: 1px; }
+  .shop-navigation button .hud-icon { width: 23px; height: 24px; }
+}
+@media (max-width: 360px) {
+  .shop-shell { padding-left: 4px; padding-right: 4px; }
+  .brand-small { font-size: 6px; letter-spacing: .7px; }
+  .shop-header .brand-button { padding-left: 1px; }
+  .shop-totals { flex-basis: 91px; }
+  .ingredient-title strong { font-size: 10px; }
+  .dose-selector { gap: 2px; }
+  .dose-selector button { min-width: 30px; }
+  .order-panel .customer-heading .eyebrow { font-size: 7px; letter-spacing: 0; }
+  .lab-caption { font-size: 7px; }
+  .lab-caption #volume { font-size: 9px; }
+  .shop-navigation button { font-size: 8px; }
+}
+@media (max-height: 600px) {
+  /* Compress decoration, retaining the existing contained phone workbench. */
+  .shop-shell { gap: 2px; padding-top: calc(3px + env(safe-area-inset-top)); padding-bottom: calc(3px + env(safe-area-inset-bottom)); }
+  .shop-header { flex-basis: 48px; min-height: 48px; border-width: 6px; border-image-width: 6px; }
+  .shop-header .brand-button strong { font-size: 21px; }
+  .shop-totals > span { min-height: 17px; border-width: 3px; border-image-width: 3px; }
+  .shop-totals .hud-icon { width: 11px; height: 11px; }
+  .order-panel { padding-top: 0; padding-bottom: 0; border-width: 6px; border-image-width: 6px; }
+  .order-panel .customer-line > img { width: 28px; height: 28px; padding: 1px; }
+  .order-panel .customer-heading h2 { font-size: 13px; }
+  .order-panel .customer-dialogue { font-size: 9px; margin: 2px 0 0; }
+  .laboratory { min-height: 148px; }
+  .lab-caption { min-height: 22px; border-width: 4px; border-image-width: 4px; }
+  .brew-tools .tool-button { min-height: 46px; border-width: 4px; border-image-width: 4px; font-size: 10px; line-height: 1; padding: 1px 0; }
+  .brew-tools .hud-icon { width: 18px; height: 18px; }
+  .brew-tools .tool-button small { line-height: 1; }
+  .ingredient-title { border-width: 0; border-image-width: 6px; padding: 2px 6px; }
+  .ingredient-card { height: 64px; min-height: 64px; max-height: 64px; }
+  .shop-navigation button { height: 50px; min-height: 50px; border-width: 5px; border-image-width: 5px; }
+  .shop-shell .toast { max-height: 20px; padding: 2px 4px; }
+}
+@media (min-width: 800px) and (min-height: 761px) {
+  .shop-header { flex-basis: 72px; }
+  .brand-small { font-size: 10px; }
+  .shop-header .brand-button strong { font-size: 32px; }
+  .shop-totals { flex-basis: 135px; }
+  .shop-totals .reputation { font-size: 10px; }
+  .ingredient-card { height: 95px; min-height: 95px; max-height: 95px; }
+  .ingredient-card span { font-size: 11px; }
+}
+@media (max-height: 500px) {
+  .shop-shell { overflow-y: auto; overscroll-behavior-y: contain; }
+  .laboratory { flex: 0 0 250px; }
+}
+@media (prefers-reduced-motion: reduce) { .shop-shell button { transition: none; } }

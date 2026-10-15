@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 const root = process.cwd(), port = Number(process.env.PORT || 4173), mount = (process.env.BASE_PATH || '').replace(/\/$/, '');
-const types = { '.html': 'text/html', '.css': 'text/css', '.mjs': 'text/javascript', '.js': 'text/javascript', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml' };
+const types = { '.html': 'text/html', '.css': 'text/css', '.mjs': 'text/javascript', '.js': 'text/javascript', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff': 'font/woff' };
 http.createServer(async (req, res) => {
   try {
     let p = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
