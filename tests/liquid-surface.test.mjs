@@ -4,7 +4,7 @@ import { ParticleSystem } from '../src/simulation/ParticleSystem.mjs';
 import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
 import { effectiveParticleRadius } from '../src/simulation/FluidSolver.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
-import { paintMaterialParticles } from '../src/game/MaterialRaster.mjs';
+import { LIQUID_SURFACE, paintMaterialParticles } from '../src/game/MaterialRaster.mjs';
 
 const material = sanitizeMaterial({ id: 1, color: '#40a0c0', particleRadius: .105 });
 const color = (ps, i, out) => { out.r = ps.r[i] * 255; out.g = ps.g[i] * 255; out.b = ps.b[i] * 255; };
@@ -18,7 +18,8 @@ function pixel(pixels, t, x, y) {
   return Array.from(pixels.subarray(index, index + 4));
 }
 
-test('touching liquid parcels form an opaque surface without packing holes at both resolutions', () => {
+test('touching liquid parcels form a gently translucent surface without packing holes at both resolutions', () => {
+  assert.equal(LIQUID_SURFACE.opacity, .9, 'liquids are just slightly transparent');
   for (const scale of [40, 80]) {
     const ps = new ParticleSystem(100); ps.packingScale = .58;
     ps.add({ x: 0, y: 0, z: 0, mass: .25 }, material, Phase.LIQUID);
@@ -31,7 +32,7 @@ test('touching liquid parcels form an opaque surface without packing holes at bo
     const reach = spacing * 3 * scale;
     for (let y = Math.ceil(t.cy - reach); y <= Math.floor(t.cy + reach); y++) {
       for (let x = Math.ceil(t.cx - reach); x <= Math.floor(t.cx + reach); x++) {
-        assert.equal(pixels[(y * t.w + x) * 4 + 3], 255, 'interior texels must have no seams or pinholes');
+        assert.equal(pixels[(y * t.w + x) * 4 + 3], Math.round(255 * LIQUID_SURFACE.opacity), 'interior texels must have a uniform, subtly translucent fill without seams or pinholes');
       }
     }
   }
@@ -45,7 +46,7 @@ test('surface reconstruction keeps remote splashes and unmixed ingredient colour
     const t = transform(scale), pixels = paint(ps, t);
     assert.equal(pixel(pixels, t, 0, 0)[3], 0, 'separated droplets must not grow a connecting skin');
     const blue = pixel(pixels, t, -.413, .007), red = pixel(pixels, t, .417, -.009);
-    assert.equal(blue[3],255); assert.equal(red[3],255);
+    assert.equal(blue[3], Math.round(255 * LIQUID_SURFACE.opacity)); assert.equal(red[3], Math.round(255 * LIQUID_SURFACE.opacity));
     // Surface lighting may change brightness, but must preserve each isolated
     // ingredient's hue rather than mix it with the remote splash.
     assert.ok(Math.abs(blue[0]/blue[2] - 1/3) < .02 && Math.abs(blue[1]/blue[2] - 5/6) < .02);
@@ -72,7 +73,7 @@ test('reused surface buffers erase moved, evaporated and removed liquid without 
   const pixels = paint(ps, t);
   ps.x[0] = .4; paint(ps, t, pixels);
   assert.equal(pixel(pixels, t, -.4, 0)[3], 0);
-  assert.equal(pixel(pixels, t, .4, 0)[3], 255);
+  assert.equal(pixel(pixels, t, .4, 0)[3], Math.round(255 * LIQUID_SURFACE.opacity));
   ps.phase[0] = Phase.GAS; paint(ps, t, pixels);
   assert.ok(pixel(pixels, t, .4, 0)[3] < 100, 'evaporated matter stays translucent');
   ps.count = 0; paint(ps, t, pixels);
@@ -80,7 +81,7 @@ test('reused surface buffers erase moved, evaporated and removed liquid without 
   ps.count = 1; ps.phase[0] = Phase.LIQUID;
   const resized = transform(80); paint(ps, resized);
   paint(ps, t, pixels);
-  assert.equal(pixel(pixels, t, .4, 0)[3], 255, 'changing graphics resolution must not leave stale scratch');
+  assert.equal(pixel(pixels, t, .4, 0)[3], Math.round(255 * LIQUID_SURFACE.opacity), 'changing graphics resolution must not leave stale scratch');
 });
 
 test('dry powder remains textured and does not acquire a continuous liquid skin', () => {
