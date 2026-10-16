@@ -34,7 +34,7 @@ try {
     const { Phase } = await import('./src/simulation/Phase.mjs');
     const { effectiveParticleRadius } = await import('./src/simulation/FluidSolver.mjs');
     const { sanitizeMaterial } = await import('./src/materials/MaterialDefinition.mjs');
-    const { paintMaterialParticles } = await import('./src/game/MaterialRaster.mjs');
+    const { LIQUID_SURFACE, paintMaterialParticles } = await import('./src/game/MaterialRaster.mjs');
     const { particleMagicAuras } = await import('./src/game/magicLight.mjs');
     const check = (condition, message) => { if (!condition) throw new Error(message); };
     const color = (ps, i, out) => { out.r = ps.r[i] * 255; out.g = ps.g[i] * 255; out.b = ps.b[i] * 255; };
@@ -61,8 +61,11 @@ try {
     const before = Array.from(ps.r);
     gpu.render(ps, t, color, scratch, [], 0);
     const pool = pixels();
+    const expectedLiquidAlpha = Math.round(255 * LIQUID_SURFACE.opacity);
+    check(expectedLiquidAlpha < 210 && expectedLiquidAlpha > 170, 'liquid surface is visibly translucent');
     for (let y = -7; y <= 7; y++) for (let x = -7; x <= 7; x++)
-      check(pixel(pool, x / 40, y / 40)[3] === 255, 'GPU liquid has an interior pinhole');
+      check(Math.abs(pixel(pool, x / 40, y / 40)[3] - expectedLiquidAlpha) <= 2,
+        'GPU liquid has an interior pinhole or incorrect translucency');
     check(gpu.stats.drawCalls === 2, 'a liquid pool should take only two draw calls');
     check(gpu.stats.uploadedBytes === ps.count * 48, 'upload only active instance records');
     check(before.every((v, i) => v === ps.r[i]), 'surface reconstruction must not alter diffusion');
@@ -85,7 +88,7 @@ try {
       gpu.render(ps, t, color, scratch, [], 0, resolution, new Map([[1, material]]));
       const touching = pixels();
       for (let x = 0; x <= separation; x += 1 / resolution)
-        check(pixel(touching, x, 0, resolution)[3] >= 220, 'GPU liquid/solid contact has a visible empty seam');
+        check(pixel(touching, x, 0, resolution)[3] >= 150, 'GPU liquid/solid contact has a visible empty seam');
     }
     // Every phase fades continuously through the exact discrete handoff.
     ps.count = 0; ps.nativeLiquidRadius = .039 * Math.sqrt(.5 / .25);

@@ -18,8 +18,8 @@ function pixel(pixels, t, x, y) {
   return Array.from(pixels.subarray(index, index + 4));
 }
 
-test('touching liquid parcels form a gently translucent surface without packing holes at both resolutions', () => {
-  assert.equal(LIQUID_SURFACE.opacity, .9, 'liquids are just slightly transparent');
+test('touching liquid parcels form a clearly translucent surface without packing holes at both resolutions', () => {
+  assert.equal(LIQUID_SURFACE.opacity, .74, 'liquids should reveal the cauldron behind them');
   for (const scale of [40, 80]) {
     const ps = new ParticleSystem(100); ps.packingScale = .58;
     ps.add({ x: 0, y: 0, z: 0, mass: .25 }, material, Phase.LIQUID);
@@ -32,7 +32,7 @@ test('touching liquid parcels form a gently translucent surface without packing 
     const reach = spacing * 3 * scale;
     for (let y = Math.ceil(t.cy - reach); y <= Math.floor(t.cy + reach); y++) {
       for (let x = Math.ceil(t.cx - reach); x <= Math.floor(t.cx + reach); x++) {
-        assert.equal(pixels[(y * t.w + x) * 4 + 3], Math.round(255 * LIQUID_SURFACE.opacity), 'interior texels must have a uniform, subtly translucent fill without seams or pinholes');
+        assert.equal(pixels[(y * t.w + x) * 4 + 3], Math.round(255 * LIQUID_SURFACE.opacity), 'interior texels must have a uniform, visibly translucent fill without seams or pinholes');
       }
     }
   }
@@ -105,7 +105,7 @@ test('native liquid visibly meets raw solids and powder at the actual fixture co
     const t = transform(scale), pixels = new Uint8ClampedArray(t.w * t.h * 4);
     paintMaterialParticles(ps, t, pixels, color, {}, new Map([[1, material]]));
     for (let x = t.cx; x <= Math.floor(t.cx + separation * scale); x++) {
-      assert.ok(pixels[(Math.floor(t.cy) * t.w + x) * 4 + 3] >= 220,
+      assert.ok(pixels[(Math.floor(t.cy) * t.w + x) * 4 + 3] >= 150,
         `a touching ${subdivision < .55 ? 'raw ingredient' : 'grain'} must not have a black halo at scale ${scale}`);
     }
   }
