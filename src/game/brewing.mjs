@@ -172,7 +172,10 @@ export class BrewingSession {
     // Wider spoon catches a meaningful cross-section of both liquids and
     // loose powders. Sweep its footprint along the entire touch movement:
     // frame-rate-dependent pointer gaps must not leave un-stirred strips.
-    const vx = clamp(velocity.x, -6, 6), vy = clamp(velocity.y, -6, 6), radius = .42;
+    // Preserve diagonal direction and transfer the hand's velocity immediately;
+    // per-axis clamping would amplify diagonal strokes unnaturally.
+    const velocityScale = Math.min(1, 6 / speed);
+    const vx = velocity.x * velocityScale, vy = velocity.y * velocityScale, radius = .42;
     const sx = Number.isFinite(fromPoint?.x) ? fromPoint.x : point.x;
     const sy = Number.isFinite(fromPoint?.y) ? fromPoint.y : point.y;
     const dx = point.x - sx, dy = point.y - sy, lengthSquared = dx * dx + dy * dy;
@@ -190,7 +193,13 @@ export class BrewingSession {
       // Smooth nonzero peripheral influence allows several grains to move
       // together while keeping strong impulses centered under the spoon.
       const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
-      const amount = falloff * Math.min(.52, Math.max(.015, dt) * 9) * clamp(intensity, 0, 1);
+      const strength = clamp(intensity, 0, 1);
+      // Direct strokes should respond on the very first pointer event, not
+      // converge to the hand's motion over several physics ticks. Keep the
+      // low-intensity hold-assisted stir deliberately gentle.
+      const response = strength >= .5 ? clamp(.72 + dt * 3, .72, .86)
+        : Math.min(.52, Math.max(.015, dt) * 9);
+      const amount = falloff * response * strength;
       ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
       ps.stirActivity[i] = Math.max(ps.stirActivity[i], falloff * Math.min(1, speed) * Math.sqrt(clamp(intensity, 0, 1)));
       ps.grainRest[i] = 0;
@@ -213,6 +222,51 @@ export class BrewingSession {
       ps.vx[i] *= .3; ps.vy[i] = Math.min(0, ps.vy[i]); affected++;
     }
     return affected;
+  }
+  movePestle(point, fromPoint = point, dt = FIXED_STEP) {
+    // Crushing remains local, but the pestle also occupies volume in the
+    // liquid. Give nearby parcels an immediate, bounded velocity rather than
+    // teleporting them or adding energy on every physics substep.
+    const crushed = this.crush(point, fromPoint);
+    const ps = this.engine.ps;
+    const sx = Number.isFinite(fromPoint?.x) ? fromPoint.x : point.x;
+    const sy = Number.isFinite(fromPoint?.y) ? fromPoint.y : point.y;
+    const dx = point.x - sx, dy = point.y - sy;
+    const lengthSquared = dx * dx + dy * dy, length = Math.sqrt(lengthSquared);
+    const moving = length > .002;
+    const safeDt = clamp(Number.isFinite(dt) ? dt : FIXED_STEP, 1 / 120, .1);
+    const speed = moving ? Math.min(5.5, length / safeDt) : 0;
+    let displaced = 0;
+    for (let i = 0; i < ps.count; i++) {
+      // Loose powder can be pushed after crushing. Coherent frozen blocks
+      // remain intact unless the pestle actually breaks their local region.
+      if (ps.phase[i] !== Phase.LIQUID && ps.phase[i] !== Phase.GAS &&
+          !(ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] >= .95)) continue;
+      const along = moving
+        ? clamp(((ps.x[i] - sx) * dx + (ps.y[i] - sy) * dy) / lengthSquared, 0, 1)
+        : 1;
+      const contactX = sx + along * dx, contactY = sy + along * dy;
+      const rx = ps.x[i] - contactX, ry = ps.y[i] - contactY;
+      const distance = Math.hypot(rx, ry);
+      const contact = .24 + effectiveParticleRadius(ps, i, true);
+      if (distance >= contact) continue;
+      // A press displaces liquid sideways/downwards; a drag additionally
+      // carries it along the pestle's swept path, including when reversed.
+      const radialX = distance > 1e-6 ? rx / distance : 0;
+      const radialY = distance > 1e-6 ? ry / distance : -1;
+      const radialSpeed = moving ? .35 : 1.2;
+      const desiredX = (moving ? dx / length * speed : 0) + radialX * radialSpeed;
+      const desiredY = (moving ? dy / length * speed : 0) + radialY * radialSpeed - (moving ? .08 : .28);
+      const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
+      const response = falloff * (moving ? .76 : .58);
+      ps.vx[i] += (clamp(desiredX, -6, 6) - ps.vx[i]) * response;
+      ps.vy[i] += (clamp(desiredY, -6, 6) - ps.vy[i]) * response;
+      ps.stirActivity[i] = Math.max(ps.stirActivity[i], falloff * (moving ? .8 : .3));
+      ps.grainRest[i] = 0;
+      displaced++;
+    }
+    if (displaced) this.history.stirred += moving ? Math.min(5, speed) * safeDt * .5 : .005;
+    return { crushed, displaced };
   }
   assistStir(dt = FIXED_STEP) {
     const angle = this.history.elapsed * 3.5, radius = 1.15;
