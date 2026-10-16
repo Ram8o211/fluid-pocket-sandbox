@@ -1,5 +1,4 @@
 import { Phase } from './Phase.mjs';
-import { targetPhaseAt } from './PhaseSolver.mjs';
 
 // Freezing is a change of *bulk* mechanics, not the emission of individual ice
 // grains. Keep the liquid solver in charge while the connected cold region
@@ -10,7 +9,8 @@ export function freezeConnectedLiquids(ps, grid, solid, planar = false) {
   let candidates = 0;
   for (let i = 0; i < ps.count; i++) {
     if (ps.phase[i] !== Phase.LIQUID || ps.phaseTarget[i] !== Phase.SOLID ||
-        ps.phaseProgress[i] <= 0 || targetPhaseAt(ps, i) !== Phase.SOLID) continue;
+        ps.phaseProgress[i] <= 0 ||
+        ps.temperature[i] >= ps.meltingTemperature[i] - ps.phaseHysteresis[i]) continue;
     parent[i] = i;
     candidates++;
   }
