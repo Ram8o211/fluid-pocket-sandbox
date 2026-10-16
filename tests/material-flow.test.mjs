@@ -145,3 +145,84 @@ test('frost changes local colour/texture without holes; vapour retains liquid fo
     assert.ok(vapour[(60 * 160 + 80) * 4 + 3] > 30 && vapour[(60 * 160 + 80) * 4 + 3] < 160);
   } finally { b.dispose(); }
 });
+
+
+test('continuous nozzle inserts a whole smashable piece, not eight separate grains', () => {
+  const world = generateWorld('whole-stream'), b = create(world.ingredients);
+  const stream = new PourStream();
+  try {
+    const ingredient = world.ingredients.find(i => i.crushable), id = ingredient.id;
+    const inventory = { [id]: 16 }, ps = b.engine.ps, point = { x: 0, y: .76 };
+    assert.equal(stream.step(b, id, inventory, point, .025), 4, 'one whole on first touch');
+    assert.equal(inventory[id], 12);
+    assert.equal(b.occupiedVolume, 4);
+    assert.equal(ps.count, 8);
+    assert.equal(new Set(ps.solidBodyId.subarray(0, ps.count)).size, 1);
+    assert.ok(ps.solidBodyId[0] > 0);
+    assert.ok(ps.solidSubdivision.subarray(0, ps.count).every(value => value < .55));
+    const raw = new Map([[id, ingredient]]);
+    const pieces = intactIngredientPieces(ps, raw);
+    assert.equal(pieces.size, 1, 'eight particles form one visible sprite');
+    assert.equal([...pieces.values()][0].indices.length, 8);
+    for (let tick = 0; tick < 8; tick++) {
+      assert.equal(stream.step(b, id, inventory, point, .025), 0,
+        'a held finger cannot emit ingredient fragments between whole pieces');
+      b.step();
+    }
+    assert.equal(ps.count, 8);
+    const saved = b.snapshot(); b.restore(saved);
+    assert.equal(intactIngredientPieces(ps, raw).size, 1, 'saved whole artwork remains intact');
+  } finally { b.dispose(); }
+});
+
+test('bulk pours create distinct coherent whole pieces, preserve stock, and crush locally', () => {
+  const world = generateWorld('whole-quantity'), ingredient = world.ingredients.find(i => i.crushable);
+  const id = ingredient.id, b = create(world.ingredients), ps = b.engine.ps;
+  const raw = new Map([[id, ingredient]]);
+  try {
+    const inventory = { [id]: 100 };
+    assert.equal(b.pour(id, 5, inventory, { point: { x: 0, y: .65 } }), 5);
+    assert.equal(inventory[id], 95);
+    assert.equal(b.occupiedVolume, 5);
+    assert.equal(ps.count, 10);
+    const pieces = [...intactIngredientPieces(ps, raw).values()];
+    assert.equal(pieces.length, 2, 'one full piece and one smaller whole remainder');
+    assert.deepEqual(pieces.map(p => p.indices.length).sort((a,b) => b-a), [8,2]);
+    assert.ok(pieces.every(p => new Set(p.indices.map(i => ps.solidBodyId[i])).size === 1));
+    const previousIds = new Set(ps.solidBodyId.subarray(0, ps.count));
+    assert.equal(b.pour(id, 4, inventory, { point: { x: 0, y: .65 } }), 4);
+    assert.equal(intactIngredientPieces(ps, raw).size, 3);
+    for (let i = 10; i < ps.count; i++) assert.ok(!previousIds.has(ps.solidBodyId[i]),
+      'later pours cannot weld a tower or stretch existing artwork');
+    const mass = ps.totalMass(), saved = b.snapshot(); b.restore(saved);
+    assert.equal(ps.totalMass(), mass);
+    assert.equal(intactIngredientPieces(ps, raw).size, 3);
+    const at = pieces[0].indices[0], hit = b.crush({ x: ps.x[at], y: ps.y[at] });
+    assert.ok(hit > 0);
+    assert.equal(ps.powderContent[at], 1, 'pestle still grinds only the touched region');
+    assert.equal(ps.solidBodyId[at], 0);
+    const ground = create(world.ingredients), stock = { [id]: 4 };
+    try {
+      assert.equal(ground.pour(id, 4, stock, { crushed: true }), 4);
+      const gp = ground.engine.ps;
+      assert.ok(gp.solidBodyId.subarray(0, gp.count).every(value => value === 0));
+      assert.ok(gp.powderContent.subarray(0, gp.count).every(value => value === 1));
+    } finally { ground.dispose(); }
+  } finally { b.dispose(); }
+});
+
+test('a physically blocked whole-item nozzle does not emit loose grains or spend stock', () => {
+  const world = generateWorld('whole-blocked'), ingredient = world.ingredients.find(i => i.crushable);
+  const id = ingredient.id, b = create(world.ingredients), ps = b.engine.ps;
+  const stream = new PourStream();
+  try {
+    for (let x = -.42; x <= .42; x += .07) for (let y = .34; y <= 1.12; y += .07)
+      ps.add({ x, y, z: 0, mass: .5 * ingredient.material.density }, b.engine.materials.get(id), Phase.SOLID);
+    const before = ps.count, stock = { [id]: 8 }, mass = ps.totalMass();
+    assert.equal(stream.step(b, id, stock, { x: 0, y: .76 }, .025), 0);
+    assert.equal(ps.count, before);
+    assert.equal(ps.totalMass(), mass);
+    assert.equal(stock[id], 8);
+    assert.equal(b.portions.length, 0);
+  } finally { b.dispose(); }
+});
