@@ -17,6 +17,23 @@ import { capturePotionContents, restorePotionContents } from './potionTransfer.m
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
 const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'phaseTarget', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'frozenRadius', 'solidBodyId', 'solidLocalX', 'solidLocalY', 'solidLocalZ', ...INGREDIENT_ART_FIELDS, 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
 
+// A tool contacts the *surface* of a rigid solid, but its impulse must be
+// transferred to every parcel of the same body. LiquidFun represents each
+// intact ingredient/ice block as one compound body; assigning different
+// velocities to its fixtures would otherwise waste the push or tear the shape.
+function applyRigidToolContacts(ps, contacts) {
+  if (!contacts.size) return;
+  for (let i = 0; i < ps.count; i++) {
+    if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .55) continue;
+    const hit = contacts.get(ps.solidBodyId[i]);
+    if (!hit) continue;
+    ps.vx[i] += (hit.vx - ps.vx[i]) * hit.response;
+    ps.vy[i] += (hit.vy - ps.vy[i]) * hit.response;
+    ps.stirActivity[i] = Math.max(ps.stirActivity[i], hit.activity);
+    ps.grainRest[i] = 0;
+  }
+}
+
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
 export class BrewingSession {
@@ -171,21 +188,21 @@ export class BrewingSession {
   }
   stir(point, velocity, dt = FIXED_STEP, fromPoint = point, intensity = 1) {
     const ps = this.engine.ps, speed = Math.hypot(velocity.x, velocity.y);
-    if (speed < .02 || !Number.isFinite(speed)) return 0;
-    // Wider spoon catches a meaningful cross-section of both liquids and
-    // loose powders. Sweep its footprint along the entire touch movement:
-    // frame-rate-dependent pointer gaps must not leave un-stirred strips.
-    // Preserve diagonal direction and transfer the hand's velocity immediately;
-    // per-axis clamping would amplify diagonal strokes unnaturally.
+    if (speed < .02 || !Number.isFinite(speed) || !Number.isFinite(point.x) || !Number.isFinite(point.y) ||
+        !Number.isFinite(dt) || dt <= 0 || !Number.isFinite(intensity) || intensity <= 0) return 0;
+    // Swept contact prevents fast mouse/touch movement skipping small solids.
+    // One velocity cap for both axes preserves diagonal steering direction.
+    const strength = clamp(intensity, 0, 1);
     const velocityScale = Math.min(1, 6 / speed);
     const vx = velocity.x * velocityScale, vy = velocity.y * velocityScale, radius = .42;
     const sx = Number.isFinite(fromPoint?.x) ? fromPoint.x : point.x;
     const sy = Number.isFinite(fromPoint?.y) ? fromPoint.y : point.y;
     const dx = point.x - sx, dy = point.y - sy, lengthSquared = dx * dx + dy * dy;
+    const response = strength >= .5 ? clamp(.72 + dt * 3, .72, .86)
+      : Math.min(.52, Math.max(.015, dt) * 9);
+    const rigidContacts = new Map();
     let affected = 0;
     for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] !== Phase.LIQUID && ps.phase[i] !== Phase.GAS &&
-          !(ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] >= .55)) continue;
       const projection = lengthSquared > 1e-8
         ? clamp(((ps.x[i] - sx) * dx + (ps.y[i] - sy) * dy) / lengthSquared, 0, 1)
         : 1;
@@ -193,21 +210,26 @@ export class BrewingSession {
       const distance = Math.hypot(ps.x[i] - closestX, ps.y[i] - closestY);
       const contact = radius + effectiveParticleRadius(ps, i, true);
       if (distance >= contact) continue;
-      // Smooth nonzero peripheral influence allows several grains to move
-      // together while keeping strong impulses centered under the spoon.
       const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
-      const strength = clamp(intensity, 0, 1);
-      // Direct strokes should respond on the very first pointer event, not
-      // converge to the hand's motion over several physics ticks. Keep the
-      // low-intensity hold-assisted stir deliberately gentle.
-      const response = strength >= .5 ? clamp(.72 + dt * 3, .72, .86)
-        : Math.min(.52, Math.max(.015, dt) * 9);
       const amount = falloff * response * strength;
-      ps.vx[i] += (vx - ps.vx[i]) * amount; ps.vy[i] += (vy - ps.vy[i]) * amount;
-      ps.stirActivity[i] = Math.max(ps.stirActivity[i], falloff * Math.min(1, speed) * Math.sqrt(clamp(intensity, 0, 1)));
-      ps.grainRest[i] = 0;
+      const activity = falloff * Math.min(1, speed) * Math.sqrt(strength);
+      const bodyId = ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55
+        ? ps.solidBodyId[i] : 0;
+      if (bodyId > 0) {
+        const previous = rigidContacts.get(bodyId);
+        if (previous) {
+          previous.response = Math.max(previous.response, amount);
+          previous.activity = Math.max(previous.activity, activity);
+        } else rigidContacts.set(bodyId, { vx, vy, response: amount, activity });
+      } else {
+        ps.vx[i] += (vx - ps.vx[i]) * amount;
+        ps.vy[i] += (vy - ps.vy[i]) * amount;
+        ps.stirActivity[i] = Math.max(ps.stirActivity[i], activity);
+        ps.grainRest[i] = 0;
+      }
       affected++;
     }
+    applyRigidToolContacts(ps, rigidContacts);
     if (affected) this.history.stirred += Math.min(6, speed) * dt;
     return affected;
   }
@@ -227,9 +249,9 @@ export class BrewingSession {
     return affected;
   }
   movePestle(point, fromPoint = point, dt = FIXED_STEP) {
-    // Crushing remains local, but the pestle also occupies volume in the
-    // liquid. Give nearby parcels an immediate, bounded velocity rather than
-    // teleporting them or adding energy on every physics substep.
+    // The pestle can push fluids, vapour, powders AND still-intact rigid
+    // ingredients/ice. Actual narrow-head contact keeps the separate crushing
+    // mechanic: adjacent solid regions are pushed without being pulverised.
     const crushed = this.crush(point, fromPoint);
     const ps = this.engine.ps;
     const sx = Number.isFinite(fromPoint?.x) ? fromPoint.x : point.x;
@@ -240,11 +262,8 @@ export class BrewingSession {
     const safeDt = clamp(Number.isFinite(dt) ? dt : FIXED_STEP, 1 / 120, .1);
     const speed = moving ? Math.min(5.5, length / safeDt) : 0;
     let displaced = 0;
+    const rigidContacts = new Map();
     for (let i = 0; i < ps.count; i++) {
-      // Loose powder can be pushed after crushing. Coherent frozen blocks
-      // remain intact unless the pestle actually breaks their local region.
-      if (ps.phase[i] !== Phase.LIQUID && ps.phase[i] !== Phase.GAS &&
-          !(ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] >= .95)) continue;
       const along = moving
         ? clamp(((ps.x[i] - sx) * dx + (ps.y[i] - sy) * dy) / lengthSquared, 0, 1)
         : 1;
@@ -253,8 +272,8 @@ export class BrewingSession {
       const distance = Math.hypot(rx, ry);
       const contact = .24 + effectiveParticleRadius(ps, i, true);
       if (distance >= contact) continue;
-      // A press displaces liquid sideways/downwards; a drag additionally
-      // carries it along the pestle's swept path, including when reversed.
+      // A stationary press displaces matter radially/downwards. A drag
+      // transfers directional motion, with a bounded response on reversal.
       const radialX = distance > 1e-6 ? rx / distance : 0;
       const radialY = distance > 1e-6 ? ry / distance : -1;
       const radialSpeed = moving ? .35 : 1.2;
@@ -262,12 +281,26 @@ export class BrewingSession {
       const desiredY = (moving ? dy / length * speed : 0) + radialY * radialSpeed - (moving ? .08 : .28);
       const falloff = Math.sqrt(Math.max(0, 1 - distance / contact));
       const response = falloff * (moving ? .76 : .58);
-      ps.vx[i] += (clamp(desiredX, -6, 6) - ps.vx[i]) * response;
-      ps.vy[i] += (clamp(desiredY, -6, 6) - ps.vy[i]) * response;
-      ps.stirActivity[i] = Math.max(ps.stirActivity[i], falloff * (moving ? .8 : .3));
-      ps.grainRest[i] = 0;
+      const activity = falloff * (moving ? .8 : .3);
+      const vx = clamp(desiredX, -6, 6), vy = clamp(desiredY, -6, 6);
+      const bodyId = ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55
+        ? ps.solidBodyId[i] : 0;
+      if (bodyId > 0) {
+        const previous = rigidContacts.get(bodyId);
+        // Use the strongest contact to push the whole rigid body once.
+        // Summing per-fixture impulses would exaggerate large frozen blocks.
+        if (!previous || response > previous.response)
+          rigidContacts.set(bodyId, { vx, vy, response, activity });
+        else previous.activity = Math.max(previous.activity, activity);
+      } else {
+        ps.vx[i] += (vx - ps.vx[i]) * response;
+        ps.vy[i] += (vy - ps.vy[i]) * response;
+        ps.stirActivity[i] = Math.max(ps.stirActivity[i], activity);
+        ps.grainRest[i] = 0;
+      }
       displaced++;
     }
+    applyRigidToolContacts(ps, rigidContacts);
     if (displaced) this.history.stirred += moving ? Math.min(5, speed) * safeDt * .5 : .005;
     return { crushed, displaced };
   }

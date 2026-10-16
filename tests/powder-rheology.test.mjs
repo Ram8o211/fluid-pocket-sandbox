@@ -29,9 +29,14 @@ test('dry grains reject deep overlaps and remove tangential sliding rather than 
  assert.ok(ps.x[1]-ps.x[0]>particlePairRestDistance(ps,0,1,true)*.85);assert.ok(Math.abs(ps.vy[1]-ps.vy[0])<before*.7);assert.equal(ps.powderContent[0],1);
 });
 
-test('larger spoon stirs touching powder and liquid but leaves a frozen block and distant grains alone',()=>{
+test('larger spoon steers touching powder, liquid and frozen solid without reaching distant grains',()=>{
  const b=setup(),ps=b.engine.ps;add(b,1,.25,0,Phase.SOLID);add(b,2,-.25,0,Phase.LIQUID);add(b,1,.7,0,Phase.SOLID);const block=add(b,1,0,.1,Phase.SOLID);ps.solidSubdivision[block]=0;
- assert.equal(b.stir({x:0,y:0},{x:3,y:1}),2);assert.ok(ps.vx[0]>0&&ps.vx[1]>0);assert.equal(ps.vx[2],0);assert.equal(ps.vx[3],0);
+ const mass=ps.totalMass();
+ assert.equal(b.stir({x:0,y:0},{x:3,y:1}),3);
+ assert.ok(ps.vx[0]>0&&ps.vx[1]>0&&ps.vx[block]>0);
+ assert.equal(ps.vx[2],0,'uncontacted distant grain must stay still');
+ assert.equal(ps.solidSubdivision[block],0,'frozen material should move without breaking');
+ assert.equal(ps.totalMass(),mass);
 });
 
 for(const phases of [[Phase.SOLID,Phase.SOLID],[Phase.SOLID,Phase.LIQUID],[Phase.SOLID,Phase.GAS],[Phase.GAS,Phase.GAS],[Phase.GAS,Phase.LIQUID]]){
