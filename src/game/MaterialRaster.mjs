@@ -7,19 +7,20 @@ import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
 // pixel buffer, allowing the old scratch to be collected with it.
 const liquidRasters = new WeakMap();
 const vapourRasters = new WeakMap();
-// Shared by the canvas fallback and GPU surface reconstruction.
-export const LIQUID_SURFACE = Object.freeze({ radius: 2.1, cutoff: .25, edge: .25, opacity: .9 });
-const OPAQUE_CONTOUR = Math.sqrt(1 - Math.sqrt(LIQUID_SURFACE.cutoff + LIQUID_SURFACE.edge));
+// Shared by the canvas fallback and GPU surface reconstruction. A translucent
+// liquid body lets the cauldron interior and immersed ingredients remain visible.
+export const LIQUID_SURFACE = Object.freeze({ radius: 2.1, cutoff: .25, edge: .25, opacity: .74 });
+const FILLED_CONTOUR = Math.sqrt(1 - Math.sqrt(LIQUID_SURFACE.cutoff + LIQUID_SURFACE.edge));
 
 /** LiquidFun contacts a fixture one liquid diameter from its surface. The
- * opaque contour of the squared kernel must reach that same contact, rather
+ * filled contour of the squared kernel must reach that same contact, rather
  * than ending at the smaller ingredient/grain radius. Shared by both paths. */
 export function liquidSurfaceRadius(ps, i, scale) {
   // Retain the incoming droplet footprint when the last liquid parcel has
   // evaporated; the first recondensing parcel must not resize the whole field.
   const native = ps.frozenRadius?.[i] || ps.nativeLiquidRadius || (ps.volumePacking ? .039 * Math.sqrt(Math.max(.0001, ps.mixtureAmount[i]) / .25) : 0);
   return Math.max(1.25, effectiveParticleRadius(ps, i, true) * scale * LIQUID_SURFACE.radius,
-    native > 0 ? (native * 2 * scale + .5) / OPAQUE_CONTOUR : 0);
+    native > 0 ? (native * 2 * scale + .5) / FILLED_CONTOUR : 0);
 }
 
 export function frozenSurfaceWeight(ps, i, appearance) {
@@ -99,7 +100,7 @@ function paintPhaseSurface(ps, t, pixels, particleColor, colorScratch, vapour = 
   if (!raster) return;
   for (let n = 0; n < raster.count; n++) {
     const index = raster.touched[n] * 4, density = raster.field[index];
-    // Subtly translucent interiors, a narrow softened contour, and local weighted colour
+    // Translucent interiors, a narrow softened contour, and local weighted colour
     // replace per-particle noise and overlapping square outlines. This does
     // not average separated ingredients across the whole cauldron.
     const alpha = vapour ? Math.min(.76, 1 - Math.exp(-density * .28)) : LIQUID_SURFACE.opacity * Math.min(1, Math.max(0, (density - LIQUID_SURFACE.cutoff) / LIQUID_SURFACE.edge));
