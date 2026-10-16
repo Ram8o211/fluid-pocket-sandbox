@@ -373,7 +373,12 @@ test('raw and crushed solids contact native water without pressure explosions or
       assert.equal(ps.totalMass(), mass);
       assert.equal(b.occupiedVolume, 100);
       assert.equal(nativeCount(b.engine.liquidFun), 160);
-      assert.equal(b.engine.liquidFun.solids.bodies.size, crushed || id === 11 ? 40 : 1);
+      if (crushed || id === 11) assert.equal(b.engine.liquidFun.solids.bodies.size, 40);
+      else {
+        const pieces = [...b.engine.liquidFun.solids.bodies.values()];
+        assert.ok(pieces.length > 1 && pieces.every(piece => piece.indices.length <= 8), 'raw handfuls keep separate bounded ingredient pieces');
+        assert.equal(pieces.reduce((sum, piece) => sum + piece.indices.length, 0), 40);
+      }
     } finally { b.dispose(); }
   }
 });
@@ -383,7 +388,7 @@ test('native solid bodies track crushing, save restore, melting and cleaning wit
   try {
     b.pour(4, 10, { 4: 100 });
     b.step();
-    assert.equal(backend.solids.bodies.size, 1, 'a dry solid still falls in the native world');
+    assert.ok(backend.solids.bodies.size > 0 && [...backend.solids.bodies.values()].every(piece => piece.indices.length <= 8), 'bounded dry pieces still fall in the native world');
     const mass = ps.totalMass(), before = ps.y[0];
     b.step(); assert.ok(ps.y[0] < before, 'dry solids must receive gravity exactly once');
     b.crush({ x: ps.x[0], y: ps.y[0] }); b.step();

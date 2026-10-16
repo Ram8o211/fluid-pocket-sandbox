@@ -39,6 +39,8 @@ jobs:
         run: npm run test:liquidfun
       - name: Verify GPU fluid surfaces and fallback before publishing
         run: npm run test:fluids:browser
+      - name: Verify material transitions, continuous touch pouring and local crushing
+        run: npm run test:materials:browser
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

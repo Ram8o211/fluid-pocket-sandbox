@@ -12,6 +12,22 @@ import { clamp } from '../simulation/math.mjs';
 const DX = .103;
 const DY = .092;
 const MIN_DISTANCE = .095;
+
+// A continuous nozzle emits one parcel at a time. Keep the outlet within a
+// small distance of the finger, pause against packed matter, and let gravity
+// carry the stream away before emitting the next parcel.
+export function findStreamOutlet(ps, point) {
+  for (const [dx, dy] of [[0, 0], [0, .096], [0, .192], [-.096, .096], [.096, .096]]) {
+    const x = point.x + dx, y = point.y + dy;
+    if (!insideCauldron(x, y, .073)) continue;
+    let free = true;
+    for (let i = 0; i < ps.count; i++) {
+      if ((ps.x[i] - x) ** 2 + (ps.y[i] - y) ** 2 < .087 ** 2) { free = false; break; }
+    }
+    if (free) return { x, y };
+  }
+  return null;
+}
 const candidates = [];
 for (let row = 0, y = 1.10; y >= -1.11; row++, y -= DY) {
   for (let x = -2.29 + (row % 2) * DX / 2; x <= 2.29; x += DX) {

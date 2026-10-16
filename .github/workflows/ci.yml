@@ -30,6 +30,8 @@ jobs:
         run: npm run test:liquidfun
       - name: GPU fluid surfaces, steam interaction and context recovery
         run: npm run test:fluids:browser
+      - name: Verify material transitions, continuous touch pouring and local crushing
+        run: npm run test:materials:browser
       - uses: actions/upload-artifact@v4
         if: always()
         with:

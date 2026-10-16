@@ -62,9 +62,14 @@ test('boiling/freezing are staggered, a continuously heated sealed pot equilibra
   const condensed = brew.history.condensed;
   for (let i = 0; i < 100; i++) { brew.step(); close(brew.vaporVolume, 20); }
   close(brew.history.condensed, condensed);
-  brew.setThermal(0, 1); let firstFrozen = 0;
-  for (let i = 0; i < 1000; i++) { brew.step(); const solids = brew.engine.ps.phaseCounts()[Phase.SOLID]; if (!firstFrozen && solids) firstFrozen = solids; }
-  assert.ok(firstFrozen > 0 && firstFrozen < brew.engine.ps.count);
+  brew.setThermal(0, 1); let sawFrostFront = false;
+  for (let i = 0; i < 1000; i++) {
+    brew.step(); const ps = brew.engine.ps;
+    // Optical crystallization precedes the single coherent-body handoff.
+    // It must not require the old scattered partial-ice collider behaviour.
+    for (let p = 0; p < ps.count; p++) if (ps.phase[p] === Phase.LIQUID && ps.phaseTarget[p] === Phase.SOLID && ps.phaseProgress[p] > 0 && ps.phaseProgress[p] < 1) sawFrostFront = true;
+  }
+  assert.ok(sawFrostFront);
   assert.equal(brew.engine.ps.phaseCounts()[Phase.SOLID], brew.engine.ps.count);
 });
 

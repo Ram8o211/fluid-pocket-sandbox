@@ -32,8 +32,8 @@ function separatePair(ps,i,j,nx,ny,nz,amount,planar){
 }
 
 export class FluidSolver {
-  constructor(){this.neighborRadius=.48;this.restDistance=.26;this.reverseSweep=false;this.pairPhase=0;this.gasCounts=null;this.cachePs=null;this.radii=this.viscosities=this.dough=new Float32Array(0);}
-  ensureScratch(ps){if(!this.gasCounts||this.gasCounts.length<ps.capacity){this.gasCounts=new Uint16Array(ps.capacity);this.radii=new Float32Array(ps.capacity);this.viscosities=new Float32Array(ps.capacity);this.dough=new Float32Array(ps.capacity);}}
+  constructor(){this.neighborRadius=.48;this.restDistance=.26;this.reverseSweep=false;this.pairPhase=0;this.gasCounts=null;this.cachePs=null;this.radii=this.viscosities=this.dough=this.gasCorrection=new Float32Array(0);}
+  ensureScratch(ps){if(!this.gasCounts||this.gasCounts.length<ps.capacity){this.gasCounts=new Uint16Array(ps.capacity);this.radii=new Float32Array(ps.capacity);this.viscosities=new Float32Array(ps.capacity);this.dough=new Float32Array(ps.capacity);this.gasCorrection=new Float32Array(ps.capacity);}}
   sortDensityContact(ps,i,j,nx,ny,nz,d,rest,gravity,mobility,planar,interactionScale=1){
     // Only reverse-density neighbors get a downward sorting impulse. A cutoff
     // near the particle diameter strands a fresh heavy layer on top of a
@@ -221,6 +221,7 @@ export class FluidSolver {
     // contacts are resolved, or liquid motion can undo a powder/block collision.
     integrateLiquids?.();
     if(hasPowder)searchRadius=Math.max(searchRadius,maxDisplacement*2);
+    this.gasCorrection.fill(0,0,ps.count);
     this.cachePs=ps;
     this.collideBox(ps,env.box,planar);
     collideBoundary?.();
@@ -246,7 +247,21 @@ export class FluidSolver {
         if(pi===Phase.GAS&&pj===Phase.GAS){
           this.exchangeGasFlow(ps,i,j,d,dt/Math.max(1,iterations),planar,env.gasFlowCoupling);
           const contact=particlePairRestDistance(ps,i,j,planar)*(env.gasContactScale??.55);
-          if(d<contact){const q=1-d/contact,amount=q*q*(env.gasContactStrength??.12)*dt/Math.max(1,iterations);separatePair(ps,i,j,nx,ny,nz,amount,planar);}
+          if(d<contact){
+            const q=1-d/contact;
+            // Bulk vapour has a soft excluded volume as well as optical depth.
+            // A bounded relaxation supports several layers below the lid while
+            // remaining compressible; corrections never become pressure kicks.
+            let amount=env.gasVolumeSupport?Math.min(.018, (contact-d)*.42)*Math.min(1,dt/.025)/Math.max(1,iterations):q*q*(env.gasContactStrength??.12)*dt/Math.max(1,iterations);
+            if(env.gasVolumeSupport){
+              // Bound the total, not just one contact: a freshly boiled full
+              // bowl can have dozens of overlapping neighbours per parcel.
+              const budget=.09*Math.min(1,dt/.025);
+              amount=Math.min(amount,Math.max(0,budget-this.gasCorrection[i]),Math.max(0,budget-this.gasCorrection[j]));
+              this.gasCorrection[i]+=amount;this.gasCorrection[j]+=amount;
+            }
+            separatePair(ps,i,j,nx,ny,nz,amount,planar);
+          }
           this.gasCounts[i]=Math.min(65535,this.gasCounts[i]+pairStride);this.gasCounts[j]=Math.min(65535,this.gasCounts[j]+pairStride);return;
         }
         if(pi===Phase.GAS||pj===Phase.GAS){

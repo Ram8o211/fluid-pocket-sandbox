@@ -2,7 +2,7 @@ import { Phase } from './Phase.mjs';
 import { clamp, hexToRgb } from './math.mjs';
 import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 
-const PARTICLE_ARRAYS=['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted','x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','phaseTarget','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','frozenRadius','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
+const PARTICLE_ARRAYS=['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted','x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','phaseTarget','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','frozenRadius','solidArtX','solidArtY','solidArtSize','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
 
 export class ParticleSystem {
   // Ephemeral native solver geometry; recomputed after every volume change.
@@ -22,6 +22,7 @@ export class ParticleSystem {
     this.crystallinity=new Float32Array(capacity);this.solidSubdivision=new Float32Array(capacity);this.electricalConductivity=new Float32Array(capacity);this.electricPotential=new Float32Array(capacity);this.combustionTemperature=new Float32Array(capacity);this.combustionProgress=new Float32Array(capacity);
     this.strength=new Float32Array(capacity);this.love=new Float32Array(capacity);this.death=new Float32Array(capacity);this.transformation=new Float32Array(capacity);this.fire=new Float32Array(capacity);this.freeze=new Float32Array(capacity);this.acidity=new Float32Array(capacity);this.poison=new Float32Array(capacity);
     this.solidLocalX=new Float32Array(capacity);this.solidLocalY=new Float32Array(capacity);this.solidLocalZ=new Float32Array(capacity);this.frozenRadius=new Float32Array(capacity);
+    this.solidArtX=new Float32Array(capacity);this.solidArtY=new Float32Array(capacity);this.solidArtSize=new Float32Array(capacity);
     this.savedDepth=new Float32Array(capacity);this.savedVz=new Float32Array(capacity);this.hasSavedDepth=new Uint8Array(capacity);
     this.materialId=new Int32Array(capacity);this.phase=new Int32Array(capacity);this.cell=new Int32Array(capacity);this.solidBodyId=new Int32Array(capacity);
     this.powderContent=new Float32Array(capacity);this.dissolutionProgress=new Float32Array(capacity);this.solventMeltingTemperature=new Float32Array(capacity);this.stirActivity=new Float32Array(capacity);this.grainRest=new Uint8Array(capacity);this.mixtureGroup=new Int32Array(capacity);this.mixtureProgress=new Float32Array(capacity);this.mixtureAmount=new Float32Array(capacity);
@@ -40,7 +41,7 @@ export class ParticleSystem {
     this.crystallinity[i]=material.crystallinity;this.solidSubdivision[i]=material.solidSubdivision;this.electricalConductivity[i]=material.electricalConductivity;this.electricPotential[i]=p.electricPotential??material.electricPotential;this.combustionTemperature[i]=material.combustionTemperature;this.combustionProgress[i]=0;
     this.arcaneThreshold[i]=material.arcaneThreshold??8;this.magicDecayTemperature[i]=material.magicDecayTemperature??1.4;this.arcaneCharge[i]=this.arcaneConverted[i]=0;
     for(const key of EFFECT_PROPERTIES)this[key][i]=clamp(Number.isFinite(material[key])?material[key]:0,0,1);
-    this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;this.frozenRadius[i]=0;this.savedDepth[i]=0;this.savedVz[i]=0;this.hasSavedDepth[i]=0;
+    this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;this.frozenRadius[i]=0;this.solidArtX[i]=this.solidArtY[i]=this.solidArtSize[i]=0;this.savedDepth[i]=0;this.savedVz[i]=0;this.hasSavedDepth[i]=0;
     return i;
   }
   assignMaterial(i,material,phase=this.phase[i],temperature=this.temperature[i]){
@@ -55,7 +56,7 @@ export class ParticleSystem {
     this.crystallinity[i]=material.crystallinity;this.solidSubdivision[i]=material.solidSubdivision;this.electricalConductivity[i]=material.electricalConductivity;this.electricPotential[i]=material.electricPotential;this.combustionTemperature[i]=material.combustionTemperature;
     this.arcaneThreshold[i]=material.arcaneThreshold??8;this.magicDecayTemperature[i]=material.magicDecayTemperature??1.4;this.arcaneCharge[i]=this.arcaneConverted[i]=0;
     for(const key of EFFECT_PROPERTIES)this[key][i]=clamp(Number.isFinite(material[key])?material[key]:0,0,1);
-    this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;this.frozenRadius[i]=0;return true;
+    this.solidBodyId[i]=0;this.solidLocalX[i]=this.solidLocalY[i]=this.solidLocalZ[i]=0;this.frozenRadius[i]=0;this.solidArtX[i]=this.solidArtY[i]=this.solidArtSize[i]=0;return true;
   }
   effectiveDensity(material,phase){ if(phase===Phase.GAS)return Math.max(0.08,material.density*(0.18+0.16*(1-material.compressibility))); if(phase===Phase.SOLID)return material.density*1.08; return material.density; }
   effectiveDensityAt(i,phase=this.phase[i]){ const base=this.baseDensity[i]; if(phase===Phase.GAS)return Math.max(.08,base*(.18+.16*(1-this.compressibility[i]))); if(phase===Phase.SOLID)return base*1.08; return base; }

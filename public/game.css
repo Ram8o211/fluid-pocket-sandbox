@@ -4,7 +4,7 @@
 @media(max-width:360px){.shop-shell{padding-left:8px;padding-right:8px}.order-panel{padding:8px}.customer-dialogue{font-size:11px}.brand-button{min-width:110px}.requirements{gap:4px}.requirement{min-width:110px;padding:5px}.req-target{font-size:10px}.ingredient-title strong{font-size:11px}.dose-selector button{min-width:29px;padding:5px}.sheet-body{padding:12px}.customer-heading h2{font-size:16px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}.sheet::backdrop{backdrop-filter:none}}
 
-.brew-tools{grid-template-columns:repeat(5,minmax(0,1fr))}.brew-tools .tool-button{min-width:0;padding-left:3px;padding-right:3px}
+.brew-tools{grid-template-columns:repeat(6,minmax(0,1fr))}.brew-tools .tool-button{min-width:0;padding-left:3px;padding-right:3px}
 
 .room-navigation{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 12px}
 .room-navigation button{display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;background:#39473d;border-color:#647c56;box-shadow:0 3px #222d27}
