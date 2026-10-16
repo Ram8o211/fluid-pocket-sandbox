@@ -60,7 +60,7 @@ export function shadeRabbitSurface(source,width,height,appearance,seed=1) {
         }
       } else if(effect==='fire') {
         const patch=((x>>2)*17+(y>>2)*29+seed)%23;
-        mix(at,[47,40,44],w*(.1+.11*tier)*(patch<15?1:.35));
+        mix(at,[47,40,44],w*(.1+.11*tier)*(patch<3+tier*4?1:.35));
         if(appearance.burning&&patch===3)mix(at,[242,135,60],w*.55);
       }
     }

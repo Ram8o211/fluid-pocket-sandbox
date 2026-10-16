@@ -1,10 +1,18 @@
 import { RABBIT_THRESHOLDS } from './rabbits.mjs';
 
-// These are the simulation's four observation stages (stageText in rabbits),
-// measured against each channel's own accumulated-exposure threshold.
-export function rabbitEffectTier(load, threshold) {
+// Share the established dilute-dose response with both artwork and procedural
+// rendering. Linear fractions of a lethal threshold hid most of the supplied
+// frames behind many repeated doses, even when potion strength changed greatly.
+export function rabbitVisualResponse(load, threshold = 1) {
   if (!Number.isFinite(load) || load <= .003 || !(threshold > 0)) return 0;
-  return Math.min(4, 1 + Math.floor(Math.max(0, load) / threshold * 4));
+  return Math.pow(Math.min(1, load / threshold), .36);
+}
+
+// Visual bands use accumulated exposure, including dose, sensitivity and
+// cancellation already resolved by the simulation. This never amplifies a dose.
+export function rabbitEffectTier(load, threshold) {
+  const response = rabbitVisualResponse(load, threshold);
+  return response > 0 ? Math.min(4, 1 + Math.floor(response * 4)) : 0;
 }
 
 // Ties use a stable anatomical priority, independent of dose/object key order.

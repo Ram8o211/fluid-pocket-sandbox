@@ -7,7 +7,7 @@ export async function verifyRabbitEffectArtwork(page) {
   const result = await page.evaluate(async () => {
     const { rabbitArtwork, loadRabbitArtwork } = await import('./src/game/RabbitAssets.mjs');
     const { RABBIT_EFFECT_FILES, rabbitAppearance } = await import('./src/game/RabbitAppearance.mjs');
-    const { createRabbitColony, RABBIT_THRESHOLDS } = await import('./src/game/rabbits.mjs');
+    const { createRabbitColony, assessRabbitEffects, RABBIT_THRESHOLDS } = await import('./src/game/rabbits.mjs');
     const { drawRabbit } = await import('./src/game/RabbitRenderer.mjs');
     await loadRabbitArtwork();
     const original = localStorage.getItem('alchemists-shop-sandbox-save');
@@ -30,7 +30,7 @@ export async function verifyRabbitEffectArtwork(page) {
       const signatures = [];
       for (let col = 0; col <= 4; col++) {
         const rabbit = create(), effect = bodies[row];
-        if (effect !== 'base' && col) rabbit.exposure[effect] = (col - .5) / 4 * RABBIT_THRESHOLDS[effect];
+        if (effect !== 'base' && col) rabbit.exposure[effect] = [0, .01, .06, .25, .7][col] * RABBIT_THRESHOLDS[effect];
         rabbit.activeFireUntil = 8000;
         const canvas = draw(rabbit); signatures.push(canvas.toDataURL());
         tc.drawImage(canvas, col * 240, row * 200 + 20);
@@ -39,6 +39,35 @@ export async function verifyRabbitEffectArtwork(page) {
       }
       stages.push({ effect: bodies[row], distinct: new Set(signatures).size });
     }
+    // Reproduce the hidden-texture report with real trial-sized doses. A sheet
+    // of manually assigned near-lethal loads passed even when normal play could
+    // only display T1. Check phone cards, cage and large comparison sizes too.
+    const realDoses = [], cooledBurns = [];
+    const doseSheet = document.createElement('canvas'); doseSheet.width = 960; doseSheet.height = 800;
+    const dc = doseSheet.getContext('2d'); dc.fillStyle = '#102837'; dc.fillRect(0, 0, 960, 800);
+    for (const [row, effect] of bodies.slice(1).entries()) {
+      const reports = [[.025, 5], [.15, 5], [.6, 5], [.75, 10]].map(([value, dose]) =>
+        assessRabbitEffects({ [effect]: value, stability: 100 }, create(), dose, 1000));
+      for (const size of [48, 96, 192]) {
+        const signatures = reports.map(report => {
+          const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 350;
+          drawRabbit(canvas.getContext('2d'), report.afterRabbit, 240, 320, size, 0, { reference: true, now: 1000 });
+          return canvas.toDataURL();
+        });
+        realDoses.push({ effect, size, distinct: new Set(signatures).size,
+          tiers: reports.map(report => rabbitAppearance(report.afterRabbit, 1000).tiers[effect]) });
+      }
+      reports.forEach((report, col) => {
+        dc.drawImage(draw(report.afterRabbit), col * 240, row * 200 + 20);
+        dc.fillStyle = '#f5d0a1'; dc.font = '14px monospace';
+        dc.fillText(`${effect} · T${col + 1}`, col * 240 + 10, row * 200 + 16);
+      });
+      if (effect === 'fire') for (const report of reports) cooledBurns.push(draw(report.afterRabbit, 10000).toDataURL());
+    }
+    const mildBurnTextures = [.05, .06].map(value => {
+      const report = assessRabbitEffects({ fire: value, stability: 100 }, create(), 5, 1000);
+      return draw(report.afterRabbit, 10000).toDataURL();
+    });
     const combinations = document.createElement('canvas'); combinations.width = 720; combinations.height = 1000;
     const cc = combinations.getContext('2d'); cc.imageSmoothingEnabled = false;
     cc.fillStyle = '#102837'; cc.fillRect(0, 0, combinations.width, combinations.height);
@@ -70,19 +99,25 @@ export async function verifyRabbitEffectArtwork(page) {
     const fireExtinguished = draw(active, 4999).toDataURL() !== draw(active, 5000).toDataURL();
     const dead = structuredClone(mixed); dead.stats.alive = false; dead.deathAppearance = 'charred';
     const deadStill = draw(dead, 1000, 0).toDataURL() === draw(dead, 100000, 100000).toDataURL();
-    return { decoded, stages, composed, secondaryVisible, mirrored, fireExtinguished, deadStill,
+    return { decoded, stages, realDoses, cooledBurns: new Set(cooledBurns).size, mildBurnTextures: new Set(mildBurnTextures).size, composed, secondaryVisible, mirrored, fireExtinguished, deadStill,
       unchanged: localStorage.getItem('alchemists-shop-sandbox-save') === original,
       body: rabbitAppearance(mixed, 1000).body,
-      tiers: tiers.toDataURL(), combinations: combinations.toDataURL(), mixed: allChannels };
+      tiers: tiers.toDataURL(), doses: doseSheet.toDataURL(), combinations: combinations.toDataURL(), mixed: allChannels };
   });
   assert.equal(result.decoded, true, 'every supplied body and overlay decodes at its original resolution');
   for (const row of result.stages) assert.equal(row.distinct, row.effect === 'base' ? 1 : 5, `${row.effect}: untreated plus all four supplied tiers are distinct`);
+  for (const row of result.realDoses) {
+    assert.deepEqual(row.tiers, [1, 2, 3, 4], `${row.effect}: normal trial doses reach all four textures`);
+    assert.equal(row.distinct, 4, `${row.effect}: dose differences survive rendering at size ${row.size}`);
+  }
+  assert.equal(result.cooledBurns, 4, 'extinguished fire keeps four distinct permanent burn textures');
+  assert.equal(result.mildBurnTextures, 2, 'burn tiers change the surface pattern even when their flat tint rounds to the same cached value');
   for (const row of result.composed) assert.equal(row.distinct, 3, `${row.effect} supports both real overlay channels`);
   for (const channel of result.secondaryVisible) assert.equal(channel.visible, true, `${channel.effect} survives simultaneous body effects`);
   assert.equal(result.body, 'transformation');
   assert.equal(result.mirrored, true); assert.equal(result.fireExtinguished, true);
   assert.equal(result.deadStill, true); assert.equal(result.unchanged, true);
-  for (const key of ['tiers', 'combinations', 'mixed']) {
+  for (const key of ['tiers', 'doses', 'combinations', 'mixed']) {
     await writeFile(`test-results/rabbit-reference-${key}.png`, Buffer.from(result[key].split(',')[1], 'base64'));
   }
 }

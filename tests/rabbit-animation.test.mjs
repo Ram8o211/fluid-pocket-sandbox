@@ -19,7 +19,7 @@ test('weak mixed effects cannot add a second face, cut a rectangle into the head
   const rabbit=createRabbitColony(1000).rabbits[0];
   Object.assign(rabbit.exposure,{transformation:.2,strength:.15,acidity:.1,fire:.08});
   const appearance=rabbitAppearance(rabbit,1000),rig=rabbitRig(appearance.bodyKey);
-  assert.equal(appearance.bodyKey,'transformation_t01');
+  assert.equal(appearance.bodyKey,'transformation_t02');
   const pixels=new Uint8ClampedArray(256*192*4);
   for(let i=0;i<pixels.length;i+=4){pixels[i]=210;pixels[i+1]=180;pixels[i+2]=150;pixels[i+3]=i%12?255:0;}
   const original=pixels.slice(),out=shadeRabbitSurface(pixels,256,192,appearance,12);

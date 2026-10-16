@@ -4,9 +4,9 @@ import { readFile } from 'node:fs/promises';
 import { rabbitAppearance, rabbitEffectTier, RABBIT_EFFECT_FILES } from '../src/game/RabbitAppearance.mjs';
 import { createRabbitColony, assessRabbitEffects, RABBIT_THRESHOLDS } from '../src/game/rabbits.mjs';
 
-test('art stages agree with the simulation observation stages for every actual channel', () => {
+test('art stages expose dilute-dose differences while retaining each channel threshold and inert dead zone', () => {
   for (const threshold of Object.values(RABBIT_THRESHOLDS)) {
-    for (const [fraction, tier] of [[0, 0], [.01, 1], [.249, 1], [.25, 2], [.499, 2], [.5, 3], [.749, 3], [.75, 4], [1, 4], [10, 4]]) {
+    for (const [fraction, tier] of [[0, 0], [.01, 1], [.02, 1], [.025, 2], [.14, 2], [.15, 3], [.44, 3], [.46, 4], [1, 4], [10, 4]]) {
       assert.equal(rabbitEffectTier(threshold * fraction, threshold), tier);
     }
     assert.equal(rabbitEffectTier(.003, threshold), 0);
@@ -17,14 +17,28 @@ test('art stages agree with the simulation observation stages for every actual c
 
 test('repeated real doses advance the supplied anatomy without changing snapshots or gameplay', () => {
   const original = createRabbitColony(1000).rabbits[0];
-  const first = assessRabbitEffects({ strength: .45, stability: 100 }, original, 5, 1000);
-  const second = assessRabbitEffects({ strength: .45, stability: 100 }, first.afterRabbit, 5, 8000);
+  const first = assessRabbitEffects({ strength: .04, stability: 100 }, original, 5, 1000);
+  const second = assessRabbitEffects({ strength: .04, stability: 100 }, first.afterRabbit, 5, 8000);
   assert.equal(rabbitAppearance(first.afterRabbit).bodyKey, 'strength_t01');
   assert.equal(rabbitAppearance(second.afterRabbit).bodyKey, 'strength_t02');
   const before = JSON.stringify([original, first, second]);
   for (let now = 1000; now < 15000; now += 100) rabbitAppearance(second.afterRabbit, now);
   assert.equal(JSON.stringify([original, first, second]), before);
   assert.equal(original.exposure.strength, 0);
+});
+
+test('ordinary small trials and a stronger 10 ml dose reach all four body textures before overdose', () => {
+  for (const effect of ['strength', 'transformation', 'acidity', 'fire']) {
+    const original = createRabbitColony(1000).rabbits[0];
+    for (const [concentration, dose, tier] of [[.025, 5, 1], [.15, 5, 2], [.6, 5, 3], [.75, 10, 4]]) {
+      const report = assessRabbitEffects({ [effect]: concentration, stability: 100 }, original, dose, 1000);
+      const saved = JSON.stringify(report);
+      assert.equal(rabbitAppearance(report.afterRabbit, 1000).tiers[effect], tier, `${effect}: ${concentration} at ${dose} ml`);
+      assert.equal(report.afterRabbit.exposure[effect], concentration * dose / 5);
+      assert.equal(report.after.alive, true, 'severe artwork must be visible on living subjects');
+      assert.equal(JSON.stringify(report), saved, 'visual selection cannot edit dose results');
+    }
+  }
 });
 
 test('all simultaneous body effects remain represented under a deterministic strongest-body policy', () => {

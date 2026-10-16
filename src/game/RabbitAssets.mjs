@@ -81,16 +81,19 @@ export function rabbitSprite(rabbit, poison, frost, death, charred, appearance =
   const cooledScorch = appearance?.body === 'fire' && !appearance.burning ? appearance.scorch : 0;
   const steps = [appearance ? 0 : poison, frost, death, cooledScorch].map(value => Math.round(value * 12));
   const secondary = appearance?.secondary || [];
-  if (!charred && steps.every(value => !value) && !secondary.length) return base;
-  const layers = secondary.map(effect => `${effect}:${appearance.tiers[effect]}`).join(',');
-  const key = `${revision}:${coat}:${steps.join(':')}:${charred}:${layers}:${appearance?.burning}:${secondary.length?Number(rabbit.mutation?.seed)||1:0}`;
+  // Extinguished fire keeps a flame-free body, with stage-specific ash patches
+  // instead of flattening every burn stage into the same lightly singed frame.
+  const surfaceEffects = cooledScorch ? ['fire', ...secondary] : secondary;
+  if (!charred && steps.every(value => !value) && !surfaceEffects.length) return base;
+  const layers = surfaceEffects.map(effect => `${effect}:${appearance.tiers[effect]}`).join(',');
+  const key = `${revision}:${coat}:${steps.join(':')}:${charred}:${layers}:${appearance?.burning}:${surfaceEffects.length?Number(rabbit.mutation?.seed)||1:0}`;
   if (tinted.has(key)) return tinted.get(key);
   const canvas = document.createElement('canvas'); canvas.width = base.width; canvas.height = base.height;
   const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.drawImage(base, 0, 0);
   ctx.globalCompositeOperation = 'source-atop';
-  if(secondary.length) {
+  if(surfaceEffects.length) {
     const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
-    pixels.data.set(shadeRabbitSurface(pixels.data,canvas.width,canvas.height,appearance,Number(rabbit.mutation?.seed)||1));
+    pixels.data.set(shadeRabbitSurface(pixels.data,canvas.width,canvas.height,{...appearance,secondary:surfaceEffects},Number(rabbit.mutation?.seed)||1));
     ctx.putImageData(pixels,0,0);
   }
   const colors = ['#94b46e', '#a6dce9', '#746485', '#29242f'];

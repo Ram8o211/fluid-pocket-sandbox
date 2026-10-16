@@ -1,11 +1,11 @@
-import { rabbitAppearance, rabbitEffectKey } from './RabbitAppearance.mjs';
+import { rabbitAppearance, rabbitEffectKey, rabbitVisualResponse } from './RabbitAppearance.mjs';
 import { rabbitArtwork, rabbitArtworkVersion, rabbitSprite, rabbitEffectPieces } from './RabbitAssets.mjs';
 import { rabbitRig, rabbitArtPose, poseRabbitPixels } from './RabbitArtGeometry.mjs';
 import { RABBIT_THRESHOLDS } from './rabbits.mjs';
 
 const frames=new Map(),sources=new WeakMap();
 let serial=0;
-const response=(rabbit,key)=>{const load=Math.max(0,Number(rabbit.exposure?.[key])||0);return load<=.003?0:Math.pow(Math.min(1,load/RABBIT_THRESHOLDS[key]),.36);};
+const response=(rabbit,key)=>rabbitVisualResponse(rabbit.exposure?.[key],RABBIT_THRESHOLDS[key]);
 const PADDING=32,BASELINE=180+PADDING;
 
 function sourcePixels(image) {
