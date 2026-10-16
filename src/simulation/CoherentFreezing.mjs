@@ -27,6 +27,9 @@ export function freezeConnectedLiquids(ps, grid, solid, planar = false) {
   const reach = Math.max(.19, (ps.nativeLiquidRadius || .055) * 3.6);
   grid.forEachPair(ps, reach, (i, j) => {
     if (parent[i] < 0 || parent[j] < 0) return;
+    // Check actual contact distances, not only grid candidates: missing depth
+    // in old planar parcels must never weld remote droplets into the pool.
+    if (Math.hypot(ps.x[i] - ps.x[j], ps.y[i] - ps.y[j], planar ? 0 : ps.z[i] - ps.z[j]) > reach) return;
     const a = root(i), b = root(j);
     if (a !== b) parent[b] = a;
   });
