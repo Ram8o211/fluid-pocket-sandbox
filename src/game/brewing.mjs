@@ -138,7 +138,9 @@ export class BrewingSession {
     }
     if (!ps.count) this.batchId = crypto.randomUUID();
     const massBefore = ps.totalMass();
-    const count = this.engine.emit(ingredientId, { x, y: 1, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
+    // Brewing assigns finalized whole-body IDs after placement and never needs
+    // temporary solid body creation at the emitter's provisional positions.
+    const count = this.engine.emit(ingredientId, { x, y: 1, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35, !solid);
     for (let i = start; i < ps.count; i++) {
       ps.mass[i] = ingredient.material.density * PARTICLE_ML;
       ps.mixtureAmount[i] = PARTICLE_ML;
