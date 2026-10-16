@@ -91,6 +91,7 @@ export class SimulationEngine{
     for(let i=0;i<this.ps.count;i++)applyBuoyancy(this.ps,i,this.gravity,this.env,dt);
     if(this.stepIndex%profile.thermalStride===0)updateThermal(this.ps,this.grid,this.rules,this.env,dt*profile.thermalStride);
     let changes=0,hasSolid=false;for(let i=0;i<this.ps.count;i++){const change=updatePhaseParticle(this.ps,i,dt,this.rules,this.env,this.solid.compactFreezing);if(change){changes++;if(change.from===Phase.SOLID&&change.to===Phase.LIQUID)this.solid.onMelt(this.ps,i);else if(change.to===Phase.SOLID){if(this.solid.compactFreezing&&change.from===Phase.LIQUID)this.ps.solidSubdivision[i]=0;this.solid.initializeParticle(this.ps,i,planar,this.grid);}}if(this.ps.phase[i]===Phase.SOLID)hasSolid=true;}
+    if(this.solid.compactFreezing){const frozen=freezeConnectedLiquids(this.ps,this.grid,this.solid,planar);changes+=frozen;if(frozen)hasSolid=true;}
     let positionsDirty=false;if(hasSolid&&!nativeSolids){this.solid.step(this.ps,this.grid,this.env,this.gravity,dt);this.fluid.collideBox(this.ps,this.env.box,planar);positionsDirty=true;}if(this.molds.molds.length||this.molds.barriers.size){this.molds.collide(this.ps,planar);positionsDirty=true;}if(positionsDirty){this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);}
     if(this.stepIndex%profile.electricalStride===0)updateElectrical(this.ps,this.grid,this.rules,dt*profile.electricalStride);
     const reactionOffset=this.env.mobileContactBudget&&profile.reactionStride>1?Math.floor(profile.reactionStride/2):0;
