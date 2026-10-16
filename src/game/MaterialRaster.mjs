@@ -8,7 +8,7 @@ import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
 const liquidRasters = new WeakMap();
 const vapourRasters = new WeakMap();
 // Shared by the canvas fallback and GPU surface reconstruction.
-export const LIQUID_SURFACE = Object.freeze({ radius: 2.1, cutoff: .25, edge: .25 });
+export const LIQUID_SURFACE = Object.freeze({ radius: 2.1, cutoff: .25, edge: .25, opacity: .9 });
 const OPAQUE_CONTOUR = Math.sqrt(1 - Math.sqrt(LIQUID_SURFACE.cutoff + LIQUID_SURFACE.edge));
 
 /** LiquidFun contacts a fixture one liquid diameter from its surface. The
@@ -99,10 +99,10 @@ function paintPhaseSurface(ps, t, pixels, particleColor, colorScratch, vapour = 
   if (!raster) return;
   for (let n = 0; n < raster.count; n++) {
     const index = raster.touched[n] * 4, density = raster.field[index];
-    // Opaque interiors, a narrow softened contour, and local weighted colour
+    // Subtly translucent interiors, a narrow softened contour, and local weighted colour
     // replace per-particle noise and overlapping square outlines. This does
     // not average separated ingredients across the whole cauldron.
-    const alpha = vapour ? Math.min(.76, 1 - Math.exp(-density * .28)) : Math.min(1, Math.max(0, (density - LIQUID_SURFACE.cutoff) / LIQUID_SURFACE.edge));
+    const alpha = vapour ? Math.min(.76, 1 - Math.exp(-density * .28)) : LIQUID_SURFACE.opacity * Math.min(1, Math.max(0, (density - LIQUID_SURFACE.cutoff) / LIQUID_SURFACE.edge));
     if (alpha === 0) continue;
     const texel = raster.touched[n], above = texel >= t.w ? raster.field[index - t.w * 4] : 0;
     const contour = Math.max(0, Math.min(1, (.8 - above) / .45));
