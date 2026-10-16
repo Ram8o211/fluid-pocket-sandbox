@@ -1,20 +1,21 @@
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { isPowder } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
-import { LIQUID_SURFACE } from './MaterialRaster.mjs';
+import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
+import { LIQUID_SURFACE, liquidSurfaceRadius } from './MaterialRaster.mjs';
 
-const STRIDE = 11;
+const STRIDE = 12;
 const PARTICLE_VERTEX = `#version 300 es
 precision highp float;
 layout(location=0) in vec3 a_circle;
 layout(location=1) in vec3 a_color;
 layout(location=2) in vec3 a_light;
-layout(location=3) in vec2 a_grain;
+layout(location=3) in vec3 a_grain;
 uniform vec2 u_size;
 out vec2 v_local;
 out vec3 v_color;
 out vec3 v_light;
-flat out vec2 v_grain;
+flat out vec3 v_grain;
 void main() {
   vec2 corners[4] = vec2[4](vec2(-1,-1),vec2(1,-1),vec2(-1,1),vec2(1,1));
   v_local = corners[gl_VertexID];
@@ -27,14 +28,14 @@ precision highp float;
 in vec2 v_local;
 in vec3 v_color;
 in vec3 v_light;
-flat in vec2 v_grain;
+flat in vec3 v_grain;
 uniform int u_grains;
 out vec4 out_color;
 void main() {
   float d = dot(v_local, v_local);
   if (d >= 1.0) discard;
   if (u_grains == 0) {
-    float weight = (1.0-d)*(1.0-d);
+    float weight = (1.0-d)*(1.0-d)*v_grain.z;
     out_color = vec4((v_color + v_light*.22)*weight, weight);
   } else {
     float dry = step(2.5, v_grain.x);
@@ -42,7 +43,8 @@ void main() {
     float shade = .94 + v_local.y*.08 + (noise-.5)*mix(.14,.26,dry);
     // A dark centre texel keeps sand grainy even in a compact pile.
     shade *= 1.0 - dry*.32*(1.0-step(.18, max(abs(v_local.x),abs(v_local.y))));
-    out_color = vec4(clamp(v_color*shade + v_light*.22,0.0,1.0)*.99, .99);
+    float alpha = .99*v_grain.z;
+    out_color = vec4(clamp(v_color*shade + v_light*.22,0.0,1.0)*alpha, alpha);
   }
 }`;
 const SURFACE_VERTEX = `#version 300 es
@@ -133,7 +135,7 @@ export class FluidSurfaceGPU {
     this.groups = [0, 1, 2].map(() => {
       const buffer = gl.createBuffer(), vao = gl.createVertexArray();
       gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      for (const [index, size, offset] of [[0, 3, 0], [1, 3, 3], [2, 3, 6], [3, 2, 9]]) {
+      for (const [index, size, offset] of [[0, 3, 0], [1, 3, 3], [2, 3, 6], [3, 3, 9]]) {
         gl.enableVertexAttribArray(index);
         gl.vertexAttribPointer(index, size, gl.FLOAT, false, STRIDE * 4, offset * 4);
         gl.vertexAttribDivisor(index, 1);
@@ -195,22 +197,28 @@ export class FluidSurfaceGPU {
     for (const group of this.groups) group.count = 0;
     this.stats.drawCalls = this.stats.uploadedBytes = this.stats.glowingParticles = 0;
     this.stats.particles = ps.count;
+    const appearance = { liquid: 0, gas: 0, solid: 0 };
     for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55 && rawSolids?.has(ps.materialId[i])) continue;
-      const phase = ps.phase[i], group = this.groups[phase === Phase.LIQUID ? 0 : phase === Phase.GAS ? 1 : 2];
-      const n = group.count++ * STRIDE, data = group.data;
+      phaseAppearance(ps, i, appearance);
       particleColor(ps, i, scratch);
       const physical = effectiveParticleRadius(ps, i, true) * scale;
-      const solid = phase === Phase.SOLID, dry = solid && isPowder(ps, i) && ps.powderContent[i] > .85;
-      data[n] = this.width / 2 + ps.x[i] * scale;
-      data[n + 1] = this.height / 2 + ps.y[i] * scale;
-      data[n + 2] = solid ? Math.max(1, Math.ceil(physical * 2)) / 2 :
-        Math.max(1.25, physical * (phase === Phase.GAS ? 3 : LIQUID_SURFACE.radius));
-      data[n + 3] = scratch.r / 255; data[n + 4] = scratch.g / 255; data[n + 5] = scratch.b / 255;
+      const dry = isPowder(ps, i) && ps.powderContent[i] > .85;
       const aura = auras[i], light = Math.max(0, Math.min(1, effectsScale)) * (aura?.intensity || 0);
-      if (light > .01) this.stats.glowingParticles++;
-      for (let k = 0; k < 3; k++) data[n + 6 + k] = light * (aura?.unquantized[k] || 0) / 255;
-      data[n + 9] = dry ? 3 : solid ? 2 : 0; data[n + 10] = i;
+      if (light > .0001) this.stats.glowingParticles++;
+      // A transitioning parcel contributes to both fields with complementary
+      // weights. No trails, duplicate mass or abrupt opaque steam discs.
+      for (let phase = 0; phase < 3; phase++) {
+        const weight = phase === 0 ? appearance.liquid : phase === 1 ? appearance.gas : appearance.solid;
+        if (weight <= 0) continue;
+        const group = this.groups[phase], n = group.count++ * STRIDE, data = group.data;
+        data[n] = this.width / 2 + ps.x[i] * scale;
+        data[n + 1] = this.height / 2 + ps.y[i] * scale;
+        data[n + 2] = phase === 2 ? Math.max(1, Math.ceil(physical * 2)) / 2 :
+          phase === 1 ? Math.max(1.25, physical * 3) : liquidSurfaceRadius(ps, i, scale);
+        data[n + 3] = scratch.r / 255; data[n + 4] = scratch.g / 255; data[n + 5] = scratch.b / 255;
+        for (let k = 0; k < 3; k++) data[n + 6 + k] = light * (aura?.unquantized[k] || 0) / 255;
+        data[n + 9] = dry ? 3 : phase === 2 ? 2 : 0; data[n + 10] = i; data[n + 11] = weight;
+      }
     }
     for (const group of this.groups) if (group.count) {
       gl.bindBuffer(gl.ARRAY_BUFFER, group.buffer);

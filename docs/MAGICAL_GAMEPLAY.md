@@ -33,8 +33,13 @@ values into the player’s ID.
   results remain valid. Its awakened channels
   reflect the same input shares (Strength 33%, Venom 66% for 1:2); unrelated
   magic becomes zero. A solitary ingredient awakens its strongest channel.
-  Each particle glows using the actual homogeneous mixture's eight magic
-  channels and its strength (including gas and powder). Base ingredient
+  Each particle emits light from its eight live local effect concentrations,
+  including gas and powder. Each effect contributes proportionally to additive
+  RGB emission. There is no weak-magic cutoff, constant brightness floor, or
+  recipe-wide colour switch: the glow converges as conservative local mixing
+  homogenizes the effects. Both rendering paths normalize overlapping liquid
+  emission so parcel count cannot brighten an otherwise identical brew.
+  Base ingredient
   enchantments are weak (max 12%) until a genuine threshold transition;
   older worlds migrate innate effects without overwriting in-progress brews.
   Heating or cooling may trigger awakening, but can never diminish the

@@ -2,11 +2,12 @@ import { Phase } from './Phase.mjs';
 import { clamp, hexToRgb } from './math.mjs';
 import { EFFECT_PROPERTIES } from '../materials/MaterialDefinition.mjs';
 
-const PARTICLE_ARRAYS=['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted','x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
+const PARTICLE_ARRAYS=['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted','x','y','z','px','py','pz','vx','vy','vz','temperature','density','baseDensity','mass','phaseProgress','phaseTarget','localGasDensity','age','r','g','b','opacity','viscosity','cohesion','miscibility','particleRadius','incompressible','heatCapacity','thermalConductivity','meltingTemperature','boilingTemperature','phaseHysteresis','volatility','reactionPotential','reactionHeat','compressibility','crystallinity','solidSubdivision','electricalConductivity','electricPotential','combustionTemperature','combustionProgress','mixtureGroup','mixtureProgress','mixtureAmount','powderContent','dissolutionProgress','solventMeltingTemperature','stirActivity','grainRest','solidLocalX','solidLocalY','solidLocalZ','savedDepth','savedVz','hasSavedDepth','materialId','phase','cell','solidBodyId',...EFFECT_PROPERTIES];
 
 export class ParticleSystem {
   // Ephemeral native solver geometry; recomputed after every volume change.
   nativeLiquidRadius = 0;
+  phaseTransitionStagger = 0;
   constructor(capacity=1800){
     this.capacity=capacity; this.count=0;this.packingScale=1;this.volumePacking=false;
     this.arcaneThreshold=new Float32Array(capacity);this.magicDecayTemperature=new Float32Array(capacity);this.arcaneCharge=new Float32Array(capacity);this.arcaneConverted=new Float32Array(capacity);
@@ -14,7 +15,7 @@ export class ParticleSystem {
     this.px=new Float32Array(capacity);this.py=new Float32Array(capacity);this.pz=new Float32Array(capacity);
     this.vx=new Float32Array(capacity);this.vy=new Float32Array(capacity);this.vz=new Float32Array(capacity);
     this.temperature=new Float32Array(capacity);this.density=new Float32Array(capacity);this.baseDensity=new Float32Array(capacity);this.mass=new Float32Array(capacity);
-    this.phaseProgress=new Float32Array(capacity);this.localGasDensity=new Float32Array(capacity);this.age=new Float32Array(capacity);
+    this.phaseTarget=new Int32Array(capacity).fill(-1);this.phaseProgress=new Float32Array(capacity);this.localGasDensity=new Float32Array(capacity);this.age=new Float32Array(capacity);
     this.r=new Float32Array(capacity);this.g=new Float32Array(capacity);this.b=new Float32Array(capacity);this.opacity=new Float32Array(capacity);
     this.viscosity=new Float32Array(capacity);this.cohesion=new Float32Array(capacity);this.miscibility=new Float32Array(capacity);this.particleRadius=new Float32Array(capacity);this.incompressible=new Float32Array(capacity);this.heatCapacity=new Float32Array(capacity);this.thermalConductivity=new Float32Array(capacity);
     this.meltingTemperature=new Float32Array(capacity);this.boilingTemperature=new Float32Array(capacity);this.phaseHysteresis=new Float32Array(capacity);this.volatility=new Float32Array(capacity);this.reactionPotential=new Float32Array(capacity);this.reactionHeat=new Float32Array(capacity);this.compressibility=new Float32Array(capacity);
@@ -29,7 +30,7 @@ export class ParticleSystem {
     if(this.count>=this.capacity)return -1; const i=this.count++;
     this.x[i]=this.px[i]=p.x; this.y[i]=this.py[i]=p.y; this.z[i]=this.pz[i]=p.z;
     this.vx[i]=p.vx||0; this.vy[i]=p.vy||0; this.vz[i]=p.vz||0; this.mass[i]=p.mass||1;
-    this.materialId[i]=material.id; this.temperature[i]=p.temperature??.33; this.phase[i]=phase; this.phaseProgress[i]=0;
+    this.materialId[i]=material.id; this.temperature[i]=p.temperature??.33; this.phase[i]=phase; this.phaseProgress[i]=0;this.phaseTarget[i]=-1;
     this.powderContent[i]=phase===Phase.SOLID&&material.solidSubdivision>=.55?1:0;this.dissolutionProgress[i]=0;this.solventMeltingTemperature[i]=material.meltingTemperature;this.stirActivity[i]=0;this.grainRest[i]=0;
     this.mixtureGroup[i]=0;this.mixtureProgress[i]=0;
     this.mixtureAmount[i]=this.mass[i]/Math.max(.04,material.density);
@@ -44,7 +45,7 @@ export class ParticleSystem {
   }
   assignMaterial(i,material,phase=this.phase[i],temperature=this.temperature[i]){
     if(i<0||i>=this.count)return false;
-    this.materialId[i]=material.id;this.temperature[i]=temperature;this.phase[i]=phase;this.phaseProgress[i]=0;this.combustionProgress[i]=0;
+    this.materialId[i]=material.id;this.temperature[i]=temperature;this.phase[i]=phase;this.phaseProgress[i]=0;this.phaseTarget[i]=-1;this.combustionProgress[i]=0;
     this.powderContent[i]=phase===Phase.SOLID&&material.solidSubdivision>=.55?1:0;this.dissolutionProgress[i]=0;this.solventMeltingTemperature[i]=material.meltingTemperature;this.stirActivity[i]=0;this.grainRest[i]=0;
     this.mixtureGroup[i]=0;this.mixtureProgress[i]=0;
     this.mixtureAmount[i]=this.mass[i]/Math.max(.04,material.density);
@@ -58,7 +59,7 @@ export class ParticleSystem {
   }
   effectiveDensity(material,phase){ if(phase===Phase.GAS)return Math.max(0.08,material.density*(0.18+0.16*(1-material.compressibility))); if(phase===Phase.SOLID)return material.density*1.08; return material.density; }
   effectiveDensityAt(i,phase=this.phase[i]){ const base=this.baseDensity[i]; if(phase===Phase.GAS)return Math.max(.08,base*(.18+.16*(1-this.compressibility[i]))); if(phase===Phase.SOLID)return base*1.08; return base; }
-  setPhase(i,phase){ this.phase[i]=phase;this.phaseProgress[i]=0;this.grainRest[i]=0;this.density[i]=this.effectiveDensityAt(i,phase); }
+  setPhase(i,phase){ this.phase[i]=phase;this.phaseProgress[i]=0;this.phaseTarget[i]=-1;this.grainRest[i]=0;this.density[i]=this.effectiveDensityAt(i,phase); }
   clampToBox(box,padding=0.09){ const hx=box.width/2-padding,hy=box.height/2-padding,hz=box.depth/2-padding; for(let i=0;i<this.count;i++){this.x[i]=clamp(this.x[i],-hx,hx);this.y[i]=clamp(this.y[i],-hy,hy);this.z[i]=clamp(this.z[i],-hz,hz);} }
   removeAt(index){
     if(index<0||index>=this.count)return false;

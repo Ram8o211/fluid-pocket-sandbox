@@ -32,6 +32,7 @@ try {
     const { BrewingSession } = await import('./src/game/brewing.mjs');
     const { generateWorld } = await import('./src/game/world.mjs');
     const { Phase } = await import('./src/simulation/Phase.mjs');
+    const { effectiveParticleRadius } = await import('./src/simulation/FluidSolver.mjs');
     const { sanitizeMaterial } = await import('./src/materials/MaterialDefinition.mjs');
     const { paintMaterialParticles } = await import('./src/game/MaterialRaster.mjs');
     const { particleMagicAuras } = await import('./src/game/magicLight.mjs');
@@ -48,8 +49,8 @@ try {
       gl.readPixels(0, 0, gpu.width, gpu.height, gl.RGBA, gl.UNSIGNED_BYTE, data);
       return data;
     };
-    const pixel = (data, x, y) => {
-      const n = (Math.floor(gpu.height / 2 + y * 40) * gpu.width + Math.floor(gpu.width / 2 + x * 40)) * 4;
+    const pixel = (data, x, y, scale = 40) => {
+      const n = (Math.floor(gpu.height / 2 + y * scale) * gpu.width + Math.floor(gpu.width / 2 + x * scale)) * 4;
       return Array.from(data.subarray(n, n + 4));
     };
     const ps = new ParticleSystem(128); ps.packingScale = .6; ps.volumePacking = true;
@@ -63,7 +64,7 @@ try {
     for (let y = -7; y <= 7; y++) for (let x = -7; x <= 7; x++)
       check(pixel(pool, x / 40, y / 40)[3] === 255, 'GPU liquid has an interior pinhole');
     check(gpu.stats.drawCalls === 2, 'a liquid pool should take only two draw calls');
-    check(gpu.stats.uploadedBytes === ps.count * 44, 'upload only active instance records');
+    check(gpu.stats.uploadedBytes === ps.count * 48, 'upload only active instance records');
     check(before.every((v, i) => v === ps.r[i]), 'surface reconstruction must not alter diffusion');
     ps.count = 0;
     ps.add({ x: -.5, y: 0, z: 0, mass: .5 }, material, Phase.LIQUID);
@@ -73,6 +74,53 @@ try {
     check(pixel(separate, 0, 0)[3] === 0, 'remote droplets must remain disconnected');
     const blue = pixel(separate, -.5, 0), red = pixel(separate, .5, 0);
     check(blue[2] > blue[0] * 2 && red[0] > red[2] * 2, 'unmixed droplets must retain their own colour');
+    // Use the real native particle/body gap, including half-drained parcels
+    // and eco resolution. Raw art cannot remove the underlying solid surface.
+    for (const resolution of [20, 40]) for (const amount of [.25, .5]) for (const subdivision of [.1, 1]) {
+      ps.count = 0; ps.nativeLiquidRadius = .039 * Math.sqrt(amount / .25);
+      ps.add({ x: 0, y: 0, z: 0, mass: amount }, material, Phase.SOLID);
+      ps.solidSubdivision[0] = subdivision;
+      const separation = effectiveParticleRadius(ps, 0, true) + ps.nativeLiquidRadius * 2;
+      ps.add({ x: separation, y: 0, z: 0, mass: amount }, material, Phase.LIQUID);
+      gpu.render(ps, t, color, scratch, [], 0, resolution, new Map([[1, material]]));
+      const touching = pixels();
+      for (let x = 0; x <= separation; x += 1 / resolution)
+        check(pixel(touching, x, 0, resolution)[3] >= 220, 'GPU liquid/solid contact has a visible empty seam');
+    }
+    // Every phase fades continuously through the exact discrete handoff.
+    ps.count = 0; ps.nativeLiquidRadius = 0;
+    ps.add({ x: 0, y: 0, z: 0, mass: .5 }, material, Phase.LIQUID);
+    for (const [from, to, temperature] of [[Phase.LIQUID, Phase.GAS, 1], [Phase.GAS, Phase.LIQUID, .5],
+      [Phase.LIQUID, Phase.SOLID, .05], [Phase.SOLID, Phase.LIQUID, .5]]) {
+      ps.setPhase(0, from); ps.temperature[0] = temperature;
+      ps.meltingTemperature[0] = .2; ps.boilingTemperature[0] = .7; ps.phaseHysteresis[0] = .01;
+      ps.phaseTarget[0] = to;
+      let previous, final;
+      for (let frame = 0; frame <= 40; frame++) {
+        ps.phaseProgress[0] = frame / 40;
+        gpu.render(ps, t, color, scratch, [], 0);
+        const current = pixels();
+        if (previous) {
+          let opacityDelta = 0;
+          for (let n = 3; n < current.length; n += 4) opacityDelta += Math.abs(current[n] - previous[n]);
+          check(opacityDelta < 2200, 'phase appearance changed abruptly between adjacent frames');
+        }
+        previous = current; final = current;
+      }
+      ps.setPhase(0, to); gpu.render(ps, t, color, scratch, [], 0);
+      const handoff = pixels();
+      check(handoff.every((v, n) => Math.abs(v - final[n]) <= 1), 'phase handoff left an opacity or texture pop');
+    }
+    // Reconstruct light from actual concentrations, with no weak-magic cutoff.
+    ps.setPhase(0, Phase.LIQUID); ps.temperature[0] = .5;
+    gpu.render(ps, t, color, scratch, [], 0); const unlit = pixel(pixels(), 0, 0);
+    ps.poison[0] = .1; gpu.render(ps, t, color, scratch, particleMagicAuras(ps)); const weak = pixel(pixels(), 0, 0);
+    ps.poison[0] = .2; gpu.render(ps, t, color, scratch, particleMagicAuras(ps)); const strong = pixel(pixels(), 0, 0);
+    for (let k = 0; k < 3; k++) check(Math.abs((strong[k] - unlit[k]) - 2 * (weak[k] - unlit[k])) <= 2,
+      'GPU glow must scale with actual power');
+    ps.count = 0;
+    ps.add({ x: -.5, y: 0, z: 0, mass: .5 }, material, Phase.GAS);
+    ps.add({ x: .5, y: 0, z: 0, mass: .5 }, material, Phase.SOLID);
     ps.phase[0] = Phase.GAS; ps.phase[1] = Phase.SOLID; ps.solidSubdivision[1] = 1; ps.powderContent[1] = 1;
     ps.poison.fill(.7, 0, ps.count);
     gpu.render(ps, t, color, scratch, particleMagicAuras(ps), 1);
@@ -143,12 +191,19 @@ try {
       for (let tick = 0; tick < 200; tick++) brew.engine.step(.025);
       renderer.render();
       answer.image = canvas.toDataURL('image/png');
+      brew.clean(); brew.pour(1, 90, { 1: 100 });
+      for (let tick = 0; tick < 220; tick++) brew.step();
+      brew.pour(4, 12, { 4: 20 }); brew.pour(3, 10, { 3: 20 }, { crushed: true });
+      for (let tick = 0; tick < 240; tick++) brew.step();
+      renderer.render(); answer.contactImage = canvas.toDataURL('image/png');
       return answer;
     } finally { renderer?.dispose(); brew.dispose(); gpu.dispose(); }
   });
   await mkdir('test-results', { recursive: true });
   await writeFile('test-results/fluid-gpu.png', Buffer.from(result.image.split(',')[1], 'base64'));
+  await writeFile('test-results/fluid-contact.png', Buffer.from(result.contactImage.split(',')[1], 'base64'));
   delete result.image;
+  delete result.contactImage;
   await writeFile('test-results/fluid-gpu-metrics.json', JSON.stringify(result, null, 2));
   assert.deepEqual(errors, [], 'no browser exceptions');
   console.log('GPU liquid continuity, local colours, steam, grain texture, per-parcel magic, DPR budget, context recovery and fallback OK', JSON.stringify(result));

@@ -1,14 +1,28 @@
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { isPowder } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
+import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
 
 // Each ImageData owns reusable density/colour scratch. Resizing replaces the
 // pixel buffer, allowing the old scratch to be collected with it.
 const liquidRasters = new WeakMap();
 // Shared by the canvas fallback and GPU surface reconstruction.
 export const LIQUID_SURFACE = Object.freeze({ radius: 2.1, cutoff: .25, edge: .25 });
+const OPAQUE_CONTOUR = Math.sqrt(1 - Math.sqrt(LIQUID_SURFACE.cutoff + LIQUID_SURFACE.edge));
+
+/** LiquidFun contacts a fixture one liquid diameter from its surface. The
+ * opaque contour of the squared kernel must reach that same contact, rather
+ * than ending at the smaller ingredient/grain radius. Shared by both paths. */
+export function liquidSurfaceRadius(ps, i, scale) {
+  // Retain the incoming droplet footprint when the last liquid parcel has
+  // evaporated; the first recondensing parcel must not resize the whole field.
+  const native = ps.nativeLiquidRadius || (ps.volumePacking ? .039 * Math.sqrt(Math.max(.0001, ps.mixtureAmount[i]) / .25) : 0);
+  return Math.max(1.25, effectiveParticleRadius(ps, i, true) * scale * LIQUID_SURFACE.radius,
+    native > 0 ? (native * 2 * scale + .5) / OPAQUE_CONTOUR : 0);
+}
 
 function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
+  const appearance = { liquid: 0, solid: 0, gas: 0 };
   let raster = liquidRasters.get(pixels);
   if (raster) {
     // Clear only last frame's occupied texels, including droplets that moved
@@ -20,7 +34,8 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
     raster.count = 0;
   }
   for (let i = 0; i < ps.count; i++) {
-    if (ps.phase[i] !== Phase.LIQUID) continue;
+    phaseAppearance(ps, i, appearance);
+    if (appearance.liquid <= 0) continue;
     if (!raster) {
       raster = { field: new Float32Array(pixels.length), touched: new Uint32Array(t.w * t.h), count: 0 };
       liquidRasters.set(pixels, raster);
@@ -30,7 +45,7 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
     // Distant splashes stay separate; physical radius, mass and mixing never
     // change. Subpixel centres avoid a square footprint jumping each frame.
     const x = t.cx + ps.x[i] * t.scale, y = t.cy - ps.y[i] * t.scale;
-    const radius = Math.max(1.25, effectiveParticleRadius(ps, i, true) * t.scale * LIQUID_SURFACE.radius);
+    const radius = liquidSurfaceRadius(ps, i, t.scale);
     const inverseRadius2 = 1 / (radius * radius);
     const top = Math.max(0, Math.ceil(y - radius - .5)), bottom = Math.min(t.h - 1, Math.floor(y + radius - .5));
     const left = Math.max(0, Math.ceil(x - radius - .5)), right = Math.min(t.w - 1, Math.floor(x + radius - .5));
@@ -40,7 +55,7 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
       for (let px = left; px <= right; px++) {
         const dx = px + .5 - x, falloff = 1 - (dx * dx + rowDistance2) * inverseRadius2;
         if (falloff <= 0) continue;
-        const weight = falloff * falloff, texel = row + px, index = texel * 4;
+        const weight = falloff * falloff * appearance.liquid, texel = row + px, index = texel * 4;
         if (field[index] === 0) touched[raster.count++] = texel;
         field[index] += weight;
         field[index + 1] += colorScratch.r * weight;
@@ -74,17 +89,18 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
 export function paintMaterialParticles(ps, t, pixels, particleColor, colorScratch, rawSolids = null) {
   pixels.fill(0);
   paintLiquidSurface(ps, t, pixels, particleColor, colorScratch);
+  const appearance = { liquid: 0, solid: 0, gas: 0 };
   for (let i = 0; i < ps.count; i++) {
-    // Grains, coherent solids and translucent vapour retain their own texture
-    // and sit over the reconstructed liquid, never entering its density field.
-    if (ps.phase[i] === Phase.LIQUID) continue;
-    if (ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55 && rawSolids?.has(ps.materialId[i])) continue;
+    // Solid substrate remains under the ingredient artwork, including its
+    // transparent edge texels. Grains and vapour retain their own texture.
+    phaseAppearance(ps, i, appearance);
+    if (appearance.solid + appearance.gas <= 0) continue;
     particleColor(ps, i, colorScratch);
     const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
     const phase = ps.phase[i], dry = isPowder(ps, i) && ps.powderContent[i] > .85;
     const diameter = Math.max(1, Math.ceil(effectiveParticleRadius(ps, i, true) * t.scale * 2));
     const variation = dry ? .13 : phase === Phase.SOLID ? .07 : .04;
-    const alpha = phase === Phase.GAS ? .24 : .99;
+    const alpha = .24 * appearance.gas + .99 * appearance.solid;
     const originY = y - Math.floor(diameter / 2), originX = x - Math.floor(diameter / 2);
     const top = Math.max(0, originY), bottom = Math.min(t.h, originY + diameter);
     const left = Math.max(0, originX), right = Math.min(t.w, originX + diameter);

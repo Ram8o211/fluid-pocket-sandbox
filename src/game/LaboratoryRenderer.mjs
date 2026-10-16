@@ -1,4 +1,5 @@
 import { PlanarRenderer } from '../rendering/PlanarRenderer.mjs';
+import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { workshopBackground, magicGlowSprite, solidIngredientCanvas } from './art.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
@@ -133,6 +134,19 @@ export class LaboratoryRenderer extends PlanarRenderer {
     }
     ctx.restore(); ctx.restore(); this.frame++;
   }
+  particleColor(ps, i, out = this.colorScratch) {
+    if (this.debugMode !== 'none') return super.particleColor(ps, i, out);
+    const appearance = this.phaseColor || (this.phaseColor = { liquid: 0, solid: 0, gas: 0 });
+    phaseAppearance(ps, i, appearance);
+    const cry = ps.crystallinity[i], sub = ps.solidSubdivision[i];
+    const grain = .72 + .28 * Math.abs(Math.sin((i + 1) * 8.431));
+    const shade = (.8 + .3 * cry) * (1 - sub * .3 * (1 - grain));
+    const weight = appearance.solid, r = ps.r[i], g = ps.g[i], b = ps.b[i];
+    out.r = Math.round((r + (Math.max(0, Math.min(1, r * shade + cry * .1)) - r) * weight) * 255);
+    out.g = Math.round((g + (Math.max(0, Math.min(1, g * shade + cry * .13)) - g) * weight) * 255);
+    out.b = Math.round((b + (Math.max(0, Math.min(1, b * shade + cry * .18)) - b) * weight) * 255);
+    return out;
+  }
   getGlowSprite(colour) {
     if (!this.glowSprites) this.glowSprites = new Map();
     let sprite = this.glowSprites.get(colour);
@@ -158,10 +172,10 @@ export class LaboratoryRenderer extends PlanarRenderer {
       const warm = Math.max(0, Math.min(1, (ps.temperature[i] - .28) * 2));
       const mixed = ps.mixtureProgress[i] || 0;
       const activity = Math.min(1, stirring * .65 + warm * .45 + mixed * .3);
-      const pulse = .94 + .06 * Math.sin(this.sim.time * (2 + activity * 3) + i * .7);
+      const pulse = .97 + .03 * Math.sin(this.sim.time * 2);
       const radius = Math.max(t.scale / 40 * 4, effectiveParticleRadius(ps, i, true) * t.scale * 2.5) *
-        (1 + aura.intensity * .45 + activity * .15);
-      ctx.globalAlpha = Math.min(1, (.15 + aura.intensity * .7) * (1 + activity * .18) * pulse * effectsScale);
+        (1 + activity * .15);
+      ctx.globalAlpha = Math.min(1, (aura.intensity * .7) * (1 + activity * .18) * pulse * effectsScale);
       ctx.drawImage(this.getGlowSprite(aura.color), x - radius, y - radius, radius * 2, radius * 2);
       const mark = this.magicCount++;
       this.magicX[mark] = x; this.magicY[mark] = y; this.magicColor[mark] = aura.color;
@@ -177,7 +191,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
     const texel = Math.max(1, Math.round(t.scale / 40)), effectsScale = Math.max(0, Math.min(1, this.graphics?.effectsScale ?? 1));
     for (let i = 0; effectsScale > .01 && i < this.magicCount; i += this.quality === 'eco' ? 3 : 2) {
       const pulse = .75 + .25 * Math.sin(this.sim.time * 3 + i * 2.3);
-      ctx.globalAlpha = (.12 + this.magicIntensity[i] * .25) * pulse * effectsScale;
+      ctx.globalAlpha = (this.magicIntensity[i] * .25) * pulse * effectsScale;
       ctx.fillStyle = this.magicColor[i];
       ctx.fillRect(this.magicX[i], this.magicY[i] - texel, texel, texel);
     }
@@ -229,12 +243,13 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.globalAlpha = 1; ctx.drawImage(this.matterLayer, 0, 0);
   }
   drawIntactIngredients(ctx, t) {
-    const ps = this.sim.ps, groups = new Map();
+    const ps = this.sim.ps, groups = new Map(), appearance = { liquid: 0, solid: 0, gas: 0 };
     for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .55 || !this.rawSolids.has(ps.materialId[i])) continue;
+      if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .55 || ps.powderContent[i] > .001 || ps.mixtureProgress[i] > .001 || !this.rawSolids.has(ps.materialId[i])) continue;
       const key = `${ps.materialId[i]}:${ps.solidBodyId[i] || -i - 1}`;
-      if (!groups.has(key)) groups.set(key, { ingredient: this.rawSolids.get(ps.materialId[i]), minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+      if (!groups.has(key)) groups.set(key, { ingredient: this.rawSolids.get(ps.materialId[i]), minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, weight: 0, count: 0 });
       const group = groups.get(key), radius = effectiveParticleRadius(ps, i, true);
+      phaseAppearance(ps, i, appearance); group.weight += appearance.solid; group.count++;
       group.minX = Math.min(group.minX, ps.x[i] - radius); group.maxX = Math.max(group.maxX, ps.x[i] + radius);
       group.minY = Math.min(group.minY, ps.y[i] - radius); group.maxY = Math.max(group.maxY, ps.y[i] + radius);
     }
@@ -243,8 +258,10 @@ export class LaboratoryRenderer extends PlanarRenderer {
       const x = Math.round(t.cx + group.minX * t.scale), y = Math.round(t.cy - group.maxY * t.scale);
       const width = Math.max(1, Math.round((group.maxX - group.minX) * t.scale));
       const height = Math.max(1, Math.round((group.maxY - group.minY) * t.scale));
+      ctx.globalAlpha = group.weight / group.count;
       ctx.drawImage(solidIngredientCanvas(group.ingredient), x, y, width, height);
     }
+    ctx.globalAlpha = 1;
     this.intactIngredientCount = groups.size;
   }
   dispose() {

@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-rabbit-animation-46';
+const CACHE = 'alchemist-shop-rabbit-animation-47';
 const CORE = [
   './',
   './index.html',
