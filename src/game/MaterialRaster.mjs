@@ -16,7 +16,7 @@ const OPAQUE_CONTOUR = Math.sqrt(1 - Math.sqrt(LIQUID_SURFACE.cutoff + LIQUID_SU
 export function liquidSurfaceRadius(ps, i, scale) {
   // Retain the incoming droplet footprint when the last liquid parcel has
   // evaporated; the first recondensing parcel must not resize the whole field.
-  const native = ps.nativeLiquidRadius || (ps.volumePacking ? .039 * Math.sqrt(Math.max(.0001, ps.mixtureAmount[i]) / .25) : 0);
+  const native = ps.frozenRadius?.[i] || ps.nativeLiquidRadius || (ps.volumePacking ? .039 * Math.sqrt(Math.max(.0001, ps.mixtureAmount[i]) / .25) : 0);
   return Math.max(1.25, effectiveParticleRadius(ps, i, true) * scale * LIQUID_SURFACE.radius,
     native > 0 ? (native * 2 * scale + .5) / OPAQUE_CONTOUR : 0);
 }
@@ -35,7 +35,13 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
   }
   for (let i = 0; i < ps.count; i++) {
     phaseAppearance(ps, i, appearance);
-    if (appearance.liquid <= 0) continue;
+    // A crystallized pool keeps one smooth silhouette, never a cloud of
+    // independent ice dots. A pending freeze uses the same surface throughout
+    // its optical blend, before its rigid-body physics handoff.
+    const cohesiveFrozen = ps.frozenRadius?.[i] > 0;
+    const freezingLiquid = ps.phase[i] === Phase.LIQUID && ps.phaseTarget[i] === Phase.SOLID;
+    const continuousWeight = appearance.liquid + ((cohesiveFrozen || freezingLiquid) ? appearance.solid : 0);
+    if (continuousWeight <= 0) continue;
     if (!raster) {
       raster = { field: new Float32Array(pixels.length), touched: new Uint32Array(t.w * t.h), count: 0 };
       liquidRasters.set(pixels, raster);
@@ -55,7 +61,7 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
       for (let px = left; px <= right; px++) {
         const dx = px + .5 - x, falloff = 1 - (dx * dx + rowDistance2) * inverseRadius2;
         if (falloff <= 0) continue;
-        const weight = falloff * falloff * appearance.liquid, texel = row + px, index = texel * 4;
+        const weight = falloff * falloff * continuousWeight, texel = row + px, index = texel * 4;
         if (field[index] === 0) touched[raster.count++] = texel;
         field[index] += weight;
         field[index + 1] += colorScratch.r * weight;
@@ -94,13 +100,14 @@ export function paintMaterialParticles(ps, t, pixels, particleColor, colorScratc
     // Solid substrate remains under the ingredient artwork, including its
     // transparent edge texels. Grains and vapour retain their own texture.
     phaseAppearance(ps, i, appearance);
-    if (appearance.solid + appearance.gas <= 0) continue;
+    const grainWeight = ps.frozenRadius?.[i] > 0 ? 0 : appearance.solid;
+    if (grainWeight + appearance.gas <= 0) continue;
     particleColor(ps, i, colorScratch);
     const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
     const phase = ps.phase[i], dry = isPowder(ps, i) && ps.powderContent[i] > .85;
     const diameter = Math.max(1, Math.ceil(effectiveParticleRadius(ps, i, true) * t.scale * 2));
     const variation = dry ? .13 : phase === Phase.SOLID ? .07 : .04;
-    const alpha = .24 * appearance.gas + .99 * appearance.solid;
+    const alpha = .24 * appearance.gas + .99 * grainWeight;
     const originY = y - Math.floor(diameter / 2), originX = x - Math.floor(diameter / 2);
     const top = Math.max(0, originY), bottom = Math.min(t.h, originY + diameter);
     const left = Math.max(0, originX), right = Math.min(t.w, originX + diameter);
