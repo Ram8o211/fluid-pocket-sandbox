@@ -39,7 +39,7 @@ export function updateThermal(ps,grid,rules,env,dt){
     const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i];if(dx*dx+dy*dy+dz*dz>r2)return;
     // Slow only the near-freezing liquid/ice interface. Ordinary cooling and
     // vapour condensation retain their rates and existing arcane timing.
-    const nearFreezing=phase[i]!==Phase.GAS&&phase[j]!==Phase.GAS&&Math.max(temp[i],temp[j])<Math.max(ps.meltingTemperature[i],ps.meltingTemperature[j])+.025;
+    const nearFreezing=(rules.freezingDiffusionScale??1)<1&&phase[i]!==Phase.GAS&&phase[j]!==Phase.GAS&&Math.max(temp[i],temp[j])<Math.max(ps.meltingTemperature?.[i]??0,ps.meltingTemperature?.[j]??0)+.025;
     const rate=diffusion*(nearFreezing?Math.max(0,rules.freezingDiffusionScale??1):1);
     const f=thermalConductionFraction(conductivity[i],conductivity[j],rate,dt);
     if(f<=0)return;
