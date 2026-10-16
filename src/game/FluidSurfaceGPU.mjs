@@ -2,7 +2,7 @@ import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { isPowder } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
-import { LIQUID_SURFACE, liquidSurfaceRadius } from './MaterialRaster.mjs';
+import { LIQUID_SURFACE, liquidSurfaceRadius, vapourSurfaceRadius, frozenSurfaceWeight, frostSurfaceColor } from './MaterialRaster.mjs';
 
 const STRIDE = 12;
 const PARTICLE_VERTEX = `#version 300 es
@@ -36,7 +36,9 @@ void main() {
   if (d >= 1.0) discard;
   if (u_grains == 0) {
     float weight = (1.0-d)*(1.0-d)*v_grain.z;
-    out_color = vec4((v_color + v_light*.22)*weight, weight);
+    float facet = mod(floor(v_local.x*8.0)*3.0+floor(v_local.y*8.0)*5.0+v_grain.y,13.0);
+    float iceShade = facet < 2.0 ? 1.08 : facet == 6.0 ? .94 : 1.0;
+    out_color = vec4((v_color*(1.0+(iceShade-1.0)*v_grain.x) + v_light*.22)*weight, weight);
   } else {
     float dry = step(2.5, v_grain.x);
     float noise = fract(sin(dot(floor(v_local*3.0),vec2(23.0,41.0)) + v_grain.y)*67.0);
@@ -67,7 +69,7 @@ void main() {
   float alpha;
   if (u_vapour == 1) {
     // Optical depth joins overlapping steam parcels without an opaque gas skin.
-    alpha = min(.72, 1.0-exp(-density*.23));
+    alpha = min(.76, 1.0-exp(-density*.28));
   } else {
     alpha = clamp((density-${LIQUID_SURFACE.cutoff})/${LIQUID_SURFACE.edge},0.0,1.0);
     float above = texture(u_field, uv+vec2(0,1.0/u_size.y)).a;
@@ -200,7 +202,6 @@ export class FluidSurfaceGPU {
     const appearance = { liquid: 0, gas: 0, solid: 0 };
     for (let i = 0; i < ps.count; i++) {
       phaseAppearance(ps, i, appearance);
-      particleColor(ps, i, scratch);
       const physical = effectiveParticleRadius(ps, i, true) * scale;
       const dry = isPowder(ps, i) && ps.powderContent[i] > .85;
       const aura = auras[i], light = Math.max(0, Math.min(1, effectsScale)) * (aura?.intensity || 0);
@@ -211,6 +212,7 @@ export class FluidSurfaceGPU {
       // WebGL as on canvas; only powders and intact ingredients keep grit.
       const cohesiveFrozen = ps.frozenRadius?.[i] > 0 ||
         (ps.phase[i] === Phase.LIQUID && ps.phaseTarget[i] === Phase.SOLID);
+      const ice = frozenSurfaceWeight(ps, i, appearance);
       for (let phase = 0; phase < 3; phase++) {
         const weight = phase === 0 ? appearance.liquid + (cohesiveFrozen ? appearance.solid : 0) :
           phase === 1 ? appearance.gas : (cohesiveFrozen ? 0 : appearance.solid);
@@ -219,10 +221,12 @@ export class FluidSurfaceGPU {
         data[n] = this.width / 2 + ps.x[i] * scale;
         data[n + 1] = this.height / 2 + ps.y[i] * scale;
         data[n + 2] = phase === 2 ? Math.max(1, Math.ceil(physical * 2)) / 2 :
-          phase === 1 ? Math.max(1.25, physical * 3) : liquidSurfaceRadius(ps, i, scale);
+          phase === 1 ? vapourSurfaceRadius(ps, i, scale) : liquidSurfaceRadius(ps, i, scale);
+        particleColor(ps, i, scratch);
+        if (phase === 0) frostSurfaceColor(scratch, ice);
         data[n + 3] = scratch.r / 255; data[n + 4] = scratch.g / 255; data[n + 5] = scratch.b / 255;
         for (let k = 0; k < 3; k++) data[n + 6 + k] = light * (aura?.unquantized[k] || 0) / 255;
-        data[n + 9] = dry ? 3 : phase === 2 ? 2 : 0; data[n + 10] = i; data[n + 11] = weight;
+        data[n + 9] = phase === 0 ? ice : phase === 2 ? (dry ? 3 : 2) : 0; data[n + 10] = i; data[n + 11] = weight;
       }
     }
     for (const group of this.groups) if (group.count) {

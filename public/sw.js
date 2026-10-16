@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-rabbit-animation-48';
+const CACHE = 'alchemist-shop-rabbit-animation-49';
 const CORE = [
   './',
   './index.html',
@@ -7,6 +7,8 @@ const CORE = [
   './public/toon.css',
   './public/hud.css',
   './public/rabbit-trials.css',
+  './src/game/PourStream.mjs',
+  './src/game/IngredientPieces.mjs',
   './src/game/RabbitAssets.mjs',
   './src/game/RabbitAppearance.mjs',
   './src/game/RabbitArtGeometry.mjs',

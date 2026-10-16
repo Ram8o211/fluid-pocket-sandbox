@@ -1,5 +1,6 @@
 import { clamp } from '../simulation/math.mjs';
 import { ROOM_TEMPERATURE } from './contracts.mjs';
+import { Phase } from '../simulation/Phase.mjs';
 import { cauldronBottomContact, cauldronParticlePadding } from './cauldron.mjs';
 
 const FLOOR_CAPACITY = .75, LID_CAPACITY = .45;
@@ -27,10 +28,13 @@ export class CauldronThermal {
     this.floor -= copperEnergy / FLOOR_CAPACITY;
     this.lid += copperEnergy / LID_CAPACITY;
     this.exchangeWall(ps, 'floor', FLOOR_CAPACITY, dt);
-    const lidEnergy = this.exchangeWall(ps, 'lid', LID_CAPACITY, dt);
+    // Active Frost enters through the lower bowl. A chilled copper lid must
+    // not start a second freezing front at the top of the liquid. Passive lid
+    // condensation and heat exchange resume normally when Frost is off.
+    const lidEnergy = this.exchangeWall(ps, 'lid', LID_CAPACITY, dt, power >= 0);
     return { supplied, lidCooling: Math.max(0, lidEnergy) };
   }
-  exchangeWall(ps, wall, capacity, dt) {
+  exchangeWall(ps, wall, capacity, dt, allowCooling = true) {
     if (this.exchange.length < ps.capacity) this.exchange = new Float64Array(ps.capacity);
     const temperature = this[wall];
     let contactCapacity = 0, energy = 0;
@@ -39,7 +43,7 @@ export class CauldronThermal {
       const contact = wall === 'floor' ? cauldronBottomContact(ps, i) : clamp(1 - gap / .12, 0, 1);
       const c = Math.max(.00001, ps.mass[i] * ps.heatCapacity[i]);
       const fraction = 1 - Math.exp(-contact * Math.max(0, ps.thermalConductivity[i]) * 32 * dt);
-      this.exchange[i] = (temperature - ps.temperature[i]) * c * fraction;
+      this.exchange[i] = (allowCooling || ps.phase[i] === Phase.GAS ? temperature - ps.temperature[i] : Math.max(0, temperature - ps.temperature[i])) * c * fraction;
       contactCapacity += c * fraction;
     }
     // Shared finite wall energy cannot be spent independently for every parcel.

@@ -31,7 +31,7 @@ try {
   for (const viewport of [{ width: 320, height: 568 }, { width: 360, height: 640 }, { width: 393, height: 852 }, { width: 430, height: 932 }, { width: 1280, height: 950 }]) {
     await page.setViewportSize(viewport);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no horizontal page overflow');
-    for (const id of ['heatBtn', 'coolBtn', 'stirBtn', 'crushBtn', 'cleanBtn', 'pourBtn', 'bottleBtn', 'natureBtn']) {
+    for (const id of ['heatBtn', 'coolBtn', 'pourToolBtn', 'stirBtn', 'crushBtn', 'cleanBtn', 'pourBtn', 'bottleBtn', 'natureBtn']) {
       const box = await page.locator(`#${id}`).boundingBox();
       assert.ok(box.height >= 44 && box.y >= 0 && box.y + box.height <= viewport.height + 1,
         `${id} stays reachable at ${viewport.width}×${viewport.height}: ${JSON.stringify(box)}`);

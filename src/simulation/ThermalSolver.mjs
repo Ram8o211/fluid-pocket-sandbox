@@ -37,7 +37,11 @@ export function updateThermal(ps,grid,rules,env,dt){
   // heat is available on the next thermal tick, independent of grid ordering.
   grid.forEachPair(ps,radius,(i,j)=>{
     const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i];if(dx*dx+dy*dy+dz*dz>r2)return;
-    const f=thermalConductionFraction(conductivity[i],conductivity[j],diffusion,dt);
+    // Slow only the near-freezing liquid/ice interface. Ordinary cooling and
+    // vapour condensation retain their rates and existing arcane timing.
+    const nearFreezing=(rules.freezingDiffusionScale??1)<1&&phase[i]!==Phase.GAS&&phase[j]!==Phase.GAS&&Math.max(temp[i],temp[j])<Math.max(ps.meltingTemperature?.[i]??0,ps.meltingTemperature?.[j]??0)+.025;
+    const rate=diffusion*(nearFreezing?Math.max(0,rules.freezingDiffusionScale??1):1);
+    const f=thermalConductionFraction(conductivity[i],conductivity[j],rate,dt);
     if(f<=0)return;
     const ca=capacity[i],cb=capacity[j];
     weight[i]+=f*cb/(ca+cb);weight[j]+=f*ca/(ca+cb);

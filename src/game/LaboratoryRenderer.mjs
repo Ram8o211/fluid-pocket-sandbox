@@ -6,6 +6,7 @@ import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
 import { mixedMagicGlow, particleMagicAuras, paintParticleMagicLights } from './magicLight.mjs';
 import { paintMaterialParticles } from './MaterialRaster.mjs';
+import { intactIngredientPieces } from './IngredientPieces.mjs';
 import { FluidSurfaceGPU } from './FluidSurfaceGPU.mjs';
 
 const MAGIC_GLOW_LIMIT = 160;
@@ -113,9 +114,12 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.restore();
     if (this.brew.lastPour && this.sim.time < this.brew.lastPour.until) {
       const x = 192 + this.brew.lastPour.x * 40;
+      const nozzleY = this.brew.lastPour.continuous ? 158 - this.brew.lastPour.y * 40 - 17 : 76;
+      ctx.save(); ctx.translate(0, nozzleY - 76);
       rect(x - 8, 76, 16, 13, '#c1cfc2'); rect(x - 5, 79, 10, 9, this.brew.lastPour.color);
       if (this.brew.lastPour.form !== 'liquid' && this.brew.lastPour.form !== 'water' && this.brew.lastPour.form) { for (let n=0;n<5;n++) rect(x - 3 + (n%3)*2, 90 + (n*5+this.frame)%14, 2, 2, this.brew.lastPour.color); }
-      else rect(x - 3, 90, 6, 14, this.brew.lastPour.color);
+      else rect(x - 2, 90, 4, 14, this.brew.lastPour.color);
+      ctx.restore();
     }
     if (this.spoon) {
       const x = 192 + this.spoon.x * 40, y = 158 - this.spoon.y * 40;
@@ -243,27 +247,34 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.globalAlpha = 1; ctx.drawImage(this.matterLayer, 0, 0);
   }
   drawIntactIngredients(ctx, t) {
-    const ps = this.sim.ps, groups = new Map(), appearance = { liquid: 0, solid: 0, gas: 0 };
-    for (let i = 0; i < ps.count; i++) {
-      if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .55 || ps.powderContent[i] > .001 || ps.mixtureProgress[i] > .001 || !this.rawSolids.has(ps.materialId[i])) continue;
-      const key = `${ps.materialId[i]}:${ps.solidBodyId[i] || -i - 1}`;
-      if (!groups.has(key)) groups.set(key, { ingredient: this.rawSolids.get(ps.materialId[i]), minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, weight: 0, count: 0 });
-      const group = groups.get(key), radius = effectiveParticleRadius(ps, i, true);
-      phaseAppearance(ps, i, appearance); group.weight += appearance.solid; group.count++;
-      group.minX = Math.min(group.minX, ps.x[i] - radius); group.maxX = Math.max(group.maxX, ps.x[i] + radius);
-      group.minY = Math.min(group.minY, ps.y[i] - radius); group.maxY = Math.max(group.maxY, ps.y[i] + radius);
-    }
+    const ps = this.sim.ps, pieces = intactIngredientPieces(ps, this.rawSolids);
+    const appearance = { liquid: 0, solid: 0, gas: 0 };
     ctx.imageSmoothingEnabled = false;
-    for (const group of groups.values()) {
-      const x = Math.round(t.cx + group.minX * t.scale), y = Math.round(t.cy - group.maxY * t.scale);
-      const width = Math.max(1, Math.round((group.maxX - group.minX) * t.scale));
-      const height = Math.max(1, Math.round((group.maxY - group.minY) * t.scale));
-      ctx.globalAlpha = group.weight / group.count;
-      ctx.drawImage(solidIngredientCanvas(group.ingredient), x, y, width, height);
+    for (const piece of pieces.values()) {
+      const size = piece.size * t.scale;
+      const x = t.cx + piece.x * t.scale - size / 2;
+      const y = t.cy - piece.y * t.scale - size / 2;
+      // Stamp only each surviving physical region from the original fixed
+      // sprite. A crushed/melted region exposes its powder/substrate in place;
+      // the untouched half keeps exactly the same texture coordinates.
+      const image = solidIngredientCanvas(piece.ingredient);
+      for (const i of piece.indices) {
+        phaseAppearance(ps, i, appearance);
+        const r = effectiveParticleRadius(ps, i, true) * t.scale * 1.35;
+        const left = Math.max(x, t.cx + ps.x[i] * t.scale - r);
+        const top = Math.max(y, t.cy - ps.y[i] * t.scale - r);
+        const right = Math.min(x + size, t.cx + ps.x[i] * t.scale + r);
+        const bottom = Math.min(y + size, t.cy - ps.y[i] * t.scale + r);
+        if (right <= left || bottom <= top) continue;
+        ctx.globalAlpha = appearance.solid;
+        ctx.drawImage(image, (left - x) / size * 16, (top - y) / size * 16,
+          (right - left) / size * 16, (bottom - top) / size * 16, left, top, right - left, bottom - top);
+      }
     }
     ctx.globalAlpha = 1;
-    this.intactIngredientCount = groups.size;
+    this.intactIngredientCount = pieces.size;
   }
+
   dispose() {
     this.fluidGPU?.dispose();
     this.glowSprites?.clear();

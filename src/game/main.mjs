@@ -5,6 +5,7 @@ import { rabbitById, advanceRabbits, buyRabbit, moveRabbit, cullRabbit, rabbitRe
 import { findPotionId, compilePotionId } from './potionId.mjs';
 import { startNegotiation, counterOffer, acceptCustomerOffer, certificationCost, certifyPotion, certificateFor, advanceComplaints, resolveComplaint } from './commerce.mjs';
 import { generateWorld, availableIngredients, seedNumber } from './world.mjs';
+import { PourStream } from './PourStream.mjs';
 import { BrewingSession } from './brewing.mjs';
 import { newShop, restock, tradeStock, discardVial, UPGRADES, upgradeStatus, buyUpgrade, completeSale, nextCustomer, recordDiscovery, guildLoan } from './economy.mjs';
 import { assessPotion, priceSale, requirementDescription } from './evaluation.mjs';
@@ -28,6 +29,8 @@ import { arcaneTriggerTemperature, ARCANE_MARGIN } from '../simulation/ArcaneSol
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const audio = new ShopAudio();
+const pourStream = new PourStream();
+let streamDirty = false, streamRackDirty = false;
 const adaptiveQuality = new AdaptiveQuality();
 let state = null, brew = null, renderer = null, loaded = null;
 let selected = 1, dose = 20, inShop = false, assist = false, pointer = null, tool = 'spoon';
@@ -262,10 +265,12 @@ function renderTools() {
   $('coolBtn').innerHTML = `${hudIcon('frost')}<span>Frost <small>${brew.cool ? `${Math.round(brew.cool * 100)}%` : 'OFF'}</small></span>`;
   $('coolBtn').classList.toggle('cold', brew.cool > 0); $('coolBtn').setAttribute('aria-label', `Adjust cooling, ${Math.round(brew.cool * 100)} percent`);
   $('stirBtn').innerHTML = `${hudIcon('spoon')}<span>Stir <small>HOLD</small></span>`;
+  $('pourToolBtn').innerHTML = `${hudIcon('vial')}<span>Pour <small>STREAM</small></span>`;
+  $('pourToolBtn').classList.toggle('active', tool === 'pour'); $('pourToolBtn').setAttribute('aria-pressed', String(tool === 'pour'));
   $('crushBtn').innerHTML = `${hudIcon('pestle')}<span>Pestle <small>CRUSH</small></span>`;
   $('crushBtn').classList.toggle('active', tool === 'pestle'); $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle'));
   $('cleanBtn').innerHTML = `${hudIcon('clean')}<span>Clean <small>CAULDRON</small></span>`;
-  for (const id of ['heatBtn', 'coolBtn', 'stirBtn', 'crushBtn', 'cleanBtn']) $(id).disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
+  for (const id of ['heatBtn', 'coolBtn', 'pourToolBtn', 'stirBtn', 'crushBtn', 'cleanBtn']) $(id).disabled = Boolean(state.pendingBottle) || state.stage === 'sale';
 }
 function updateHUD() {
   if (!brew || !state) return;
@@ -282,6 +287,8 @@ function updateHUD() {
   if (tool === 'pestle' && !state.pendingBottle && !condensing) $('labHint').textContent = 'Tap or drag the pestle on raw or frozen matter';
   else if (!state.pendingBottle && state.stage === 'brewing' && !condensing && !brew.heat && !brew.cool)
     $('labHint').textContent = 'Tap or hold inside to pour · drag to stir';
+  if (tool === 'pour' && !state.pendingBottle && state.stage === 'brewing') $('labHint').textContent = 'Hold and move inside the cauldron to pour a steady stream';
+  $('pourToolBtn').setAttribute('aria-pressed', String(tool === 'pour')); $('pourToolBtn').classList.toggle('active', tool === 'pour');
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
   if (sandboxInspectorOpen && sandboxInspectorTab === 'mixture' && performance.now() - lastSandboxInspection > 750) renderSandboxInspector();
 }
@@ -315,7 +322,12 @@ function pour(crushed = false, point = null) {
   audio.play('pour'); renderRack(); updateHUD(); advanceTutorial(); persist();
   return ml;
 }
-function stopPour() { clearTimeout(holdTimer); clearInterval(holdInterval); holdTimer = holdInterval = 0; }
+function stopPour() {
+  clearTimeout(holdTimer); clearInterval(holdInterval); holdTimer = holdInterval = 0;
+  pourStream.reset();
+  if (brew?.lastPour?.continuous) brew.lastPour = null;
+  if (streamDirty) { streamDirty = streamRackDirty = false; renderRack(); updateHUD(); advanceTutorial(); persist(); }
+}
 function thermal(kind) {
   if (!state || state.pendingBottle || state.stage !== 'brewing') return;
   if (!brew.engine.ps.count) { notify('Pour a reagent into the cauldron first.'); return; }
@@ -629,8 +641,9 @@ function bindUI() {
   };
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('pourBtn').addEventListener(event, stopPour);
   $('pourBtn').onclick = event => { if (event.detail === 0) pour(); };
-  $('crushBtn').onclick = () => { tool = tool === 'pestle' ? 'spoon' : 'pestle'; assist = false; renderer.spoon = null; updateHUD(); };
-  $('stirBtn').onpointerdown = event => { if (!state || state.pendingBottle || state.stage !== 'brewing') return; event.preventDefault(); $('stirBtn').setPointerCapture(event.pointerId); tool = 'spoon'; assist = true; audio.play(); updateHUD(); };
+  $('pourToolBtn').onclick = () => { stopPour(); pointer = null; tool = tool === 'pour' ? 'spoon' : 'pour'; assist = false; renderer.spoon = null; updateHUD(); };
+  $('crushBtn').onclick = () => { stopPour(); pointer = null; tool = tool === 'pestle' ? 'spoon' : 'pestle'; assist = false; renderer.spoon = null; updateHUD(); };
+  $('stirBtn').onpointerdown = event => { if (!state || state.pendingBottle || state.stage !== 'brewing') return; event.preventDefault(); $('stirBtn').setPointerCapture(event.pointerId); stopPour(); pointer = null; tool = 'spoon'; assist = true; audio.play(); updateHUD(); };
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('stirBtn').addEventListener(event, () => { assist = false; if (renderer) renderer.spoon = null; updateHUD(); });
   $('stirBtn').onkeydown = event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); assist = true; } };
   $('stirBtn').onkeyup = () => { assist = false; renderer.spoon = null; };
@@ -658,7 +671,8 @@ function bindUI() {
     event.preventDefault(); $('labCanvas').setPointerCapture(event.pointerId);
     const point = renderer.screenToWorld(event.clientX, event.clientY);
     pointer = { id: event.pointerId, point, time: performance.now(),
-      startX: event.clientX, startY: event.clientY, moved: false, pouring: false };
+      startX: event.clientX, startY: event.clientY, moved: false, pouring: false, streaming: tool === 'pour' };
+    if (tool === 'pour') { stopPour(); renderer.spoon = null; return; }
     if (tool === 'pestle') { brew.crush(point); renderer.tool = tool; renderer.spoon = point; }
     else if (insideCauldron(point.x, point.y)) {
       stopPour();
@@ -680,11 +694,11 @@ function bindUI() {
     const distance = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
     // Once a hold starts it remains a pouring gesture. Track the finger, pause
     // outside the vessel, and resume on re-entry without accidentally stirring.
-    if (pointer.pouring) { pointer.point = point; return; }
+    if (pointer.pouring || pointer.streaming) { pointer.point = point; return; }
     if (!pointer.moved && distance < 10 && tool !== 'pestle') return;
     stopPour();
     const dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
-    if (tool === 'pestle') brew.crush(point);
+    if (tool === 'pestle') brew.crush(point, pointer.point);
     else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt, pointer.point);
     renderer.tool = tool; renderer.spoon = point;
     pointer = { ...pointer, point, time: now, moved: true }; advanceTutorial();
@@ -692,7 +706,7 @@ function bindUI() {
   $('labCanvas').addEventListener('pointerup', event => {
     if (!pointer || pointer.id !== event.pointerId) return;
     stopPour();
-    if (tool !== 'pestle' && !pointer.moved && !pointer.pouring &&
+    if (tool === 'spoon' && !pointer.moved && !pointer.pouring &&
         Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) < 10) {
       const point = renderer.screenToWorld(event.clientX, event.clientY);
       if (insideCauldron(point.x, point.y)) pour(false, point);
@@ -801,6 +815,13 @@ function loop(now) {
     }
     accumulator = Math.min(accumulator + elapsed, FIXED_STEP * 3);
     while (accumulator >= FIXED_STEP) {
+      if (pointer?.streaming) {
+        const poured = pourStream.step(brew, selected, state.inventory, pointer.point, FIXED_STEP, isSandbox());
+        if (poured) { if (!streamDirty) audio.play('pour'); streamDirty = streamRackDirty = true; }
+        else if (brew.occupiedVolume >= brew.capacity - .01 || (!isSandbox() && (state.inventory[selected] || 0) < .5)) {
+          pointer.streaming = false; stopPour();
+        }
+      }
       if (assist) { renderer.tool = 'spoon'; brew.assistStir(); const angle = brew.history.elapsed * 3.5; renderer.spoon = { x: Math.cos(angle) * 1.15, y: -.6 + Math.sin(angle) * .45 }; }
       brew.step(FIXED_STEP); accumulator -= FIXED_STEP;
     }
@@ -811,7 +832,7 @@ function loop(now) {
   if(currentRoom==='experiments'&&testingRenderer&&!document.hidden){const subject=selectedRabbit(),report=visibleTrial(subject);testingRenderer.render(subject,report,now,showUntreated);colonyRenderer?.render(state.experiments,subject.id,now,cullMode,testingRenderer.paused);paintRabbitPortraits(now);}
   if(state&&inShop&&!isSandbox()&&now-lastClaims>1000){lastClaims=now;const before=JSON.stringify((state.complaints||[]).map(c=>c.status));const arrived=advanceComplaints(state);if(arrived.length||before!==JSON.stringify((state.complaints||[]).map(c=>c.status))){renderAll();persist();if(!$('sheet').open&&arrived.length)showReturns();else notify('A customer return has reached the counter.');}}
   if (inShop && renderer && !$('sheet').open && now - lastRender >= (renderer.quality === 'eco' ? 32 : 16)) { renderer.render(); lastRender = now; }
-  if (inShop && now - lastHUD > 200) { updateHUD(); if (active) advanceTutorial(); lastHUD = now; }
+  if (inShop && now - lastHUD > 200) { if (streamRackDirty) { streamRackDirty = false; renderRack(); } updateHUD(); if (active) advanceTutorial(); lastHUD = now; }
   requestAnimationFrame(loop);
 }
 function drawMenu() {

@@ -16,12 +16,12 @@ export class SolidSolver{
     this.grainCachePS=ps;
   }
   reset(){this.nextBodyId=1;this.bodyOrigins.clear();}
-  onMelt(ps,i){ps.frozenRadius[i]=0;ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
+  onMelt(ps,i){ps.frozenRadius[i]=0;ps.solidArtX[i]=ps.solidArtY[i]=ps.solidArtSize[i]=0;ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
   initializeParticle(ps,i,planar=false,grid=null){
     if(ps.phase[i]!==Phase.SOLID)return 0;
     if(ps.solidSubdivision[i]>=.55){ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;return 0;}
     let bodyId=0,nearest=Infinity;
-    const inspect=j=>{if(j===i||ps.phase[j]!==Phase.SOLID||ps.solidBodyId[j]<=0||ps.materialId[j]!==ps.materialId[i])return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<(this.compactFreezing?.18*.18:BODY_JOIN_RADIUS*BODY_JOIN_RADIUS)&&d2<nearest){bodyId=ps.solidBodyId[j];nearest=d2;}};
+    const inspect=j=>{if((this.compactFreezing&&(ps.solidArtSize[i]>0||ps.solidArtSize[j]>0))||j===i||ps.phase[j]!==Phase.SOLID||ps.solidBodyId[j]<=0||ps.materialId[j]!==ps.materialId[i])return;const dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz;if(d2<(this.compactFreezing?.18*.18:BODY_JOIN_RADIUS*BODY_JOIN_RADIUS)&&d2<nearest){bodyId=ps.solidBodyId[j];nearest=d2;}};
     if(grid&&ps.cell[i]>=0)grid.forEachNeighbor(ps,i,BODY_JOIN_RADIUS,inspect);else for(let j=0;j<ps.count;j++)inspect(j);
     if(!bodyId){bodyId=this.nextBodyId++;this.bodyOrigins.set(bodyId,{x:ps.x[i],y:ps.y[i],z:planar?0:ps.z[i]});}
     let origin=this.bodyOrigins.get(bodyId);
@@ -47,7 +47,7 @@ export class SolidSolver{
       const root=id=>{while(parent.get(id)!==id)id=parent.get(id);return id;};
       grid.forEachPair(ps,.22,(i,j)=>{
         const a=ps.solidBodyId[i],b=ps.solidBodyId[j];
-        if(ps.phase[i]!==Phase.SOLID||ps.phase[j]!==Phase.SOLID||!parent.has(a)||!parent.has(b)||ps.solidSubdivision[i]>=.55||ps.solidSubdivision[j]>=.55)return;
+        if(ps.solidArtSize[i]>0||ps.solidArtSize[j]>0||ps.phase[i]!==Phase.SOLID||ps.phase[j]!==Phase.SOLID||!parent.has(a)||!parent.has(b)||ps.solidSubdivision[i]>=.55||ps.solidSubdivision[j]>=.55)return;
         if(Math.hypot(ps.x[i]-ps.x[j],ps.y[i]-ps.y[j],planar?0:ps.z[i]-ps.z[j])>.18)return;
         const ra=root(a),rb=root(b);if(ra!==rb)parent.set(rb,ra);
       });

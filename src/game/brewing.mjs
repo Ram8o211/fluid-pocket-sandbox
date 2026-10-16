@@ -9,12 +9,13 @@ import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSup
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 import { LiquidFunFluid } from './LiquidFunFluid.mjs';
-import { positionPouredParcels } from './cauldronPour.mjs';
+import { INGREDIENT_ART_FIELDS, initializeIngredientPieces } from './IngredientPieces.mjs';
+import { findStreamOutlet, positionPouredParcels } from './cauldronPour.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
 import { capturePotionContents, restorePotionContents } from './potionTransfer.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'phaseTarget', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'frozenRadius', 'solidBodyId', 'solidLocalX', 'solidLocalY', 'solidLocalZ', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
+const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'phaseTarget', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'frozenRadius', 'solidBodyId', 'solidLocalX', 'solidLocalY', 'solidLocalZ', ...INGREDIENT_ART_FIELDS, 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -34,7 +35,8 @@ export class BrewingSession {
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
     this.engine.env.environmentDensity = ROOM_DENSITY;
     this.engine.env.gasBuoyancyUsesMaterialDensity = true;
-    this.engine.env.gasContactScale = 1.7;
+    this.engine.env.gasContactScale = 2.35;
+    this.engine.env.gasVolumeSupport = true;
     this.engine.env.gasContactStrength = 1.2;
     this.engine.env.gasConstraintVelocityShare = .1;
     this.engine.env.gasThermalMotion = .28;
@@ -104,7 +106,7 @@ export class BrewingSession {
     for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.GAS) ml += ps.mass[i] / Math.max(.04, ps.baseDensity[i]);
     return ml;
   }
-  pour(ingredientId, requestedMl, inventory, { crushed = false, infinite = false, point = null } = {}) {
+  pour(ingredientId, requestedMl, inventory, { crushed = false, infinite = false, point = null, continuous = false } = {}) {
     const ingredient = this.ingredients.find(i => i.id === ingredientId);
     if (!ingredient || !Number.isFinite(requestedMl) || requestedMl <= 0) return 0;
     // A recovered reagent can join this pinned world while a brew is already
@@ -112,12 +114,17 @@ export class BrewingSession {
     if (!this.engine.materials.has(ingredientId)) this.engine.registerMaterial({ ...ingredient.material,
       particleRadius: clamp(ingredient.material.particleRadius, .10, .11) });
     const ps = this.engine.ps;
-    const quantity = Math.max(0, Math.floor(Math.min(requestedMl, infinite ? Infinity : inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, (ps.capacity - ps.count) * PARTICLE_ML) + .00001));
+    const quantum = continuous ? PARTICLE_ML : 1;
+    const quantity = Math.max(0, Math.floor((Math.min(requestedMl, continuous ? PARTICLE_ML : Infinity, infinite ? Infinity : inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, (ps.capacity - ps.count) * PARTICLE_ML) + .00001) / quantum) * quantum);
     if (!quantity) return 0;
     if (!ps.count) this.batchId = crypto.randomUUID();
     const massBefore = ps.totalMass();
     const start = ps.count, x = Number.isFinite(point?.x) ? clamp(point.x, -2.2, 2.2) : (ingredientId % 2 ? -.55 : .55);
-    const origin = { x, y: Number.isFinite(point?.y) ? point.y : .76 };
+    let origin = { x, y: Number.isFinite(point?.y) ? point.y : .76 };
+    if (continuous) {
+      origin = findStreamOutlet(ps, origin);
+      if (!origin) return 0; // back pressure: wait for free space or a moved nozzle
+    }
     const count = this.engine.emit(ingredientId, { x, y: 1, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
     // Never allow an entire dose to start inside the same tiny sphere.
     // Space its parcels around the selected touch location, avoiding any
@@ -126,7 +133,10 @@ export class BrewingSession {
       ps.mass[i] = ingredient.material.density * PARTICLE_ML;
       ps.mixtureAmount[i] = PARTICLE_ML;
     }
-    positionPouredParcels(ps, start, origin);
+    if (continuous) {
+      ps.x[start] = ps.px[start] = origin.x; ps.y[start] = ps.py[start] = origin.y;
+      ps.vx[start] = 0; ps.vy[start] = -2.4;
+    } else positionPouredParcels(ps, start, origin);
     const solid = ingredient.form && ingredient.form !== 'liquid' && ingredient.form !== 'water';
     const loose = ingredient.form === 'powder' || (crushed && solid);
     for (let i = start; i < ps.count; i++) {
@@ -138,17 +148,19 @@ export class BrewingSession {
       }
     }
     if (solid && !loose) {
-      this.engine.grid.rebuild(ps, this.engine.env.box);
-      for (let i = start; i < ps.count; i++)
-        if (ps.solidSubdivision[i] < .55) this.engine.solid.initializeParticle(ps, i, true, this.engine.grid);
+      initializeIngredientPieces(ps, this.engine.solid,
+        Array.from({ length: ps.count - start }, (_, n) => start + n).filter(i => ps.solidSubdivision[i] < .55));
     }
     this.confineCauldron();
     const pouredMl = count * PARTICLE_ML;
     this.history.activation *= massBefore / Math.max(.001, ps.totalMass());
     if (!infinite) inventory[ingredientId] = Math.max(0, (inventory[ingredientId] || 0) - pouredMl);
     this.cost.ingredients += infinite ? 0 : pouredMl * ingredient.price;
-    this.portions.push({ ingredientId, ml: pouredMl, time: this.history.elapsed, crushed });
-    this.lastPour = { x, color: ingredient.material.color, form: crushed ? 'powder' : ingredient.form, until: this.engine.time + .6 };
+    const previous = this.portions.at(-1);
+    if (continuous && previous?.continuous && previous.ingredientId === ingredientId && previous.crushed === crushed && this.history.elapsed - previous.time < .25) {
+      previous.ml += pouredMl; previous.time = this.history.elapsed;
+    } else this.portions.push({ ingredientId, ml: pouredMl, time: this.history.elapsed, crushed, continuous });
+    this.lastPour = { x: origin.x, y: origin.y, continuous, color: ingredient.material.color, form: crushed ? 'powder' : ingredient.form, until: this.engine.time + .6 };
     return pouredMl;
   }
   setThermal(heat, cool = 0) {
@@ -187,13 +199,17 @@ export class BrewingSession {
     if (affected) this.history.stirred += Math.min(6, speed) * dt;
     return affected;
   }
-  crush(point) {
+  crush(point, fromPoint = point) {
     const ps = this.engine.ps; let affected = 0;
     for (let i = 0; i < ps.count; i++) {
       if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .95) continue;
-      if (Math.hypot(ps.x[i] - point.x, ps.y[i] - point.y) > .18 + effectiveParticleRadius(ps, i, true)) continue;
+      const dx = point.x - fromPoint.x, dy = point.y - fromPoint.y, length2 = dx * dx + dy * dy;
+      const along = length2 > 1e-8 ? clamp(((ps.x[i] - fromPoint.x) * dx + (ps.y[i] - fromPoint.y) * dy) / length2, 0, 1) : 1;
+      if (Math.hypot(ps.x[i] - fromPoint.x - along * dx, ps.y[i] - fromPoint.y - along * dy) > .18 + effectiveParticleRadius(ps, i, true)) continue;
       ps.solidSubdivision[i] = 1; ps.solidBodyId[i] = 0; ps.powderContent[i] = 1; ps.dissolutionProgress[i] = 0;
       ps.solidLocalX[i] = ps.solidLocalY[i] = ps.solidLocalZ[i] = 0;
+      ps.frozenRadius[i] = 0; ps.grainRest[i] = 0;
+      ps.solidArtX[i] = ps.solidArtY[i] = ps.solidArtSize[i] = 0;
       ps.vx[i] *= .3; ps.vy[i] = Math.min(0, ps.vy[i]); affected++;
     }
     return affected;
@@ -212,6 +228,9 @@ export class BrewingSession {
     // Passive heat exchange is gradual in either direction. While powered,
     // source energy still enters only through bottom contacts and neighbours.
     this.engine.env.ambientThermalExchange = power ? 0 : 1;
+    // Cold propagates between actual neighbours over several visible ticks;
+    // it must not homogenize the whole pot before frost can become visible.
+    this.engine.rules.freezingDiffusionScale = power < 0 ? .18 : 1;
     const thermal = this.thermal.step(ps, power, dt);
     if (ps.count) {
       const previousCount = ps.count;
@@ -333,7 +352,7 @@ export class BrewingSession {
       const values = saved.particles[key];
       if (values === undefined && key === 'phaseTarget') { ps.phaseTarget.fill(-1); continue; }
       if (values === undefined && ['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted'].includes(key)) { ps[key].fill(key === 'arcaneThreshold' ? 8 : key === 'magicDecayTemperature' ? 1.4 : 0); continue; }
-      if (values === undefined && ['frozenRadius','solidBodyId','solidLocalX','solidLocalY','solidLocalZ'].includes(key)) { ps[key].fill(0); continue; }
+      if (values === undefined && ['frozenRadius','solidBodyId','solidLocalX','solidLocalY','solidLocalZ',...INGREDIENT_ART_FIELDS].includes(key)) { ps[key].fill(0); continue; }
       if (values === undefined && key === 'solventMeltingTemperature') { ps[key].set(ps.meltingTemperature); continue; }
       if (values === undefined && (EFFECT_PROPERTIES.includes(key) || key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount' || key === 'powderContent' || key === 'dissolutionProgress')) { ps[key].fill(0); continue; }
       if (!Array.isArray(values) || values.length !== saved.count || values.some(v => !Number.isFinite(v))) throw new Error('Invalid saved particle data.');
@@ -387,6 +406,16 @@ export class BrewingSession {
         if (original) ps.arcaneThreshold[i] = original.arcaneThreshold;
       }
     }
+    // Migrate old stretched sprites into bounded pieces. New saves retain the
+    // original texture coordinates, including locally missing crushed regions.
+    const rawIds = new Set(this.ingredients.filter(i => i.form && !['liquid', 'water', 'powder'].includes(i.form)).map(i => i.id));
+    this.engine.solid.nextBodyId = 1 + Math.max(0, ...ps.solidBodyId.subarray(0, ps.count));
+    const unbound = [];
+    for (let i = 0; i < ps.count; i++) {
+      if (ps.solidSubdivision[i] >= .55) ps.frozenRadius[i] = 0;
+      if (ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55 && ps.frozenRadius[i] === 0 && rawIds.has(ps.materialId[i]) && ps.solidArtSize[i] <= 0) unbound.push(i);
+    }
+    initializeIngredientPieces(ps, this.engine.solid, unbound);
     // Reconstruct rigid body membership if a save contained frozen liquid.
     this.engine.grid.rebuild(ps, this.engine.env.box);
     this.engine.solid.reset();
