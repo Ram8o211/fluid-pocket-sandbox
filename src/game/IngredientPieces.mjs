@@ -2,6 +2,8 @@ import { Phase } from '../simulation/Phase.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 
 export const INGREDIENT_ART_FIELDS = ['solidArtX', 'solidArtY', 'solidArtSize'];
+// Eight physical parcels make one intact 4-measure ingredient.
+export const INTACT_PIECE_PARTICLES = 8;
 
 // A new handful is made of small, independent pieces. It must never extend an
 // older piece (or weld a whole tower into one ever-growing ingredient sprite).
@@ -14,7 +16,7 @@ export function initializeIngredientPieces(ps, solid, indices) {
     const nearby = [...remaining].filter(i => ps.materialId[i] === ps.materialId[first] &&
       Math.hypot(ps.x[i] - ps.x[first], ps.y[i] - ps.y[first]) <= .24)
       .sort((a, b) => Math.hypot(ps.x[a] - ps.x[first], ps.y[a] - ps.y[first]) -
-        Math.hypot(ps.x[b] - ps.x[first], ps.y[b] - ps.y[first])).slice(0, 8);
+        Math.hypot(ps.x[b] - ps.x[first], ps.y[b] - ps.y[first])).slice(0, INTACT_PIECE_PARTICLES);
     const id = solid.nextBodyId++;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const i of nearby) {

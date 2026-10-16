@@ -9,8 +9,8 @@ import { confineCauldronBodies, confineCauldronParticle, cauldronGranularWallSup
 import { CauldronThermal } from './CauldronThermal.mjs';
 import { MixtureSolver } from '../reactions/MixtureSolver.mjs';
 import { LiquidFunFluid } from './LiquidFunFluid.mjs';
-import { INGREDIENT_ART_FIELDS, initializeIngredientPieces } from './IngredientPieces.mjs';
-import { findStreamOutlet, positionPouredParcels } from './cauldronPour.mjs';
+import { INGREDIENT_ART_FIELDS, INTACT_PIECE_PARTICLES, initializeIngredientPieces } from './IngredientPieces.mjs';
+import { findStreamOutlet, positionPouredParcels, positionWholeIngredients } from './cauldronPour.mjs';
 import { EFFECT_PROPERTIES } from './effects.mjs';
 import { capturePotionContents, restorePotionContents } from './potionTransfer.mjs';
 
@@ -134,40 +134,60 @@ export class BrewingSession {
     if (!this.engine.materials.has(ingredientId)) this.engine.registerMaterial({ ...ingredient.material,
       particleRadius: clamp(ingredient.material.particleRadius, .10, .11) });
     const ps = this.engine.ps;
+    const solid = ingredient.form && ingredient.form !== 'liquid' && ingredient.form !== 'water';
+    const loose = ingredient.form === 'powder' || (crushed && solid);
+    const intact = Boolean(ingredient.crushable && solid && !loose);
+    const pieceMl = INTACT_PIECE_PARTICLES * PARTICLE_ML;
     const quantum = continuous ? PARTICLE_ML : 1;
-    const quantity = Math.max(0, Math.floor((Math.min(requestedMl, continuous ? PARTICLE_ML : Infinity, infinite ? Infinity : inventory[ingredientId] || 0, this.capacity - this.occupiedVolume, (ps.capacity - ps.count) * PARTICLE_ML) + .00001) / quantum) * quantum);
+    const quantity = Math.max(0, Math.floor((Math.min(requestedMl, continuous ? (intact ? pieceMl : PARTICLE_ML) : Infinity,
+      infinite ? Infinity : inventory[ingredientId] || 0, this.capacity - this.occupiedVolume,
+      (ps.capacity - ps.count) * PARTICLE_ML) + .00001) / quantum) * quantum);
     if (!quantity) return 0;
-    if (!ps.count) this.batchId = crypto.randomUUID();
-    const massBefore = ps.totalMass();
     const start = ps.count, x = Number.isFinite(point?.x) ? clamp(point.x, -2.2, 2.2) : (ingredientId % 2 ? -.55 : .55);
     let origin = { x, y: Number.isFinite(point?.y) ? point.y : .76 };
-    if (continuous) {
+    // Whole ingredients are inserted atomically with their final body geometry.
+    // If the stream is obstructed, no fragments, mass or stock are consumed.
+    const wholeGroups = intact ? positionWholeIngredients(ps, Math.round(quantity / PARTICLE_ML), origin, continuous) : null;
+    if (intact && !wholeGroups) return 0;
+    if (continuous && !intact) {
       origin = findStreamOutlet(ps, origin);
-      if (!origin) return 0; // back pressure: wait for free space or a moved nozzle
+      if (!origin) return 0;
     }
-    const count = this.engine.emit(ingredientId, { x, y: 1, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35);
-    // Never allow an entire dose to start inside the same tiny sphere.
-    // Space its parcels around the selected touch location, avoiding any
-    // existing fluid or solid mass and without introducing an artificial kick.
+    if (!ps.count) this.batchId = crypto.randomUUID();
+    const massBefore = ps.totalMass();
+    // Brewing assigns finalized whole-body IDs after placement and never needs
+    // temporary solid body creation at the emitter's provisional positions.
+    const count = this.engine.emit(ingredientId, { x, y: 1, z: 0 }, quantity / PARTICLE_ML, ROOM_TEMPERATURE, .35, !solid);
     for (let i = start; i < ps.count; i++) {
       ps.mass[i] = ingredient.material.density * PARTICLE_ML;
       ps.mixtureAmount[i] = PARTICLE_ML;
     }
-    if (continuous) {
+    if (intact) {
+      let index = start;
+      for (const group of wholeGroups) {
+        const indices = [];
+        for (const position of group) {
+          ps.x[index] = ps.px[index] = position.x;
+          ps.y[index] = ps.py[index] = position.y;
+          ps.vx[index] = 0; ps.vy[index] = continuous ? -.32 : -.12;
+          indices.push(index++);
+        }
+        // Each whole item has its own rigid-body id and original sprite map.
+        initializeIngredientPieces(ps, this.engine.solid, indices);
+      }
+    } else if (continuous) {
       ps.x[start] = ps.px[start] = origin.x; ps.y[start] = ps.py[start] = origin.y;
       ps.vx[start] = 0; ps.vy[start] = -2.4;
     } else positionPouredParcels(ps, start, origin);
-    const solid = ingredient.form && ingredient.form !== 'liquid' && ingredient.form !== 'water';
-    const loose = ingredient.form === 'powder' || (crushed && solid);
     for (let i = start; i < ps.count; i++) {
       if (solid) ps.setPhase(i, Phase.SOLID);
       if (loose) { ps.solidSubdivision[i] = 1; ps.powderContent[i] = 1; }
-      if (ps.phase[i] === Phase.SOLID) {
+      if (ps.phase[i] === Phase.SOLID && !intact) {
         ps.solidBodyId[i] = 0;
         ps.solidLocalX[i] = ps.solidLocalY[i] = ps.solidLocalZ[i] = 0;
       }
     }
-    if (solid && !loose) {
+    if (solid && !loose && !intact) {
       initializeIngredientPieces(ps, this.engine.solid,
         Array.from({ length: ps.count - start }, (_, n) => start + n).filter(i => ps.solidSubdivision[i] < .55));
     }

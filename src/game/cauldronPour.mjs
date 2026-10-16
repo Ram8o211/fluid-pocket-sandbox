@@ -1,5 +1,6 @@
 import { insideCauldron } from './cauldron.mjs';
 import { clamp } from '../simulation/math.mjs';
+import { INTACT_PIECE_PARTICLES } from './IngredientPieces.mjs';
 
 // A 40 ml dose is 80 physical parcels. The old single-point emitter packed
 // all 80 into a ~0.1-unit ball and then launched them downwards together:
@@ -83,4 +84,55 @@ export function positionPouredParcels(ps, start, target = null) {
     if (index >= ps.count) break;
   }
   if (index !== ps.count) throw new Error('No safe pour positions in the cauldron.');
+}
+
+
+// New whole ingredient items have a coherent eight-parcel footprint rather
+// than isolated half-measure grains. All offsets belong to a single rigid body.
+const PIECE_OFFSETS = Object.freeze([
+  [0, 0], [-.098, 0], [.098, 0], [0, -.098], [0, .098],
+  [-.098, -.098], [.098, -.098], [-.098, .098]
+]);
+
+/** Plan complete rigid items without mutating physics. A blocked continuous
+ * outlet pauses before any ingredient is emitted; it must not teleport,
+ * fragment, or violently overlap existing liquid/solids. */
+export function positionWholeIngredients(ps, particleCount, point = null, continuous = false) {
+  if (!particleCount) return [];
+  const cx = clamp(Number.isFinite(point?.x) ? point.x : 0, -2.2, 2.2);
+  const cy = clamp(Number.isFinite(point?.y) ? point.y : .76, -1.08, 1.08);
+  const sorted = candidates.map((slot, index) => ({
+    ...slot, index, distance: (slot.x - cx) ** 2 + (slot.y - cy) ** 2 * 1.12
+  })).filter(slot => !continuous || slot.distance <= .32 ** 2)
+    .sort((a, b) => a.distance - b.distance || b.y - a.y || a.index - b.index);
+  const cells = new Map(), cellSize = .11;
+  const coord = value => Math.floor(value / cellSize);
+  const key = (x, y) => x + ':' + y;
+  const insert = (x, y) => {
+    const cell = key(coord(x), coord(y));
+    if (!cells.has(cell)) cells.set(cell, []);
+    cells.get(cell).push({ x, y });
+  };
+  for (let i = 0; i < ps.count; i++) insert(ps.x[i], ps.y[i]);
+  const free = (x, y) => {
+    const ix = coord(x), iy = coord(y);
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++)
+      for (const p of cells.get(key(ix + ox, iy + oy)) || [])
+        if ((x - p.x) ** 2 + (y - p.y) ** 2 < .092 ** 2) return false;
+    return true;
+  };
+  const groups = [];
+  for (let start = 0; start < particleCount; start += INTACT_PIECE_PARTICLES) {
+    const offsets = PIECE_OFFSETS.slice(0, Math.min(INTACT_PIECE_PARTICLES, particleCount - start));
+    let chosen = null;
+    for (const centre of sorted) {
+      const positions = offsets.map(([dx, dy]) => ({ x: centre.x + dx, y: centre.y + dy }));
+      if (!positions.every(({ x, y }) => insideCauldron(x, y, .073) && free(x, y))) continue;
+      chosen = positions; break;
+    }
+    if (!chosen) return null;
+    groups.push(chosen);
+    for (const position of chosen) insert(position.x, position.y);
+  }
+  return groups;
 }
