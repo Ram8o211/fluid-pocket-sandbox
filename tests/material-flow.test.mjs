@@ -187,6 +187,7 @@ test('bulk pours create distinct coherent whole pieces, preserve stock, and crus
     assert.equal(ps.count, 10);
     const pieces = [...intactIngredientPieces(ps, raw).values()];
     assert.equal(pieces.length, 2, 'one full piece and one smaller whole remainder');
+    assert.equal(b.engine.solid.bodyOrigins.size, 2, 'whole-item pouring allocates no throwaway collider bodies');
     assert.deepEqual(pieces.map(p => p.indices.length).sort((a,b) => b-a), [8,2]);
     assert.ok(pieces.every(p => new Set(p.indices.map(i => ps.solidBodyId[i])).size === 1));
     const previousIds = new Set(ps.solidBodyId.subarray(0, ps.count));
