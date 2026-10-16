@@ -281,7 +281,7 @@ function updateHUD() {
   $('crushBtn').setAttribute('aria-pressed', String(tool === 'pestle')); $('crushBtn').classList.toggle('active', tool === 'pestle');
   if (tool === 'pestle' && !state.pendingBottle && !condensing) $('labHint').textContent = 'Tap or drag the pestle on raw or frozen matter';
   else if (!state.pendingBottle && state.stage === 'brewing' && !condensing && !brew.heat && !brew.cool)
-    $('labHint').textContent = 'Tap the cauldron to pour here · drag to stir';
+    $('labHint').textContent = 'Tap or hold inside to pour · drag to stir';
   $('stirBtn').setAttribute('aria-pressed', String(assist)); $('stirBtn').classList.toggle('active', assist);
   if (sandboxInspectorOpen && sandboxInspectorTab === 'mixture' && performance.now() - lastSandboxInspection > 750) renderSandboxInspector();
 }
@@ -309,10 +309,11 @@ function advanceTutorial() {
   updateTutorial();
 }
 function pour(crushed = false, point = null) {
-  if (!state || state.pendingBottle || state.stage !== 'brewing' || $('sheet').open) return;
+  if (!inShop || !state || state.pendingBottle || state.stage !== 'brewing' || $('sheet').open) { stopPour(); return 0; }
   const ml = brew.pour(selected, dose, state.inventory, { crushed: crushed === true, infinite: isSandbox(), point });
   if (!ml) { stopPour(); notify(brew.occupiedVolume >= brew.capacity - 1 ? 'The cauldron is full. Bottle or clean it.' : 'This ingredient is depleted. Gather more in the Wild garden.'); return; }
   audio.play('pour'); renderRack(); updateHUD(); advanceTutorial(); persist();
+  return ml;
 }
 function stopPour() { clearTimeout(holdTimer); clearInterval(holdInterval); holdTimer = holdInterval = 0; }
 function thermal(kind) {
@@ -622,8 +623,9 @@ function bindUI() {
     dose = Number(button.dataset.dose); document.querySelectorAll('[data-dose]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); }); renderRack();
   }; });
   $('pourBtn').onpointerdown = event => {
-    if (event.button !== 0) return; event.preventDefault(); $('pourBtn').setPointerCapture(event.pointerId);
-    pour(); holdTimer = setTimeout(() => { holdInterval = setInterval(() => pour(), 240); }, 420);
+    if (event.button !== 0 || pointer) return; event.preventDefault(); $('pourBtn').setPointerCapture(event.pointerId);
+    stopPour();
+    if (pour()) holdTimer = setTimeout(() => { holdInterval = setInterval(() => pour(), 240); }, 420);
   };
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('pourBtn').addEventListener(event, stopPour);
   $('pourBtn').onclick = event => { if (event.detail === 0) pour(); };
@@ -656,16 +658,31 @@ function bindUI() {
     event.preventDefault(); $('labCanvas').setPointerCapture(event.pointerId);
     const point = renderer.screenToWorld(event.clientX, event.clientY);
     pointer = { id: event.pointerId, point, time: performance.now(),
-      startX: event.clientX, startY: event.clientY, moved: false };
+      startX: event.clientX, startY: event.clientY, moved: false, pouring: false };
     if (tool === 'pestle') { brew.crush(point); renderer.tool = tool; renderer.spoon = point; }
+    else if (insideCauldron(point.x, point.y)) {
+      stopPour();
+      holdTimer = setTimeout(() => {
+        if (!pointer || pointer.id !== event.pointerId || pointer.moved || tool === 'pestle') return;
+        pointer.pouring = true;
+        const pourAtFinger = () => {
+          if (!pointer?.pouring) { stopPour(); return; }
+          if (insideCauldron(pointer.point.x, pointer.point.y)) pour(false, pointer.point);
+        };
+        holdInterval = setInterval(pourAtFinger, 240);
+        pourAtFinger();
+      }, 420);
+    }
   };
   $('labCanvas').onpointermove = event => {
     if (!pointer || pointer.id !== event.pointerId) return;
     const now = performance.now(), point = renderer.screenToWorld(event.clientX, event.clientY);
     const distance = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
-    // A tap deposits the selected dose; a deliberate drag continues to stir
-    // (or crush with the pestle). Tiny touch jitter must not stir the pool.
+    // Once a hold starts it remains a pouring gesture. Track the finger, pause
+    // outside the vessel, and resume on re-entry without accidentally stirring.
+    if (pointer.pouring) { pointer.point = point; return; }
     if (!pointer.moved && distance < 10 && tool !== 'pestle') return;
+    stopPour();
     const dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
     if (tool === 'pestle') brew.crush(point);
     else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt, pointer.point);
@@ -674,7 +691,8 @@ function bindUI() {
   };
   $('labCanvas').addEventListener('pointerup', event => {
     if (!pointer || pointer.id !== event.pointerId) return;
-    if (tool !== 'pestle' && !pointer.moved &&
+    stopPour();
+    if (tool !== 'pestle' && !pointer.moved && !pointer.pouring &&
         Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) < 10) {
       const point = renderer.screenToWorld(event.clientX, event.clientY);
       if (insideCauldron(point.x, point.y)) pour(false, point);
@@ -682,7 +700,7 @@ function bindUI() {
     pointer = null; if (renderer) renderer.spoon = null;
   });
   for (const type of ['pointercancel', 'lostpointercapture']) $('labCanvas').addEventListener(type, event => {
-    if (pointer?.id === event.pointerId) pointer = null;
+    if (pointer?.id === event.pointerId) { stopPour(); pointer = null; }
     if (renderer) renderer.spoon = null;
   });
   $('labCanvas').onkeydown = event => {

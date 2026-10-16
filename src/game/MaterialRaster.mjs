@@ -71,13 +71,14 @@ function paintLiquidSurface(ps, t, pixels, particleColor, colorScratch) {
 /** Paint all matter into one reusable RGBA buffer. Texels are always one pixel;
  * physical footprints and mass are independent of the display resolution.
  * This avoids thousands of canvas calls and colour strings every frame. */
-export function paintMaterialParticles(ps, t, pixels, particleColor, colorScratch) {
+export function paintMaterialParticles(ps, t, pixels, particleColor, colorScratch, rawSolids = null) {
   pixels.fill(0);
   paintLiquidSurface(ps, t, pixels, particleColor, colorScratch);
   for (let i = 0; i < ps.count; i++) {
     // Grains, coherent solids and translucent vapour retain their own texture
     // and sit over the reconstructed liquid, never entering its density field.
     if (ps.phase[i] === Phase.LIQUID) continue;
+    if (ps.phase[i] === Phase.SOLID && ps.solidSubdivision[i] < .55 && rawSolids?.has(ps.materialId[i])) continue;
     particleColor(ps, i, colorScratch);
     const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
     const phase = ps.phase[i], dry = isPowder(ps, i) && ps.powderContent[i] > .85;

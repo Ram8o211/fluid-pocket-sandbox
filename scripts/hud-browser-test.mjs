@@ -94,6 +94,38 @@ try {
   await page.locator('[data-dose="5"]').click();
   await page.locator('#pourBtn').click();
   assert.match(await page.locator('#volume').textContent(), /25 \/ 60 ml/, 'automatic button pouring still works');
+  // Use real touch dispatch (not synthetic DOM handlers): holding a stationary
+  // finger must repeat, stop on lift, track movement, and pause outside the pot.
+  const touchSession = await page.context().newCDPSession(page);
+  const touchX = touchArea.x + touchArea.width * .55, touchY = touchArea.y + touchArea.height * .54;
+  const finger = async (type, x = touchX, y = touchY) => touchSession.send('Input.dispatchTouchEvent', {
+    type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x, y, id: 1 }]
+  });
+  const poured = () => page.evaluate(() => JSON.parse(localStorage.getItem('alchemists-shop-save')).brew.portions.reduce((sum, p) => sum + p.ml, 0));
+  await finger('touchStart');
+  await page.waitForTimeout(1050);
+  assert.ok(await poured() >= 40, 'stationary touch repeats at least three 5 ml doses');
+  await finger('touchMove', touchArea.x + touchArea.width * .65, touchY);
+  await page.waitForTimeout(270);
+  await finger('touchMove', touchArea.x + 2, touchArea.y + 2);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const outside = await poured();
+  await page.waitForTimeout(520);
+  assert.equal(await poured(), outside, 'captured finger outside the vessel pauses pouring');
+  await finger('touchMove');
+  await page.waitForTimeout(300);
+  assert.ok(await poured() > outside, 'moving the held finger back into the vessel resumes pouring');
+  await finger('touchEnd');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const released = await poured();
+  await page.waitForTimeout(600);
+  assert.equal(await poured(), released, 'lifting the finger stops without a bonus release dose');
+  await finger('touchStart'); await page.waitForTimeout(500); await finger('touchCancel');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const cancelled = await poured();
+  await page.waitForTimeout(500);
+  assert.equal(await poured(), cancelled, 'touch cancellation stops repeated pouring');
+  await touchSession.detach();
   await page.locator('#crushBtn').click();
   assert.equal(await page.locator('#crushBtn').getAttribute('aria-pressed'), 'true');
   const stir = await page.locator('#stirBtn').boundingBox();

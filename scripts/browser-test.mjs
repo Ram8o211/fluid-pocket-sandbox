@@ -128,7 +128,7 @@ async function brewAndSell(state,subject){
   assert.ok((await readSave()).negotiation.offer>offer);
   await screenshot('bargaining');await page.locator('[data-action="accept-offer"]').click();
   const sold=await readSave();assert.equal(sold.completed,state.completed+1);assert.ok(sold.deliveries.length>0);assert.equal(sold.pendingBottle,null);
-  assert.equal(sold.lastSale.acceptable,true,'the real customer loop must satisfy mandatory magical constraints');
+  assert.equal(sold.lastSale.acceptable,true,'the real customer loop must satisfy mandatory magical constraints: '+JSON.stringify({order:sold.order,witness:state.order.witness,assessment:sold.lastSale}));
   assert.equal(sold.deliveries[0].genuine,false,'a correctly prepared commission must not cause a genuine complaint');
   await screenshot('negotiated-delivery');await page.locator('[data-action="next"]').click();
   await page.waitForSelector('body[data-game-state="brewing"]');

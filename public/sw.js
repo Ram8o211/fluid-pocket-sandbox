@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-rabbit-animation-44';
+const CACHE = 'alchemist-shop-rabbit-animation-45';
 const CORE = [
   './',
   './index.html',
@@ -42,6 +42,8 @@ const CORE = [
   './public/assets/rabbit-trials/effects/sprites/transformation/transformation_t04.png',
   // Cache the complete brewing import graph before the first offline reload.
   './src/game/FluidSurfaceGPU.mjs',
+  './src/game/LiquidFunSolids.mjs',
+  './src/game/SolidIngredientArt.mjs',
   './src/materials/MaterialDefinition.mjs',
   './src/materials/MaterialGenerator.mjs',
   './src/materials/MaterialSampler.mjs',
