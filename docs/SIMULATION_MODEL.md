@@ -36,6 +36,24 @@ relax exponentially toward the explicit room reference (.33, shown as 33 °A),
 warming cold brews and cooling hot ones without a sudden temperature reset. Empty
 copper also cools. Passive exchange does not add energy costs or source history.
 
+Native cauldron phase fronts use fixed parcel nucleation offsets. Melting,
+freezing, boiling and condensation crossfade their optical weights and colours;
+cancelled transitions fade back before work begins toward an opposite phase.
+The saved transition direction prevents boiling progress becoming freezing
+progress after a heat reversal. Older saves infer their missing direction.
+
+After a native phase handoff or reload, pressure overlaps relax over bounded
+sub-parcel position corrections. Native contacts can dissipate input motion but
+cannot amplify its speed beyond the incoming gravity/tool budget while this
+relaxation is active. Coherent bodies relax at their centre, preserving their
+shape. Relaxation continues while contacts still require correction; it does
+not move parcels to arbitrary free slots or change their mass or recipe.
+
+GPU and Canvas liquid contours share a kernel calibrated to LiquidFun's actual
+particle/body contact distance. The solid substrate remains beneath intact
+ingredient artwork, so sprite transparency does not expose a dark moat around
+touching matter. Native liquid radius follows partially bottled volumes.
+
 ## Stability
 
 All major scalar ranges are clamped. Velocity has a hard maximum. Walls clamp particle positions. Reactions have maximum per-step interpolation. Phase changes require progress and hysteresis. A final sanitization pass replaces non-finite values and reclamps the domain.

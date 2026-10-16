@@ -1,6 +1,6 @@
 import { Phase } from '../simulation/Phase.mjs';
 import { CAULDRON_NATIVE_INTERIOR, PARTICLE_ML } from './cauldron.mjs';
-import { LiquidFunSolids } from './LiquidFunSolids.mjs';
+import { LiquidFunSolids, readNativeMotion } from './LiquidFunSolids.mjs';
 
 /**
  * Adapter for Google's actual LiquidFun 1.1.0 Emscripten-generated JavaScript.
@@ -53,6 +53,7 @@ export class LiquidFunFluid {
     this.frames = 0;
     this.rebuilds = 0;
     this.disposed = false;
+    this.lastPhases = new Int8Array(0); this.phaseRelaxation = 0;
   }
   allocate(count) {
     if (!count) return;
@@ -112,6 +113,17 @@ export class LiquidFunFluid {
     this.r.world = this.world;
     this.r._transBuf = this.scratchBuffers.transform; this.r._vec2Buf = this.scratchBuffers.vector;
     this.particlesPS = ps;
+    ps.phaseTransitionStagger = .45;
+    // A save may resume in the middle of pressure relaxation after a handoff.
+    if (!this.frames && ps.count) this.phaseRelaxation = .8;
+    if (this.lastPhases.length < ps.capacity) this.lastPhases = new Int8Array(ps.capacity).fill(-1);
+    for (let i = 0; i < ps.count; i++) {
+      if (this.lastPhases[i] >= 0 && this.lastPhases[i] !== ps.phase[i]) this.phaseRelaxation = .8;
+      this.lastPhases[i] = ps.phase[i];
+    }
+    this.lastPhases.fill(-1, ps.count);
+    const relaxing = this.phaseRelaxation > 0;
+    this.phaseRelaxation = Math.max(0, this.phaseRelaxation - dt);
     this.synchronize(ps);
     this.solids.synchronize(ps);
     this.world.SetGravity(new this.r.b2Vec2(gravity.x, gravity.y));
@@ -145,7 +157,7 @@ export class LiquidFunFluid {
       Math.ceil(maxSpeed * dt / Math.max(.001, radius * 1.5))));
     for (let substep = 0; substep < this.substeps; substep++)
       this.world.Step(dt / this.substeps, 6, 3);
-    this.solids.readback(ps);
+    let limited = this.solids.readback(ps, dt, gravity, relaxing);
     ({ position, velocity } = this.buffers(count));
     for (let k = 0; k < count; k++) {
       const i = indices[k], j = k * 2;
@@ -160,9 +172,9 @@ export class LiquidFunFluid {
           finite:{x:Number.isFinite(position[j]),y:Number.isFinite(position[j+1]),
             vx:Number.isFinite(velocity[j]),vy:Number.isFinite(velocity[j+1])}
         }));
-      ps.x[i] = position[j]; ps.y[i] = position[j + 1];
-      ps.vx[i] = velocity[j]; ps.vy[i] = velocity[j + 1];
+      limited = readNativeMotion(ps, i, position[j], position[j + 1], velocity[j], velocity[j + 1], dt, gravity, relaxing) || limited;
     }
+    if (limited) this.phaseRelaxation = Math.max(this.phaseRelaxation, .25);
     this.frames++;
   }
   reset() {
@@ -173,6 +185,7 @@ export class LiquidFunFluid {
     this.world.DestroyParticleSystem(this.system);
     this.system = this.world.CreateParticleSystem(this.definition);
     this.frames = 0;
+    this.lastPhases.fill(-1); this.phaseRelaxation = 0;
   }
   dispose() {
     if (this.disposed) return;

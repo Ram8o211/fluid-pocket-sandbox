@@ -4,6 +4,10 @@ import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
 import { EFFECT_PROPERTIES } from '../src/game/effects.mjs';
 import { mixedMagicGlow, particleMagicAuras, paintParticleMagicLights } from '../src/game/magicLight.mjs';
 import { magicGlowSprite } from '../src/game/art.mjs';
+import { ParticleSystem } from '../src/simulation/ParticleSystem.mjs';
+import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
+import { MixtureSolver } from '../src/reactions/MixtureSolver.mjs';
+import { Phase } from '../src/simulation/Phase.mjs';
 
 function setup(count = 1, quality = 'balanced', scale = 40) {
   const ps = { count };
@@ -146,7 +150,7 @@ test('every enchanted parcel contributes a local glow pixel, not only the 160 br
   assert.equal(pixels[center+3],0,'effect scaling zero disables per-particle glow');
 });
 
-test('homogeneous mixture parcels use the common live magical hue despite their original materials', () => {
+test('mixture glow converges with its local fields without a batch-wide hue switch', () => {
   const { ps } = setup(3);
   ps.mixtureGroup = new Uint32Array([1,1,2]);
   ps.mixtureProgress.fill(.95);
@@ -157,7 +161,12 @@ test('homogeneous mixture parcels use the common live magical hue despite their 
   };
   const glows=particleMagicAuras(ps,groups);
   assert.ok(glows[0]&&glows[1]&&glows[2]);
-  assert.strictEqual(glows[0],glows[1],'fully blended particles share one group-level magic glow');
+  assert.deepEqual(glows[0],mixedMagicGlow(ps,0));
+  assert.deepEqual(glows[1],mixedMagicGlow(ps,1));
+  assert.equal(glows[0].color,glows[1].color,'nearly equal concentrations have nearly equal colours');
+  ps.strength[1]=ps.strength[0];ps.poison[1]=ps.poison[0];
+  const homogeneous=particleMagicAuras(ps,groups);
+  assert.deepEqual(homogeneous[0],homogeneous[1],'identical live concentrations have identical emission');
   assert.notEqual(glows[0].color,glows[2].color,'a separate potion must retain its own color');
   ps.mixtureProgress[1]=0;
   const unmixed=particleMagicAuras(ps,groups);
@@ -173,4 +182,65 @@ test('local magic exists for gas and powder particles even if they are skipped b
   const pixels=new Uint8ClampedArray(160*80*4);
   assert.equal(paintParticleMagicLights(ps,{cx:80,cy:40,w:160,h:80,scale:40},pixels,auras),3);
   for(const x of [40,80,120]) assert.ok(pixels[(40*160+x)*4+3]>0,'each physical phase receives its own glow');
+});
+
+test('weak magic and every effect scale linearly without a brightness floor or a visibility cutoff', () => {
+  for (const key of EFFECT_PROPERTIES) {
+    const { ps, images, draw } = setup();
+    ps[key][0] = .005; draw(); const weak = mixedMagicGlow(ps, 0);
+    ps[key][0] = .01; draw(); const strong = mixedMagicGlow(ps, 0);
+    assert.ok(weak && strong, `${key} must not suddenly appear at 1.5%`);
+    assert.equal(strong.intensity, weak.intensity * 2);
+    assert.ok(Math.abs(images[1].alpha - images[0].alpha * 2) < 1e-6);
+    ps[key][0] = 0; assert.equal(mixedMagicGlow(ps, 0), null);
+  }
+});
+
+test('homogeneous fallback glow is independent of overlapping parcel count and follows actual power', () => {
+  const glowPixel = (count, power) => {
+    const { ps } = setup(count); ps.poison.fill(power);
+    const pixels = new Uint8ClampedArray(32 * 32 * 4);
+    for (let i = 0; i < pixels.length; i += 4) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 60; pixels[i + 3] = 255; }
+    paintParticleMagicLights(ps, { cx: 16, cy: 16, w: 32, h: 32, scale: 40 }, pixels, particleMagicAuras(ps));
+    return Array.from(pixels.subarray((16 * 32 + 16) * 4, (16 * 32 + 16) * 4 + 3));
+  };
+  assert.deepEqual(glowPixel(1, .2), glowPixel(100, .2), 'overlap must not overexpose the potion');
+  const weak = glowPixel(1, .1), strong = glowPixel(1, .2);
+  for (let k = 0; k < 3; k++) assert.ok(Math.abs((strong[k] - 60) - 2 * (weak[k] - 60)) <= 1);
+});
+
+test('recipe membership and old homogeneity thresholds cannot recolour unmixed local magic', () => {
+  const { ps } = setup(2); ps.mixtureGroup = new Int32Array([1, 1]);
+  ps.strength.set([.1, .16]); ps.poison.set([.14, .08]);
+  const mixtures = { root: () => ({ id: 1, arcaneRecipe: { sourceCount: 2 } }) };
+  ps.mixtureProgress.fill(.349); const before = particleMagicAuras(ps, mixtures);
+  ps.mixtureProgress.fill(.351); const after = particleMagicAuras(ps, mixtures);
+  assert.deepEqual(after, before, 'a progress threshold cannot replace live local colours');
+  assert.notDeepEqual(after[0], after[1], 'spatially separated concentrations keep their own hue');
+});
+
+test('real local mixing conserves magical emission and converges to a homogeneous hue and power', () => {
+  const a = sanitizeMaterial({ id: 1, strength: .24, poison: 0, miscibility: .4 });
+  const b = sanitizeMaterial({ id: 2, strength: 0, poison: .12, miscibility: .4 });
+  const ps = new ParticleSystem(2), mixtures = new MixtureSolver();
+  mixtures.materials = new Map([[1, a], [2, b]]);
+  ps.add({ x: -.1, y: 0, z: 0, mass: .5 }, a, Phase.LIQUID);
+  ps.add({ x: .1, y: 0, z: 0, mass: 1 }, b, Phase.LIQUID);
+  const energy = () => {
+    const auras = particleMagicAuras(ps, mixtures), sum = [0, 0, 0];
+    for (let i = 0; i < 2; i++) for (let k = 0; k < 3; k++)
+      sum[k] += auras[i].unquantized[k] * auras[i].intensity * ps.mixtureAmount[i];
+    return sum;
+  };
+  const before = energy();
+  for (let tick = 0; tick < 120; tick++) {
+    ps.stirActivity.fill(1); mixtures.beginFrame(ps);
+    mixtures.contact(ps, 0, 1, .7, .12, .025); mixtures.finishFrame(ps, {}, .025);
+  }
+  const auras = particleMagicAuras(ps, mixtures), after = energy();
+  for (let k = 0; k < 3; k++) {
+    assert.ok(Math.abs(after[k] - before[k]) < .0001, 'mixing must conserve the light contribution of each live effect');
+    assert.ok(Math.abs(auras[0].unquantized[k] - auras[1].unquantized[k]) < .001);
+  }
+  assert.ok(Math.abs(auras[0].intensity - auras[1].intensity) < .00001);
 });

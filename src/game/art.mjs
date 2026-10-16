@@ -3,12 +3,12 @@ import { paintSolidIngredient } from './SolidIngredientArt.mjs';
 
 // All artwork is original: small, reusable pixel sprites and a seeded workshop.
 // No external fonts, stock images, emoji, downloads or runtime art dependencies.
-const cache = new Map();
+const cache = new Map(), glowCache = new Map();
 function surface(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
 /** Tiny reusable lights; building the falloff once keeps particle drawing cheap. */
 export function magicGlowSprite(colour) {
-  const key = `glow:${colour}`; if (cache.has(key)) return cache.get(key);
+  const key = `glow:${colour}`; if (glowCache.has(key)) return glowCache.get(key);
   const canvas = surface(20, 20), ctx = canvas.getContext('2d');
   ctx.fillStyle = colour;
   for (let y = 0; y < 20; y++) for (let x = 0; x < 20; x++) {
@@ -17,7 +17,9 @@ export function magicGlowSprite(colour) {
     ctx.globalAlpha = (1 - distance) ** 2;
     ctx.fillRect(x, y, 1, 1);
   }
-  ctx.globalAlpha = 1; cache.set(key, canvas); return canvas;
+  ctx.globalAlpha = 1;
+  if (glowCache.size >= 128) glowCache.delete(glowCache.keys().next().value);
+  glowCache.set(key, canvas); return canvas;
 }
 
 /** Raw gatherables share the 24×32 rack contract with the original bottles. */

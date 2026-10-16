@@ -14,7 +14,7 @@ import { EFFECT_PROPERTIES } from './effects.mjs';
 import { capturePotionContents, restorePotionContents } from './potionTransfer.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
+const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'phaseTarget', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -331,6 +331,7 @@ export class BrewingSession {
     const ps = this.engine.ps;
     for (const key of SAVE_FIELDS) {
       const values = saved.particles[key];
+      if (values === undefined && key === 'phaseTarget') { ps.phaseTarget.fill(-1); continue; }
       if (values === undefined && ['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted'].includes(key)) { ps[key].fill(key === 'arcaneThreshold' ? 8 : key === 'magicDecayTemperature' ? 1.4 : 0); continue; }
       if (values === undefined && key === 'solventMeltingTemperature') { ps[key].set(ps.meltingTemperature); continue; }
       if (values === undefined && (EFFECT_PROPERTIES.includes(key) || key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount' || key === 'powderContent' || key === 'dissolutionProgress')) { ps[key].fill(0); continue; }

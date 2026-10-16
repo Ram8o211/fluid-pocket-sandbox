@@ -92,3 +92,20 @@ test('dry powder remains textured and does not acquire a continuous liquid skin'
   assert.equal(pixel(pixels, t, 0, 0)[3], 0, 'separate grains must keep their gaps');
   assert.ok(centre[0] < 64 && centre[1] < 160 && centre[2] < 192, 'fine grit remains visible');
 });
+
+test('native liquid visibly meets raw solids and powder at the actual fixture contact', () => {
+  for (const scale of [20, 40, 80]) for (const subdivision of [.1, 1]) {
+    const ps = new ParticleSystem(2); ps.packingScale = .6; ps.volumePacking = true;
+    ps.nativeLiquidRadius = .039 * Math.sqrt(2);
+    ps.add({ x: 0, y: 0, z: 0, mass: .5 }, material, Phase.SOLID);
+    ps.solidSubdivision[0] = subdivision;
+    const separation = effectiveParticleRadius(ps, 0, true) + ps.nativeLiquidRadius * 2;
+    ps.add({ x: separation, y: 0, z: 0, mass: .5 }, material, Phase.LIQUID);
+    const t = transform(scale), pixels = new Uint8ClampedArray(t.w * t.h * 4);
+    paintMaterialParticles(ps, t, pixels, color, {}, new Map([[1, material]]));
+    for (let x = t.cx; x <= Math.floor(t.cx + separation * scale); x++) {
+      assert.ok(pixels[(Math.floor(t.cy) * t.w + x) * 4 + 3] >= 220,
+        `a touching ${subdivision < .55 ? 'raw ingredient' : 'grain'} must not have a black halo at scale ${scale}`);
+    }
+  }
+});
