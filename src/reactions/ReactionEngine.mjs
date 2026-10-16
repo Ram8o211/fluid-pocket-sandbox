@@ -27,7 +27,7 @@ export class ReactionEngine {
     let searchRadius=radius;
     if(this.mixtures){
       if(this.radii.length<ps.capacity)this.radii=new Float32Array(ps.capacity);
-      let maxRadius=0,gas=false,minPotential=Infinity,maxPotential=-Infinity,minTemperature=Infinity,maxTemperature=-Infinity;
+      let maxRadius=0,gas=false,minPotential=Infinity,maxPotential=-Infinity,minTemperature=Infinity,maxTemperature=-Infinity,uniform=true;
       for(let i=0;i<ps.count;i++){
         // Native water contacts a solid at its actual pressure radius. Using
         // the smaller display/grain radius leaves an invisible chemistry gap:
@@ -35,15 +35,24 @@ export class ReactionEngine {
         this.radii[i]=grid.dimensionMode==='2D'&&ps.phase[i]===Phase.LIQUID&&ps.nativeLiquidRadius>0?ps.nativeLiquidRadius:effectiveParticleRadius(ps,i,grid.dimensionMode==='2D');maxRadius=Math.max(maxRadius,this.radii[i]);gas=gas||ps.phase[i]===Phase.GAS;
         minPotential=Math.min(minPotential,ps.reactionPotential[i]);maxPotential=Math.max(maxPotential,ps.reactionPotential[i]);
         minTemperature=Math.min(minTemperature,ps.temperature[i]);maxTemperature=Math.max(maxTemperature,ps.temperature[i]);
+        uniform &&= materialId[i]===materialId[0]&&ps.mixtureGroup[i]===ps.mixtureGroup[0]
+          &&ps.powderContent[i]===ps.powderContent[0]&&this.mixtures.previous[i]===0;
+      }
+      // A single unchanged source with zero mixing history has no possible
+      // pigment flux, hydration difference, group join or reaction. Still run
+      // source accounting and rune/density bookkeeping, and re-evaluate every
+      // frame so a pour, returned vial or edited channel wakes transport at once.
+      if(uniform&&!this.mixtures.activeFields.length&&maxPotential-minPotential<=thermalThreshold&&maxTemperature-minTemperature<=.35){
+        this.mixtures.finishFrame(ps,rules,dt);return;
       }
       // Only pigment/solubility work needs the fine contact neighbourhood in
       // an ordinary batch. Keep the full reach whenever heat shock, opposed
       // potentials or gas can actually use that larger radius.
       if(!gas&&maxPotential-minPotential<=thermalThreshold&&maxTemperature-minTemperature<=.35)searchRadius=Math.min(radius,Math.max(.07*(ps.packingScale??1)*1.6,maxRadius*3.2));
     }
-    grid.forEachPair(ps,searchRadius,(i,j)=>{
+    grid.forEachPair(ps,searchRadius,(i,j,dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],d2=dx*dx+dy*dy+dz*dz)=>{
       if(materialId[i]===materialId[j] && !this.mixtures)return;
-      const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],d2=dx*dx+dy*dy+dz*dz;if(d2>r2)return;
+      if(d2>r2)return;
       const distance=Math.sqrt(d2),contact=saturate(1-distance/radius),potentialDelta=Math.abs(ps.reactionPotential[i]-ps.reactionPotential[j]);
       const scale=ps.packingScale??1;
       let mixingReach=!this.mixtures||ps.phase[i]===Phase.GAS||ps.phase[j]===Phase.GAS?radius:Math.min(radius,clamp(this.radii[i]+this.radii[j],.07*scale,.44*scale)*(isPowder(ps,i)||isPowder(ps,j)?1.12:1.6));

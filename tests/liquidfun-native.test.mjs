@@ -20,6 +20,53 @@ function nativeCount(backend) {
   return runtime.Module._b2ParticleSystem_GetParticleCount(backend.system.ptr);
 }
 
+test('native body caching skips unchanged handoffs but preserves tiny real impulses and pressure limits',()=>{
+  const b=brew(),ps=b.engine.ps,backend=b.engine.liquidFun,solids=backend.solids;
+  try{
+    b.pour(11,4,{11:10});solids.synchronize(ps);solids.readback(ps,.025,b.engine.gravity,false);
+    let transforms=0,velocities=0;
+    for(const record of solids.bodies.values()){
+      const body=record.body,transform=body.SetTransform,velocity=body.SetLinearVelocity;
+      body.SetTransform=function(...args){transforms++;return transform.apply(this,args);};
+      body.SetLinearVelocity=function(...args){velocities++;return velocity.apply(this,args);};
+    }
+    solids.synchronize(ps);assert.equal(transforms,0);assert.equal(velocities,0);
+    ps.vx[0]+=.000001;solids.synchronize(ps);
+    assert.equal(transforms,0);assert.equal(velocities,1,'an actual small impulse must not be mistaken for resting motion');
+    const record=solids.bodies.get(-1),pointer=record.body.ptr;
+    record.body.SetLinearVelocity(new runtime.b2Vec2(4,0));
+    solids.readback(ps,.025,b.engine.gravity,true);
+    assert.ok(record.needsMotionSync,'startup pressure limited by the game must return to the native body');
+    velocities=transforms=0;solids.synchronize(ps);
+    assert.equal(velocities,1);assert.equal(transforms,1);
+    assert.ok(Math.abs(record.body.GetLinearVelocity().x-ps.vx[0])<1e-7);
+    ps.mass[0]*=.5;solids.synchronize(ps);
+    assert.notEqual(solids.bodies.get(-1).body,record.body,'partial quantities must update collider geometry even with unchanged indices');
+    assert.ok(pointer>0);
+  }finally{b.dispose();}
+});
+
+test('native pours append only new liquid parcels and rebuild after membership removal or substitution',()=>{
+  const b=brew(),ps=b.engine.ps,backend=b.engine.liquidFun;
+  try{
+    b.pour(1,20,{1:100});b.step();
+    const system=backend.system,rebuilds=backend.rebuilds;
+    for(let pour=0;pour<12;pour++){
+      b.pour(1,1,{1:100});b.step();
+      assert.equal(backend.system,system,'a pure pour must preserve the native pressure system');
+      assert.equal(nativeCount(backend),ps.count);
+      assert.equal(backend.buffers(ps.count).position.length,ps.count*2);
+    }
+    assert.equal(backend.rebuilds,rebuilds);assert.equal(backend.appends,12);
+    assert.ok(Math.abs(b.occupiedVolume-32)<1e-5);
+    ps.setPhase(0,Phase.GAS);ps.boilingTemperature[0]=0;ps.temperature[0]=1;
+    b.step();assert.notEqual(backend.system,system);assert.equal(nativeCount(backend),ps.count-1);
+    ps.setPhase(0,Phase.LIQUID);ps.boilingTemperature[0]=1.2;ps.temperature[0]=.33;
+    b.step();assert.equal(nativeCount(backend),ps.count);
+    b.clean();b.step();b.pour(1,3,{1:10});b.step();assert.equal(nativeCount(backend),6);
+  }finally{b.dispose();}
+});
+
 test('a freezing pool retains a rigid silhouette while falling and after saving', () => {
   const b = brew();
   try {

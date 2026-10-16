@@ -192,8 +192,9 @@ export class FluidSolver {
   }
   step(ps,grid,gravity,env,rules,dt,iterations=2,profile=null,collideBoundary=null,externalLiquids=false,integrateLiquids=null,externalSolids=false){
     const maxV=env.maxVelocity,planar=env.dimensionMode==='2D',interactionScale=clamp(rules.interactionRadiusScale??1,.4,1);let searchRadius=clamp(profile?.fluidRadius??this.neighborRadius,.40,this.neighborRadius)*interactionScale*(ps.packingScale??1),hasPowder=false,maxDisplacement=0;
-    const pairStride=Math.max(1,profile?.fluidPairStride||1),pairPhase=this.pairPhase++%pairStride;this.reverseSweep=!this.reverseSweep;this.ensureScratch(ps);let hasHard=false,maxRadius=0;
+    const pairStride=Math.max(1,profile?.fluidPairStride||1),pairPhase=this.pairPhase++%pairStride;this.reverseSweep=!this.reverseSweep;this.ensureScratch(ps);let hasHard=false,maxRadius=0,hasNonSolid=false;
     for(let i=0;i<ps.count;i++){
+      hasNonSolid ||= ps.phase[i]!==Phase.SOLID;
       this.radii[i]=effectiveParticleRadius(ps,i,planar);this.viscosities[i]=effectiveLiquidViscosity(ps,i);this.dough[i]=ps.phase[i]===Phase.LIQUID?doughStrength(ps.powderContent[i]):0;
       maxRadius=Math.max(maxRadius,this.radii[i]);
       ps.px[i]=ps.x[i];ps.py[i]=ps.y[i];ps.pz[i]=ps.z[i];hasHard=hasHard||(ps.incompressible?.[i]||0)>=.5;
@@ -231,17 +232,23 @@ export class FluidSolver {
     const forceGranularPair=(i,j)=>(isPowder(ps,i)||isPowder(ps,j))
       &&!isCoherentSolid(ps,i)&&!isCoherentSolid(ps,j);
     for(let it=0;it<iterations;it++){
-      grid.rebuild(ps,env.box);this.gasCounts.fill(0,0,ps.count);
-      grid.forEachPair(ps,searchRadius,(i,j)=>{
-        let dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i];const d2=dx*dx+dy*dy+dz*dz;if(d2>r2)return;
+      this.gasCounts.fill(0,0,ps.count);
+      // With only native solid bodies there are no legacy contacts to solve.
+      // Keep boundary projection at its existing cadence, but avoid scanning
+      // every grain pair only to reject it after native collision handling.
+      if(!externalSolids||hasNonSolid){
+      grid.rebuild(ps,env.box);
+      grid.forEachPair(ps,searchRadius,(i,j,dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=planar?0:ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz)=>{
+        const pi=ps.phase[i],pj=ps.phase[j];
+        // Native bodies already solved these contacts together with pressure.
+        // A second positional solver would push the fluid back into itself.
+        if(externalSolids&&pi!==Phase.GAS&&pj!==Phase.GAS&&(pi===Phase.SOLID||pj===Phase.SOLID))return;
+        if(d2>r2)return;
         // Native integration plus floor projection can place a falling liquid
         // exactly on a resting grain. Recover the incoming contact normal;
         // dropping a zero-distance pair lets the liquid tunnel into the pile.
         if(d2<=1e-12){if(!externalLiquids)return;dx=ps.px[j]-ps.px[i];dy=ps.py[j]-ps.py[i];dz=planar?0:ps.pz[j]-ps.pz[i];if(dx*dx+dy*dy+dz*dz<=1e-12)dx=1;}
-        const d=Math.sqrt(d2),normalLength=d2>1e-12?d:Math.hypot(dx,dy,dz),nx=dx/normalLength,ny=dy/normalLength,nz=planar?0:dz/normalLength,pi=ps.phase[i],pj=ps.phase[j];
-        // Native bodies already solved these contacts together with pressure.
-        // A second positional solver would push the fluid back into itself.
-        if(externalSolids&&pi!==Phase.GAS&&pj!==Phase.GAS&&(pi===Phase.SOLID||pj===Phase.SOLID))return;
+        const d=Math.sqrt(d2),normalLength=d2>1e-12?d:Math.hypot(dx,dy,dz),nx=dx/normalLength,ny=dy/normalLength,nz=planar?0:dz/normalLength;
         // Vapour parcels represent overlapping gas volumes, not hard spheres.
         // Only very close contacts separate, with a time-scaled soft response.
         if(pi===Phase.GAS&&pj===Phase.GAS){
@@ -282,6 +289,7 @@ export class FluidSolver {
         if(pi===Phase.SOLID&&pj===Phase.LIQUID){this.solveSolidLiquidPair(ps,i,j,nx,ny,nz,d,gravity,rules,planar,interactionScale);return;}
         if(pi===Phase.LIQUID&&pj===Phase.SOLID)this.solveSolidLiquidPair(ps,j,i,-nx,-ny,-nz,d,gravity,rules,planar,interactionScale);
       },pairStride,(pairPhase+it)%pairStride,forceGranularPair);
+      }
       if(hasHard&&!externalSolids){grid.rebuild(ps,env.box);const scale=ps.packingScale??1;this.enforceHardPacking(ps,grid,Math.min(searchRadius,clamp(maxRadius*2,.07*scale,.44*scale)),planar,externalLiquids);}
       for(let i=0;i<ps.count;i++)ps.localGasDensity[i]=ps.phase[i]===Phase.GAS?clamp(.18+this.gasCounts[i]*.075,0,1.8):0;
       this.collideBox(ps,env.box,planar);

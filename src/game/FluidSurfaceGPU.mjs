@@ -113,6 +113,7 @@ export class FluidSurfaceGPU {
     if (!this.gl) throw new Error('WebGL2 is unavailable.');
     this.groups = []; this.fields = []; this.capacity = 0;
     this.available = false; this.disposed = false;
+    this.appearance = { liquid: 0, gas: 0, solid: 0 };
     this.stats = { drawCalls: 0, uploadedBytes: 0, particles: 0, glowingParticles: 0, width: 0, height: 0 };
     this.onLost = event => { event.preventDefault(); this.available = false; };
     this.onRestored = () => {
@@ -199,7 +200,7 @@ export class FluidSurfaceGPU {
     for (const group of this.groups) group.count = 0;
     this.stats.drawCalls = this.stats.uploadedBytes = this.stats.glowingParticles = 0;
     this.stats.particles = ps.count;
-    const appearance = { liquid: 0, gas: 0, solid: 0 };
+    const appearance = this.appearance;
     for (let i = 0; i < ps.count; i++) {
       phaseAppearance(ps, i, appearance);
       const physical = effectiveParticleRadius(ps, i, true) * scale;
@@ -231,14 +232,15 @@ export class FluidSurfaceGPU {
     }
     for (const group of this.groups) if (group.count) {
       gl.bindBuffer(gl.ARRAY_BUFFER, group.buffer);
-      const active = group.data.subarray(0, group.count * STRIDE);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, active); this.stats.uploadedBytes += active.byteLength;
+      const length = group.count * STRIDE;
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, group.data, 0, length); this.stats.uploadedBytes += length * 4;
     }
     // Two additive half-float fields avoid 8-bit saturation or colour clipping
     // in dense pools. Surfaces cost one fullscreen triangle each, within only
     // the vessel's bounds, independent of devicePixelRatio.
     gl.blendFunc(gl.ONE, gl.ONE);
     for (let i = 0; i < 2; i++) {
+      if (!this.groups[i].count) continue;
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.fields[i].target); gl.clear(gl.COLOR_BUFFER_BIT);
       this.drawGroup(this.groups[i], 0);
     }
