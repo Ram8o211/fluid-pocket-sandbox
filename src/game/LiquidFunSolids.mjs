@@ -1,6 +1,12 @@
 import { Phase } from '../simulation/Phase.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 
+// Transport changes these fields by tiny amounts every tick. Recreating a
+// collider for each change invalidates native contact/TOI caches across a whole
+// powder pile. Bound the drift from the actual fixture, not from the last tick.
+// A 0.5% radius change is below 0.02 pixels at the cauldron's native resolution.
+export const NATIVE_SOLID_SHAPE_TOLERANCE = Object.freeze({ radius: .005, density: .01 });
+
 /** Pressure startup may remove an overlap, but must not turn that correction
  * into kinetic energy. Keep physical input speed (including gravity/tools),
  * with a sub-parcel position relaxation and no added pressure-startup energy. */
@@ -63,8 +69,9 @@ export class LiquidFunSolids {
         const m = ps.mass[i]; mass += m;
         x += ps.x[i] * m; y += ps.y[i] * m; vx += ps.vx[i] * m; vy += ps.vy[i] * m;
         const radius = ps.frozenRadius?.[i] || effectiveParticleRadius(ps, i, true);
-        if (!changed && (record.indices[k] !== i || record.radiusKeys[k] !== Math.round(radius * 1e5)
-          || record.densityKeys[k] !== Math.round(ps.density[i] * 1e4))) changed = true;
+        if (!changed && (record.indices[k] !== i || record.lastMass[k] !== m
+          || Math.abs(record.radii[k] - radius) > Math.max(.00001, record.radii[k] * NATIVE_SOLID_SHAPE_TOLERANCE.radius)
+          || Math.abs(record.densities[k] - ps.density[i]) > Math.max(.0001, record.densities[k] * NATIVE_SOLID_SHAPE_TOLERANCE.density))) changed = true;
         if (!moved && (record.lastX[k] !== ps.x[i] || record.lastY[k] !== ps.y[i] || record.lastMass[k] !== m)) moved = true;
         if (!accelerated && (record.lastVX[k] !== ps.vx[i] || record.lastVY[k] !== ps.vy[i] || record.lastMass[k] !== m)) accelerated = true;
       }
@@ -77,20 +84,20 @@ export class LiquidFunSolids {
         def.position = new this.r.b2Vec2(x, y);
         def.linearDamping = .25;
         const body = this.world.CreateBody(def);
-        const offsets = [], radiusKeys = [], densityKeys = [];
+        const offsets = [], radii = [], densities = [];
         for (const i of indices) {
           const ox = ps.x[i] - x, oy = ps.y[i] - y;
           offsets.push({ x: ox, y: oy });
           const shape = new this.r.b2CircleShape();
           shape.position = new this.r.b2Vec2(ox, oy);
           shape.radius = ps.frozenRadius?.[i] || effectiveParticleRadius(ps, i, true);
-          radiusKeys.push(Math.round(shape.radius * 1e5)); densityKeys.push(Math.round(ps.density[i] * 1e4));
+          radii.push(shape.radius); densities.push(ps.density[i]);
           const fixture = new this.r.b2FixtureDef();
           fixture.shape = shape; fixture.density = Math.max(.04, ps.density[i]);
           fixture.friction = .6; fixture.restitution = 0;
           body.CreateFixtureFromDef(fixture);
         }
-        record = { body, indices: indices.slice(), offsets, radiusKeys, densityKeys,
+        record = { body, indices: indices.slice(), offsets, radii, densities,
           lastX: new Float32Array(indices.length), lastY: new Float32Array(indices.length),
           lastVX: new Float32Array(indices.length), lastVY: new Float32Array(indices.length), lastMass: new Float32Array(indices.length) };
         this.bodies.set(key, record);

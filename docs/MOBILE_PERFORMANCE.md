@@ -56,12 +56,20 @@ differences wake transport on the next scheduled chemistry tick.
 LiquidFun appends a pure pour's new particle tail without rebuilding the pool.
 Removal, reordered membership and phase substitutions still rebuild the mapping,
 and real native buffer lengths are checked before and after stepping. Solid
-membership arrays and numeric geometry keys are reused; unchanged native body
+membership arrays and numeric radii/densities are reused; unchanged native body
 motion avoids redundant handoffs. Exact Float32 comparisons preserve small real
 tool impulses, and pressure-limited readback forces a handoff on the next tick.
 Native solid-only bowls skip the duplicate legacy contact pass. Frozen-component
 scratch is retained per particle system, and WebGL uploads active instance ranges
 without new typed-array views or clears of unused phase targets.
+
+Slowly transported solid properties retain native contacts until radius drift
+exceeds 0.5% or density drift exceeds 1% of the actual fixture, with numerical
+floors of 0.00001 units and 0.0001 density respectively. The cache compares
+against fixture creation values, so drift cannot accumulate across ticks. The
+radius allowance is below 0.02 native display pixels. Any quantity change,
+membership change, crushing or phase handoff updates the collider immediately;
+the authoritative material, mass, colour and magical channels update every tick.
 
 `npm run benchmark:fluids -- --json` benchmarks the real vendored LiquidFun
 runtime in the same JavaScript realm as the adapter, with water, infusions, sand,

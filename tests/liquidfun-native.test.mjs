@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { liquidFunRuntime } from './helpers/liquidfun-runtime.mjs';
 import { LiquidFunFluid } from '../src/game/LiquidFunFluid.mjs';
+import { NATIVE_SOLID_SHAPE_TOLERANCE } from '../src/game/LiquidFunSolids.mjs';
 import { BrewingSession } from '../src/game/brewing.mjs';
 import { generateWorld } from '../src/game/world.mjs';
 import { simulateWitness } from '../src/game/orders.mjs';
@@ -64,6 +65,28 @@ test('native pours append only new liquid parcels and rebuild after membership r
     ps.setPhase(0,Phase.LIQUID);ps.boilingTemperature[0]=1.2;ps.temperature[0]=.33;
     b.step();assert.equal(nativeCount(backend),ps.count);
     b.clean();b.step();b.pour(1,3,{1:10});b.step();assert.equal(nativeCount(backend),6);
+  }finally{b.dispose();}
+});
+
+test('native collider drift is bounded against the fixture while quantity changes rebuild immediately',()=>{
+  const b=brew(),ps=b.engine.ps,backend=b.engine.liquidFun,solids=backend.solids;
+  try{
+    b.pour(11,1,{11:10});solids.synchronize(ps);solids.readback(ps,.025,b.engine.gravity,false);
+    const first=solids.bodies.get(-1),radius=first.radii[0],density=first.densities[0];
+    const original=ps.particleRadius[0];
+    ps.particleRadius[0]=original*(1+NATIVE_SOLID_SHAPE_TOLERANCE.radius*.8);
+    ps.density[0]=density*(1+NATIVE_SOLID_SHAPE_TOLERANCE.density*.8);
+    solids.synchronize(ps);assert.equal(solids.bodies.get(-1),first,'subpixel drift must retain native contacts');
+    ps.particleRadius[0]=original*(1+NATIVE_SOLID_SHAPE_TOLERANCE.radius*1.2);
+    solids.synchronize(ps);const resized=solids.bodies.get(-1);
+    assert.notEqual(resized,first,'drift is measured from the fixture, so gradual changes cannot accumulate without bound');
+    assert.ok(resized.radii[0]>radius);
+    solids.readback(ps,.025,b.engine.gravity,false);
+    ps.density[0]=resized.densities[0]*(1+NATIVE_SOLID_SHAPE_TOLERANCE.density*1.2);
+    solids.synchronize(ps);const denser=solids.bodies.get(-1);assert.notEqual(denser,resized);
+    solids.readback(ps,.025,b.engine.gravity,false);
+    ps.mass[0]*=.9999;solids.synchronize(ps);
+    assert.notEqual(solids.bodies.get(-1),denser,'even a tiny quantity change must shrink its collider immediately');
   }finally{b.dispose();}
 });
 
