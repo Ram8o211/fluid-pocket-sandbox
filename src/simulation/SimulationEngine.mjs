@@ -81,16 +81,16 @@ export class SimulationEngine{
       for(let i=0;i<this.ps.count;i++)if(this.ps.grainRest[i])this.ps.grainRest[i]=this.solid.settleGranularParticle(this.ps,this.grid,i,this.env,this.gravity,0,planar)?1:0;
       this.solid.grainCachePS=null;
     }
-    // LiquidFun replaces the liquid fluid-motion solve in the potion cauldron.
-    // Gas/granular mechanics and the subsequent thermal/chemical passes remain
-    // in the original typed arrays, preserving all nonphysical state.
-    this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider,Boolean(this.liquidFun),this.liquidFun?()=>this.liquidFun.step(this.ps,dt,this.gravity):null);
+    // The cauldron solves liquids and contacting solid bodies in one native
+    // world. Gas motion and thermal/chemical fields remain in the game arrays.
+    const nativeSolids=Boolean(this.liquidFun?.solids.supported);
+    this.fluid.step(this.ps,this.grid,this.gravity,this.env,this.rules,dt,fluidIterations,profile,this.boundaryCollider,Boolean(this.liquidFun),this.liquidFun?()=>this.liquidFun.step(this.ps,dt,this.gravity):null,nativeSolids);
     this.molds.collide(this.ps,planar);this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);
     if(this.rules.densityDrivenCondensation)updateGasDensity(this.ps,this.grid,this.rules,this.env);
     for(let i=0;i<this.ps.count;i++)applyBuoyancy(this.ps,i,this.gravity,this.env,dt);
     if(this.stepIndex%profile.thermalStride===0)updateThermal(this.ps,this.grid,this.rules,this.env,dt*profile.thermalStride);
     let changes=0,hasSolid=false;for(let i=0;i<this.ps.count;i++){const change=updatePhaseParticle(this.ps,i,dt,this.rules,this.env);if(change){changes++;if(change.from===Phase.SOLID&&change.to===Phase.LIQUID)this.solid.onMelt(this.ps,i);else if(change.to===Phase.SOLID){if(this.solid.compactFreezing&&change.from===Phase.LIQUID)this.ps.solidSubdivision[i]=0;this.solid.initializeParticle(this.ps,i,planar,this.grid);}}if(this.ps.phase[i]===Phase.SOLID)hasSolid=true;}
-    let positionsDirty=false;if(hasSolid){this.solid.step(this.ps,this.grid,this.env,this.gravity,dt);this.fluid.collideBox(this.ps,this.env.box,planar);positionsDirty=true;}if(this.molds.molds.length||this.molds.barriers.size){this.molds.collide(this.ps,planar);positionsDirty=true;}if(positionsDirty){this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);}
+    let positionsDirty=false;if(hasSolid&&!nativeSolids){this.solid.step(this.ps,this.grid,this.env,this.gravity,dt);this.fluid.collideBox(this.ps,this.env.box,planar);positionsDirty=true;}if(this.molds.molds.length||this.molds.barriers.size){this.molds.collide(this.ps,planar);positionsDirty=true;}if(positionsDirty){this.boundaryCollider?.();this.grid.rebuild(this.ps,this.env.box);}
     if(this.stepIndex%profile.electricalStride===0)updateElectrical(this.ps,this.grid,this.rules,dt*profile.electricalStride);
     const reactionOffset=this.env.mobileContactBudget&&profile.reactionStride>1?Math.floor(profile.reactionStride/2):0;
     if(this.stepIndex%profile.reactionStride===reactionOffset)this.reactions.step(this.ps,this.grid,this.rules,dt*profile.reactionStride,(ps,i,j,a,b)=>this.resolveFusion(ps,i,j,a,b));else this.reactions.clearFrame();

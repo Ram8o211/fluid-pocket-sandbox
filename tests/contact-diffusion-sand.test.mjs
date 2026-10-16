@@ -20,6 +20,21 @@ const rules={...DEFAULT_RULES,interactionRadiusScale:.5,canonicalizationDistance
 const near=(a,b,eps=.00001)=>assert.ok(Math.abs(a-b)<eps,`${a} != ${b}`);
 const transport=()=>{const reactions=new ReactionEngine();reactions.mixtures=new MixtureSolver();return reactions;};
 
+test('stirred powder exchanges solvent at the real native fluid contact radius',()=>{
+  const ps=new ParticleSystem(2),grid=new SpatialGrid(2),reactions=transport();
+  grid.setDimensionMode('2D');ps.packingScale=.6;ps.volumePacking=true;ps.nativeLiquidRadius=.055;
+  ps.add({x:0,y:0,z:0,mass:.5},material(1,'#0000ff'),Phase.LIQUID);
+  ps.add({x:.135,y:0,z:0,mass:.5},material(2,'#ff0000',{meltingTemperature:.7}),Phase.SOLID);
+  ps.stirActivity[0]=ps.stirActivity[1]=1;
+  grid.rebuild(ps,{width:5,height:5,depth:3});
+  reactions.step(ps,grid,rules,.025);
+  assert.ok(ps.powderContent[1]<1,'native contact must hydrate touched powder');
+  assert.ok(ps.r[0]>0,'native contact must transfer pigment into its solvent');
+  const after=[...ps.r];ps.x[1]=.3;grid.rebuild(ps,{width:5,height:5,depth:3});
+  reactions.step(ps,grid,rules,.025);
+  assert.deepEqual([...ps.r],after,'separated ingredients must still stop exchanging');
+});
+
 test('pigment advances one touching neighbourhood per tick, then stops when contacts separate',()=>{
   const ps=new ParticleSystem(4),grid=new SpatialGrid(4),reactions=transport();grid.setDimensionMode('2D');
   for(let i=0;i<4;i++)ps.add({x:i*.09,y:0,z:0,mass:.25},material(i?2:1,i?'#0000ff':'#ff0000'));

@@ -1,6 +1,6 @@
 import { PlanarRenderer } from '../rendering/PlanarRenderer.mjs';
 import { Phase } from '../simulation/Phase.mjs';
-import { workshopBackground, magicGlowSprite } from './art.mjs';
+import { workshopBackground, magicGlowSprite, solidIngredientCanvas } from './art.mjs';
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
 import { mixedMagicGlow, particleMagicAuras, paintParticleMagicLights } from './magicLight.mjs';
@@ -87,6 +87,7 @@ export class LaboratoryRenderer extends PlanarRenderer {
     ctx.restore();
     ctx.save(); traceCauldron(ctx, t); ctx.clip();
     this.drawFluid(ctx, t);
+    this.drawIntactIngredients(ctx, t);
     this.drawMagicGlows(ctx, t);
     this.drawEffects(ctx, t); ctx.restore(); ctx.globalAlpha = 1;
     ctx.save(); ctx.scale(factor, factor);
@@ -199,9 +200,10 @@ export class LaboratoryRenderer extends PlanarRenderer {
   }
   drawFluid(ctx, t) {
     const ps = this.sim.ps;
+    this.rawSolids = new Map(this.brew.ingredients.filter(i => i.form && !['liquid', 'water', 'powder'].includes(i.form)).map(i => [i.id, i]));
     this.magicAuras = particleMagicAuras(ps, this.sim.reactions?.mixtures);
     if (this.fluidGPU?.render(ps, t, this.materialColor, this.colorScratch,
-        this.magicAuras, this.graphics?.effectsScale ?? 1, this.quality === 'eco' ? 20 : 40)) {
+        this.magicAuras, this.graphics?.effectsScale ?? 1, this.quality === 'eco' ? 20 : 40, this.rawSolids)) {
       this.drawCount = ps.count;
       this.glowingParticleCount = this.fluidGPU.stats.glowingParticles;
       this.materialBackend = 'webgl2';
@@ -218,13 +220,32 @@ export class LaboratoryRenderer extends PlanarRenderer {
       this.matterPixels = this.matterContext.createImageData(t.w, t.h);
     }
     this.drawCount = paintMaterialParticles(ps, t, this.matterPixels.data,
-      this.materialColor, this.colorScratch);
+      this.materialColor, this.colorScratch, this.rawSolids);
     // The broad animated halos remain sampled for speed; this raster pass
     // lights every actual particle with its live (or homogeneous) mixture magic.
     this.glowingParticleCount = paintParticleMagicLights(ps, t, this.matterPixels.data,
       this.magicAuras, this.graphics?.effectsScale ?? 1);
     this.matterContext.putImageData(this.matterPixels, 0, 0);
     ctx.globalAlpha = 1; ctx.drawImage(this.matterLayer, 0, 0);
+  }
+  drawIntactIngredients(ctx, t) {
+    const ps = this.sim.ps, groups = new Map();
+    for (let i = 0; i < ps.count; i++) {
+      if (ps.phase[i] !== Phase.SOLID || ps.solidSubdivision[i] >= .55 || !this.rawSolids.has(ps.materialId[i])) continue;
+      const key = `${ps.materialId[i]}:${ps.solidBodyId[i] || -i - 1}`;
+      if (!groups.has(key)) groups.set(key, { ingredient: this.rawSolids.get(ps.materialId[i]), minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+      const group = groups.get(key), radius = effectiveParticleRadius(ps, i, true);
+      group.minX = Math.min(group.minX, ps.x[i] - radius); group.maxX = Math.max(group.maxX, ps.x[i] + radius);
+      group.minY = Math.min(group.minY, ps.y[i] - radius); group.maxY = Math.max(group.maxY, ps.y[i] + radius);
+    }
+    ctx.imageSmoothingEnabled = false;
+    for (const group of groups.values()) {
+      const x = Math.round(t.cx + group.minX * t.scale), y = Math.round(t.cy - group.maxY * t.scale);
+      const width = Math.max(1, Math.round((group.maxX - group.minX) * t.scale));
+      const height = Math.max(1, Math.round((group.maxY - group.minY) * t.scale));
+      ctx.drawImage(solidIngredientCanvas(group.ingredient), x, y, width, height);
+    }
+    this.intactIngredientCount = groups.size;
   }
   dispose() {
     this.fluidGPU?.dispose();

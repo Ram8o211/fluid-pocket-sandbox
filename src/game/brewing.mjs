@@ -24,7 +24,7 @@ export class BrewingSession {
     this.engine = new SimulationEngine(PARTICLE_CAPACITY);
     // The browser loads Google's unmodified official LiquidFun runtime before
     // this module. Node/unit-only environments retain the old fallback engine.
-    // LiquidFun only integrates LIQUID motion, never magical or thermal fields.
+    // Native contacts integrate liquids and solids, never magic or heat fields.
     if (typeof globalThis.b2World === 'function') {
       this.engine.liquidFun = new LiquidFunFluid();
       if (typeof document !== 'undefined') document.body.dataset.physicsEngine = 'liquidfun';

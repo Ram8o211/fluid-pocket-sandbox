@@ -1,4 +1,5 @@
 import { mulberry32 } from '../materials/MaterialGenerator.mjs';
+import { paintSolidIngredient } from './SolidIngredientArt.mjs';
 
 // All artwork is original: small, reusable pixel sprites and a seeded workshop.
 // No external fonts, stock images, emoji, downloads or runtime art dependencies.
@@ -40,44 +41,26 @@ export function ingredientSprite(ingredient) {
   }
   if (form === 'water' || form === 'liquid') return bottleSprite(colour, style);
   if (form === 'powder') return powderSprite(colour, style);
-  const key = `ingredient:${form}:${colour}:${style}`; if (cache.has(key)) return cache.get(key);
-  const canvas = surface(24, 32), ctx = canvas.getContext('2d');
-  const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
-  // A small grounding shadow makes loose plants and minerals feel substantial.
-  rect(4, 29, 16, 2, '#2d2837');
-  if (form === 'stone') {
-    rect(6, 11, 12, 3, '#302b3f'); rect(3, 14, 18, 12, '#302b3f'); rect(6, 26, 13, 3, '#302b3f');
-    rect(7, 13, 9, 3, colour); rect(5, 16, 14, 9, colour); rect(7, 25, 10, 2, colour);
-    rect(7, 14, 8, 2, '#e1d5c1'); rect(5, 16, 2, 5, '#e1d5c1');
-    rect(14, 20, 5, 5, '#687080'); rect(11, 24, 6, 2, '#687080');
-    if (style % 2) { rect(12, 17, 2, 5, '#e3c58a'); rect(10, 19, 6, 2, '#e3c58a'); }
-    else { rect(9, 18, 2, 2, '#41364c'); rect(15, 16, 2, 2, '#41364c'); }
-  } else if (form === 'mushroom') {
-    rect(10, 17, 5, 11, '#332c3c'); rect(11, 19, 3, 8, '#dfc5a1'); rect(13, 20, 2, 6, '#ae906e');
-    rect(7, 7, 10, 3, '#332c3c'); rect(4, 10, 16, 4, '#332c3c'); rect(2, 14, 20, 5, '#332c3c');
-    rect(8, 9, 8, 3, colour); rect(5, 12, 14, 4, colour); rect(4, 16, 16, 2, colour);
-    rect(4, 18, 16, 2, '#e6c4a0'); rect(7, 11, 3, 2, '#ffe2bd'); rect(15, 14, 3, 2, '#ffe2bd');
-    rect(10, 15, 2, 2, '#ffe2bd'); rect(8, 28, 9, 2, '#8b7754');
-  } else {
-    rect(11, 10, 3, 17, '#303e32'); rect(12, 11, 1, 15, '#a7b96e');
-    rect(3, 15, 8, 3, '#303e32'); rect(5, 18, 8, 3, '#303e32');
-    rect(14, 9, 7, 3, '#303e32'); rect(13, 12, 6, 3, '#303e32');
-    rect(4, 15, 7, 2, '#77a768'); rect(7, 18, 5, 2, '#77a768');
-    rect(14, 10, 6, 2, '#93bf72'); rect(13, 13, 4, 2, '#93bf72');
-    rect(10, 25, 5, 3, '#b89a6b'); rect(8, 28, 4, 2, '#b89a6b'); rect(15, 28, 3, 2, '#b89a6b');
-    const bloom = style % 3;
-    if (bloom === 0) {
-      rect(9, 3, 7, 8, '#303e32'); rect(7, 5, 11, 4, '#303e32');
-      rect(10, 4, 5, 6, colour); rect(8, 6, 9, 2, colour); rect(11, 6, 3, 2, '#ffe3a0');
-    } else if (bloom === 1) {
-      rect(10, 3, 6, 7, '#303e32'); rect(11, 4, 4, 5, colour); rect(11, 3, 1, 2, '#d9e3b5');
-    } else {
-      rect(8, 6, 4, 4, colour); rect(14, 4, 4, 4, colour); rect(11, 10, 4, 3, colour);
-      rect(9, 6, 1, 1, '#f3d6b1'); rect(15, 4, 1, 1, '#f3d6b1');
-    }
+  const rawKey = `raw:${ingredient.appearance?.shape || form}:${colour}`;
+  if (!cache.has(rawKey)) {
+    const canvas = surface(24, 32), ctx = canvas.getContext('2d');
+    paintSolidIngredient(ctx, ingredient, 0, 5, 24);
+    cache.set(rawKey, canvas.toDataURL());
   }
-  const url = canvas.toDataURL(); cache.set(key, url); return url;
+  return cache.get(rawKey);
 }
+
+/** Cached source canvas for crisp intact-ingredient rendering in the vessel. */
+export function solidIngredientCanvas(ingredient) {
+  const key = `rawCanvas:${ingredient.appearance?.shape || ingredient.form}:${ingredient.material.color}`;
+  if (!cache.has(key)) {
+    const canvas = surface(16, 16);
+    paintSolidIngredient(canvas.getContext('2d'), ingredient, 0, 0, 16);
+    cache.set(key, canvas);
+  }
+  return cache.get(key);
+}
+
 export function bottleSprite(colour = '#74d7c9', style = 0) {
   const key = `bottle:${colour}:${style}`; if (cache.has(key)) return cache.get(key);
   const canvas = surface(24, 32), ctx = canvas.getContext('2d');
