@@ -32,6 +32,9 @@ export class BrewingSession {
     }
     this.engine.ps.packingScale = .6;
     this.engine.ps.volumePacking = true;
+    // Match broad-phase buckets to the compact cauldron's contact lengths.
+    // The sandbox retains its larger 3D cells and all query radii stay intact.
+    this.engine.grid.cellSize = .18;
     this.engine.setDimensionMode('2D'); this.engine.resizeBox(5.6, 3.2, 3);
     this.engine.env.environmentDensity = ROOM_DENSITY;
     this.engine.env.gasBuoyancyUsesMaterialDensity = true;

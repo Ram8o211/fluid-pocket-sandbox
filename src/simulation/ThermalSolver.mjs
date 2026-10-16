@@ -32,11 +32,11 @@ export function updateThermal(ps,grid,rules,env,dt){
   delta.fill(0, 0, count); weight.fill(0, 0, count);
   for(let i=0;i<count;i++)capacity[i]=Math.max(.00001,heatCapacity[i]*mass[i]);
   let edges = 0;
-  const x=ps.x,y=ps.y,z=ps.z,radius=.55*clamp(rules.interactionRadiusScale??1,.4,1)*(ps.packingScale??1),r2=radius*radius;
+  const radius=.55*clamp(rules.interactionRadiusScale??1,.4,1)*(ps.packingScale??1),r2=radius*radius;
   // Read one temperature field for both passes. A neighbour's newly received
   // heat is available on the next thermal tick, independent of grid ordering.
-  grid.forEachPair(ps,radius,(i,j)=>{
-    const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i];if(dx*dx+dy*dy+dz*dz>r2)return;
+  grid.forEachPair(ps,radius,(i,j,dx=ps.x[j]-ps.x[i],dy=ps.y[j]-ps.y[i],dz=ps.z[j]-ps.z[i],d2=dx*dx+dy*dy+dz*dz)=>{
+    if(d2>r2)return;
     // Slow only the near-freezing liquid/ice interface. Ordinary cooling and
     // vapour condensation retain their rates and existing arcane timing.
     const nearFreezing=(rules.freezingDiffusionScale??1)<1&&phase[i]!==Phase.GAS&&phase[j]!==Phase.GAS&&Math.max(temp[i],temp[j])<Math.max(ps.meltingTemperature?.[i]??0,ps.meltingTemperature?.[j]??0)+.025;

@@ -1,11 +1,17 @@
 import { Phase } from './Phase.mjs';
 
+const workspaces = new WeakMap();
+
 // Freezing is a change of *bulk* mechanics, not the emission of individual ice
 // grains. Keep the liquid solver in charge while the connected cold region
 // crystallizes optically, then transfer its actual, current silhouette to one
 // coherent rigid body in a single handoff. Separate droplets stay separate.
 export function freezeConnectedLiquids(ps, grid, solid, planar = false) {
-  const parent = new Int32Array(ps.count).fill(-1);
+  let parent = workspaces.get(ps);
+  if (!parent || parent.length < ps.capacity) {
+    parent = new Int32Array(ps.capacity); workspaces.set(ps, parent);
+  }
+  parent.fill(-1, 0, ps.count);
   let candidates = 0;
   for (let i = 0; i < ps.count; i++) {
     if (ps.phase[i] !== Phase.LIQUID || ps.phaseTarget[i] !== Phase.SOLID ||

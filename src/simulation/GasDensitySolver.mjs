@@ -18,10 +18,8 @@ export function updateGasDensity(ps, grid, rules, env) {
   // the wider neighbour reach needed by the larger LiquidFun liquid parcels.
   const radius = .48 * clamp(rules.gasInteractionRadiusScale ?? rules.interactionRadiusScale ?? 1, .4, 1), r2 = radius * radius;
   const planar = env.dimensionMode === '2D';
-  grid.forEachPair(ps, radius, (i, j) => {
+  grid.forEachPair(ps, radius, (i, j, dx=ps.x[j]-ps.x[i], dy=ps.y[j]-ps.y[i], dz=planar?0:ps.z[j]-ps.z[i], d2=dx*dx+dy*dy+dz*dz) => {
     if (ps.phase[i] !== Phase.GAS || ps.phase[j] !== Phase.GAS) return;
-    const dx = ps.x[j] - ps.x[i], dy = ps.y[j] - ps.y[i], dz = planar ? 0 : ps.z[j] - ps.z[i];
-    const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 >= r2) return;
     const weight = 1 - Math.sqrt(d2) / radius;
     mass[i] += ps.mass[j] * weight; mass[j] += ps.mass[i] * weight;

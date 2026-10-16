@@ -44,3 +44,38 @@ are runner measurements rather than guarantees of Android FPS. Browser acceptanc
 covers both graphics modes, real gestures, two complete sales, phase transitions,
 raw grinding, stirring-only liquid dough, experiment dosing, resource depletion,
 separate infinite sandbox saves and restoration under a GitHub Pages project path.
+
+The cauldron now uses 0.18-unit broad-phase cells to match its compact contact
+lengths. Spatial queries cache their forward cell stencil and pass live pair
+geometry directly to the fluid, heat, gas-density and reaction solvers. Search
+radii, pair-stride schedules, full contact coverage and the sandbox's larger 3D
+cells remain unchanged. Uniform, single-source batches with no mixing history
+skip chemistry contact scans after source accounting; field, group or hydration
+differences wake transport on the next scheduled chemistry tick.
+
+LiquidFun appends a pure pour's new particle tail without rebuilding the pool.
+Removal, reordered membership and phase substitutions still rebuild the mapping,
+and real native buffer lengths are checked before and after stepping. Solid
+membership arrays and numeric radii/densities are reused; unchanged native body
+motion avoids redundant handoffs. Exact Float32 comparisons preserve small real
+tool impulses, and pressure-limited readback forces a handoff on the next tick.
+Native solid-only bowls skip the duplicate legacy contact pass. Frozen-component
+scratch is retained per particle system, and WebGL uploads active instance ranges
+without new typed-array views or clears of unused phase targets.
+
+Slowly transported solid properties retain native contacts until radius drift
+exceeds 0.5% or density drift exceeds 1% of the actual fixture, with numerical
+floors of 0.00001 units and 0.0001 density respectively. The cache compares
+against fixture creation values, so drift cannot accumulate across ticks. The
+radius allowance is below 0.02 native display pixels. Any quantity change,
+membership change, crushing or phase handoff updates the collider immediately;
+the authoritative material, mass, colour and magical channels update every tick.
+
+`npm run benchmark:fluids -- --json` benchmarks the real vendored LiquidFun
+runtime in the same JavaScript realm as the adapter, with water, infusions, sand,
+dough, ice, vapour and a moving continuous pour at 120/440 ml. It warms each
+scenario, reports median/p95 CPU step times, and checks finite motion and mass.
+Pouring also reports native rebuilds/appends and the actual emitted quantity.
+Use `--fallback` for the JavaScript engine or `--case=Pouring` for one scenario.
+Compare revisions sequentially on the same idle runner; these are CPU timings,
+not a device FPS guarantee or GPU execution measurement.

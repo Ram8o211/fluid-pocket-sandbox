@@ -50,8 +50,11 @@ export class LiquidFunFluid {
     this.system = this.world.CreateParticleSystem(this.definition);
     this.solids = new LiquidFunSolids(runtime, this.world);
     this.indices = [];
+    this.nextIndices = [];
+    this.gravityVector = new runtime.b2Vec2();
     this.frames = 0;
     this.rebuilds = 0;
+    this.appends = 0;
     this.disposed = false;
     this.lastPhases = new Int8Array(0); this.phaseRelaxation = 0;
   }
@@ -93,20 +96,33 @@ export class LiquidFunFluid {
    * The material/magic arrays are never copied into LiquidFun or destroyed.
    */
   synchronize(ps) {
-    const indices = [];
-    for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.LIQUID) indices.push(i);
-    const old = this.indices;
-    const changed = old.length !== indices.length || indices.some((i, n) => i !== old[n]);
+    const indices = this.nextIndices, old = this.indices;
+    indices.length = 0;
+    let changed = false;
+    for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.LIQUID) {
+      if (old[indices.length] !== i) changed = true;
+      indices.push(i);
+    }
+    changed ||= old.length !== indices.length;
     if (!changed) return;
-    this.world.DestroyParticleSystem(this.system);
-    this.system = this.world.CreateParticleSystem(this.definition);
-    // The upstream self-contained testbed API omits SetMaxParticleCount;
-    // allocation still grows dynamically when this helper is absent.
-    if (typeof this.system.SetMaxParticleCount === 'function')
-      this.system.SetMaxParticleCount(ps.capacity);
-    this.allocate(indices.length);
+    if (old.length && indices.length > old.length && old.every((i, n) => indices[n] === i)) {
+      // Held pouring appends parcels without changing any existing index.
+      // Preserve native pressure/contact history and allocate only the stream's
+      // new tail. Removals, packing changes and phase swaps still rebuild.
+      this.allocate(indices.length - old.length);
+      this.appends++;
+    } else {
+      this.world.DestroyParticleSystem(this.system);
+      this.system = this.world.CreateParticleSystem(this.definition);
+      // The upstream self-contained testbed API omits SetMaxParticleCount;
+      // allocation still grows dynamically when this helper is absent.
+      if (typeof this.system.SetMaxParticleCount === 'function')
+        this.system.SetMaxParticleCount(ps.capacity);
+      this.allocate(indices.length);
+      this.rebuilds++;
+    }
     this.indices = indices;
-    this.rebuilds++;
+    this.nextIndices = old;
   }
   step(ps, dt, gravity) {
     if (this.disposed) throw new Error('LiquidFun session has been disposed.');
@@ -117,16 +133,19 @@ export class LiquidFunFluid {
     // A save may resume in the middle of pressure relaxation after a handoff.
     if (!this.frames && ps.count) this.phaseRelaxation = .8;
     if (this.lastPhases.length < ps.capacity) this.lastPhases = new Int8Array(ps.capacity).fill(-1);
+    let maxSpeed2 = 0;
     for (let i = 0; i < ps.count; i++) {
       if (this.lastPhases[i] >= 0 && this.lastPhases[i] !== ps.phase[i]) this.phaseRelaxation = .8;
       this.lastPhases[i] = ps.phase[i];
+      if (ps.phase[i] !== Phase.GAS) maxSpeed2 = Math.max(maxSpeed2, ps.vx[i] * ps.vx[i] + ps.vy[i] * ps.vy[i]);
     }
     this.lastPhases.fill(-1, ps.count);
     const relaxing = this.phaseRelaxation > 0;
     this.phaseRelaxation = Math.max(0, this.phaseRelaxation - dt);
     this.synchronize(ps);
     this.solids.synchronize(ps);
-    this.world.SetGravity(new this.r.b2Vec2(gravity.x, gravity.y));
+    this.gravityVector.x = gravity.x; this.gravityVector.y = gravity.y;
+    this.world.SetGravity(this.gravityVector);
     const indices = this.indices, count = indices.length;
     // A partial vial drains mass from every parcel without removing indices.
     // Native systems have one radius: scale it by mean parcel area so the
@@ -149,13 +168,10 @@ export class LiquidFunFluid {
     // The 40 Hz game/chemistry clock is too coarse for native pressure in a
     // full bowl. Integrate the SAME elapsed time in small native steps; fast
     // spoon strokes get extra CFL headroom without changing their impulse.
-    let maxSpeed = 0;
-    for (const i of indices) maxSpeed = Math.max(maxSpeed, Math.hypot(ps.vx[i], ps.vy[i]));
-    for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.SOLID)
-      maxSpeed = Math.max(maxSpeed, Math.hypot(ps.vx[i], ps.vy[i]));
+    const maxSpeed = Math.sqrt(maxSpeed2);
     this.substeps = Math.min(4, Math.max(1, Math.ceil(dt * 80 - 1e-8),
       Math.ceil(maxSpeed * dt / Math.max(.001, radius * 1.5))));
-    for (let substep = 0; substep < this.substeps; substep++)
+    for (let substep = 0; (count || this.solids.bodies.size) && substep < this.substeps; substep++)
       this.world.Step(dt / this.substeps, 6, 3);
     let limited = this.solids.readback(ps, dt, gravity, relaxing);
     ({ position, velocity } = this.buffers(count));
@@ -182,6 +198,7 @@ export class LiquidFunFluid {
     this.solids.reset();
     if (this.particlesPS) this.particlesPS.nativeLiquidRadius = 0;
     this.indices.length = 0;
+    this.nextIndices.length = 0;
     this.world.DestroyParticleSystem(this.system);
     this.system = this.world.CreateParticleSystem(this.definition);
     this.frames = 0;
@@ -198,6 +215,7 @@ export class LiquidFunFluid {
     } else this.world.DestroyParticleSystem(this.system);
     if (this.r.world === this.world) this.r.world = null;
     this.indices.length = 0;
+    this.nextIndices.length = 0;
     if (this.particlesPS) this.particlesPS.nativeLiquidRadius = 0;
     this.disposed = true;
   }
