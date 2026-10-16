@@ -46,6 +46,51 @@ test('fast spoon drag catches particles along the whole travelled path only once
     'stationary movement must not cause additional impulses');
 });
 
+test('a pestle press displaces nearby liquid and vapour without changing mass or teleporting parcels', () => {
+  const b=make(),ps=b.engine.ps;
+  const center=add(b,0,0),vapor=add(b,.1,.1,Phase.GAS),far=add(b,1.1,0);
+  const mass=ps.totalMass(),x=ps.x[center],y=ps.y[center];
+  const contact=b.movePestle({x:0,y:0});
+  assert.equal(contact.crushed,0);
+  assert.equal(contact.displaced,2);
+  assert.ok(ps.vy[center]<-.3,'a downward press must move the liquid on its first event');
+  assert.ok(Math.hypot(ps.vx[vapor],ps.vy[vapor])>.1,'nearby vapour must respond');
+  assert.equal(ps.vx[far],0,'distant liquid should not feel the pestle');
+  assert.equal(ps.vx[center],0);
+  assert.equal(ps.x[center],x);assert.equal(ps.y[center],y);
+  assert.equal(ps.totalMass(),mass);
+});
+
+test('pestle sweep pushes liquids, vapour and loose powder and promptly reverses direction', () => {
+  const b=make(),ps=b.engine.ps;
+  const liquid=add(b,0,0),vapor=add(b,-.15,.06,Phase.GAS);
+  const powder=add(b,.15,.04,Phase.SOLID),intact=add(b,.3,0,Phase.SOLID);
+  const distant=add(b,1.3,0);
+  ps.solidSubdivision[powder]=1;ps.powderContent[powder]=1;
+  ps.solidSubdivision[intact]=0;
+  const mass=ps.totalMass();
+  const stroke=b.movePestle({x:.45,y:0},{x:-.45,y:0},.025);
+  assert.equal(stroke.crushed,1,'contact must still crush only the intersected solid');
+  assert.equal(ps.solidSubdivision[intact],1);
+  assert.equal(stroke.displaced,4);
+  for(const i of [liquid,vapor,powder,intact])assert.ok(ps.vx[i]>1, `pestle missed parcel ${i}`);
+  assert.equal(ps.vx[distant],0);
+  assert.ok(Math.hypot(ps.vx[liquid],ps.vy[liquid])<=6,'stroke must not explode the liquid');
+  b.movePestle({x:-.45,y:0},{x:.45,y:0},.025);
+  assert.ok(ps.vx[liquid]<0,'reversed tool must reverse liquid within a single event');
+  assert.equal(ps.totalMass(),mass);
+});
+
+test('manual spoon strokes react immediately while hold-assisted stirring remains gentle', () => {
+  const direct=make(),assisted=make(),i=add(direct,0,0),j=add(assisted,0,0);
+  direct.stir({x:0,y:0},{x:4,y:0},1/120);
+  assisted.stir({x:0,y:0},{x:4,y:0},1/120,undefined,.16);
+  assert.ok(direct.engine.ps.vx[i]>2.5,'spoon motion must transfer on first input');
+  assert.ok(assisted.engine.ps.vx[j]<.3,'automatic gentle stirring must not spike');
+  direct.stir({x:0,y:0},{x:-4,y:0},1/120);
+  assert.ok(direct.engine.ps.vx[i]<0,'manual reversal must take effect immediately');
+});
+
 test('freezing granular liquid makes one touching coherent solid without coarse lattice gaps', () => {
   const b=make(),e=b.engine,ps=e.ps;e.gravity={x:0,y:0,z:0};e.env.ambientThermalExchange=0;
   for(let i=0;i<8;i++)add(b,(i%4)*.11,Math.floor(i/4)*.11,Phase.LIQUID,.15);
