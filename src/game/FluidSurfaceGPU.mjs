@@ -207,8 +207,13 @@ export class FluidSurfaceGPU {
       if (light > .0001) this.stats.glowingParticles++;
       // A transitioning parcel contributes to both fields with complementary
       // weights. No trails, duplicate mass or abrupt opaque steam discs.
+      // Ice formed from liquid uses the same contiguous density surface on
+      // WebGL as on canvas; only powders and intact ingredients keep grit.
+      const cohesiveFrozen = ps.frozenRadius?.[i] > 0 ||
+        (ps.phase[i] === Phase.LIQUID && ps.phaseTarget[i] === Phase.SOLID);
       for (let phase = 0; phase < 3; phase++) {
-        const weight = phase === 0 ? appearance.liquid : phase === 1 ? appearance.gas : appearance.solid;
+        const weight = phase === 0 ? appearance.liquid + (cohesiveFrozen ? appearance.solid : 0) :
+          phase === 1 ? appearance.gas : (cohesiveFrozen ? 0 : appearance.solid);
         if (weight <= 0) continue;
         const group = this.groups[phase], n = group.count++ * STRIDE, data = group.data;
         data[n] = this.width / 2 + ps.x[i] * scale;

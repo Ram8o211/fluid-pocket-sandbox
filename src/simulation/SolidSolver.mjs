@@ -16,7 +16,7 @@ export class SolidSolver{
     this.grainCachePS=ps;
   }
   reset(){this.nextBodyId=1;this.bodyOrigins.clear();}
-  onMelt(ps,i){ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
+  onMelt(ps,i){ps.frozenRadius[i]=0;ps.solidSubdivision[i]=Math.min(ps.solidSubdivision[i],.08);ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;}
   initializeParticle(ps,i,planar=false,grid=null){
     if(ps.phase[i]!==Phase.SOLID)return 0;
     if(ps.solidSubdivision[i]>=.55){ps.solidBodyId[i]=0;ps.solidLocalX[i]=ps.solidLocalY[i]=ps.solidLocalZ[i]=0;return 0;}

@@ -14,7 +14,7 @@ import { EFFECT_PROPERTIES } from './effects.mjs';
 import { capturePotionContents, restorePotionContents } from './potionTransfer.mjs';
 
 const HISTORY = () => ({ elapsed: 0, heatEnergy: 0, coldEnergy: 0, lidCoolingEnergy: 0, condensed: 0, activation: 0, stirred: 0, peakTemperature: ROOM_TEMPERATURE, reactions: 0, evaporated: 0, discarded: 0 });
-const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'phaseTarget', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
+const SAVE_FIELDS = ['arcaneThreshold', 'magicDecayTemperature', 'arcaneCharge', 'arcaneConverted', 'x', 'y', 'vx', 'vy', 'mass', 'temperature', 'density', 'baseDensity', 'phase', 'phaseProgress', 'phaseTarget', 'r', 'g', 'b', 'opacity', 'viscosity', 'cohesion', 'miscibility', 'particleRadius', 'incompressible', 'heatCapacity', 'thermalConductivity', 'meltingTemperature', 'boilingTemperature', 'phaseHysteresis', 'volatility', 'reactionPotential', 'reactionHeat', 'compressibility', 'crystallinity', 'solidSubdivision', 'frozenRadius', 'solidBodyId', 'solidLocalX', 'solidLocalY', 'solidLocalZ', 'electricalConductivity', 'electricPotential', 'combustionTemperature', 'combustionProgress', 'materialId', 'age', 'localGasDensity', 'mixtureGroup', 'mixtureProgress', 'mixtureAmount', 'powderContent', 'dissolutionProgress', 'solventMeltingTemperature', ...EFFECT_PROPERTIES];
 
 /** Sole writer between game actions and the simulation. Renderers may read engine
  * buffers. UI handlers call this adapter, never write particle arrays themselves. */
@@ -333,6 +333,7 @@ export class BrewingSession {
       const values = saved.particles[key];
       if (values === undefined && key === 'phaseTarget') { ps.phaseTarget.fill(-1); continue; }
       if (values === undefined && ['arcaneThreshold','magicDecayTemperature','arcaneCharge','arcaneConverted'].includes(key)) { ps[key].fill(key === 'arcaneThreshold' ? 8 : key === 'magicDecayTemperature' ? 1.4 : 0); continue; }
+      if (values === undefined && ['frozenRadius','solidBodyId','solidLocalX','solidLocalY','solidLocalZ'].includes(key)) { ps[key].fill(0); continue; }
       if (values === undefined && key === 'solventMeltingTemperature') { ps[key].set(ps.meltingTemperature); continue; }
       if (values === undefined && (EFFECT_PROPERTIES.includes(key) || key === 'mixtureGroup' || key === 'mixtureProgress' || key === 'mixtureAmount' || key === 'powderContent' || key === 'dissolutionProgress')) { ps[key].fill(0); continue; }
       if (!Array.isArray(values) || values.length !== saved.count || values.some(v => !Number.isFinite(v))) throw new Error('Invalid saved particle data.');
@@ -388,7 +389,15 @@ export class BrewingSession {
     }
     // Reconstruct rigid body membership if a save contained frozen liquid.
     this.engine.grid.rebuild(ps, this.engine.env.box);
-    for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.SOLID) this.engine.solid.initializeParticle(ps, i, true, this.engine.grid);
+    this.engine.solid.reset();
+    for (let i = 0; i < ps.count; i++) if (ps.phase[i] === Phase.SOLID) {
+      const id = ps.solidBodyId[i];
+      if (id > 0) {
+        this.engine.solid.nextBodyId = Math.max(this.engine.solid.nextBodyId, id + 1);
+        if (!this.engine.solid.bodyOrigins.has(id)) this.engine.solid.bodyOrigins.set(id, {
+          x: ps.x[i] - ps.solidLocalX[i], y: ps.y[i] - ps.solidLocalY[i], z: 0 });
+      } else this.engine.solid.initializeParticle(ps, i, true, this.engine.grid);
+    }
   }
   refineLegacyParticles() {
     const ps = this.engine.ps, count = ps.count;

@@ -20,6 +20,48 @@ function nativeCount(backend) {
   return runtime.Module._b2ParticleSystem_GetParticleCount(backend.system.ptr);
 }
 
+test('a freezing pool retains a rigid silhouette while falling and after saving', () => {
+  const b = brew();
+  try {
+    b.pour(1, 30, { 1: 50 });
+    for (let step = 0; step < 200; step++) b.step();
+    const e = b.engine, ps = e.ps;
+    e.env.ambientThermalExchange = 0; e.rules.thermalDiffusionRate = 0;
+    for (let i = 0; i < ps.count; i++) {
+      ps.meltingTemperature[i] = .2; ps.phaseHysteresis[i] = .01;
+      ps.volatility[i] = .6; ps.temperature[i] = .05;
+    }
+    let switched = false;
+    for (let tick = 0; tick < 160; tick++) {
+      e.step(.025);
+      if (ps.phaseCounts()[Phase.SOLID] === ps.count) { switched = true; break; }
+    }
+    assert.ok(switched, 'connected liquid must eventually freeze');
+    const id = ps.solidBodyId[0];
+    assert.ok(id > 0 && ps.solidBodyId.subarray(0, ps.count).every(body => body === id));
+    const before = [[0, 7], [5, 30], [12, ps.count - 1]].map(([i, j]) =>
+      [ps.x[i] - ps.x[j], ps.y[i] - ps.y[j]]);
+    const amount = ps.totalMass();
+    let peak = 0;
+    for (let tick = 0; tick < 90; tick++) {
+      e.step(.025);
+      peak = Math.max(peak, ...Array.from({ length: ps.count }, (_, i) => Math.hypot(ps.vx[i], ps.vy[i])));
+      assert.equal(e.liquidFun.solids.bodies.size, 1, 'ice must use a single native compound fixture group');
+    }
+    for (let p = 0; p < before.length; p++) {
+      const [i, j] = [[0, 7], [5, 30], [12, ps.count - 1]][p];
+      assert.ok(Math.abs((ps.x[i] - ps.x[j]) - before[p][0]) < .003);
+      assert.ok(Math.abs((ps.y[i] - ps.y[j]) - before[p][1]) < .003);
+    }
+    assert.ok(peak < 4.8, 'a solid block must not explode across the vessel');
+    assert.equal(ps.totalMass(), amount);
+    const saved = b.snapshot();
+    b.restore(saved); b.step();
+    assert.equal(b.engine.liquidFun.solids.bodies.size, 1, 'save/restore must retain one block');
+    assert.equal(b.engine.ps.solidBodyId[0], id);
+  } finally { b.dispose(); }
+});
+
 test('small and full bowls freeze, melt, boil and recondense without pressure bursts or recipe loss', () => {
   for (const volume of [80, 440]) {
     const b = brew(); b.equipment.cauldron = 2;
@@ -54,7 +96,16 @@ test('small and full bowls freeze, melt, boil and recondense without pressure bu
         }
         assert.ok(peak < 4.8, `${volume}ml ${name} generated a pressure burst at ${peak}`);
         assert.ok(jump < .23, `${volume}ml ${name} jumped ${jump} units in one tick`);
-        assert.ok(simultaneous < ps.count / 5, 'phase fronts must not switch the whole batch in one tick');
+        if (name !== 'freeze') assert.ok(simultaneous < ps.count / 5, 'nonfreezing phase fronts must stay progressive');
+        if (name === 'freeze') {
+          const sizes = new Map();
+          for (let i = 0; i < ps.count; i++) {
+            const id = ps.solidBodyId[i];
+            assert.ok(id > 0 && ps.frozenRadius[i] > 0, 'ice must belong to a coherent native body');
+            sizes.set(id, (sizes.get(id) || 0) + 1);
+          }
+          assert.ok(Math.max(...sizes.values()) >= ps.count * .8, 'a connected pool must freeze predominantly as one block');
+        }
         assert.equal(ps.phaseCounts()[phase], ps.count, `${volume}ml ${name} must finish`);
         assert.equal(ps.totalMass(), mass); assert.equal(b.occupiedVolume, volume);
       }
