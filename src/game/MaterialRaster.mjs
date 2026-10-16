@@ -117,6 +117,37 @@ function paintPhaseSurface(ps, t, pixels, particleColor, colorScratch, vapour = 
   }
 }
 
+// Cache disk scanlines by pixel diameter. A powder parcel keeps its original
+// coverage, but adjacent frames never repeat the per-texel circle test.
+const solidFootprints = new Map();
+function solidFootprint(diameter) {
+  const cached = solidFootprints.get(diameter);
+  if (cached) return cached;
+  const rows = [], center = Math.floor(diameter / 2);
+  const half = Math.max(1, diameter / 2), limit = half * half + .5;
+  for (let py = 0; py < diameter; py++) {
+    const dy = py - center, remaining = limit - (dy + .5) * (dy + .5);
+    if (remaining < 0) continue;
+    // Negative offsets are valid disk pixels; do not use -1 as the
+    // uninitialized sentinel (it clips the left edge of even-sized grains).
+    let left = null, right = 0;
+    for (let px = 0; px < diameter; px++) {
+      const dx = px - center + .5;
+      if (dx * dx > remaining) continue;
+      if (left === null) left = px - center;
+      right = px - center + 1;
+    }
+    if (left !== null) rows.push({ dy, left, right });
+  }
+  // Oversized solids are rare. Do not allow unbounded resolution-dependent
+  // footprint caching as the user changes graphics quality or device DPR.
+  if (diameter <= 64) {
+    if (solidFootprints.size >= 64) solidFootprints.clear();
+    solidFootprints.set(diameter, rows);
+  }
+  return rows;
+}
+
 /** Paint all matter into one reusable RGBA buffer. Texels are always one pixel;
  * physical footprints and mass are independent of the display resolution.
  * This avoids thousands of canvas calls and colour strings every frame. */
@@ -134,31 +165,39 @@ export function paintMaterialParticles(ps, t, pixels, particleColor, colorScratc
     const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
     const phase = ps.phase[i], dry = isPowder(ps, i) && ps.powderContent[i] > .85;
     const diameter = Math.max(1, Math.ceil(effectiveParticleRadius(ps, i, true) * t.scale * 2));
-    const variation = dry ? .13 : phase === Phase.SOLID ? .07 : .04;
-    const alpha = .99 * grainWeight;
-    const originY = y - Math.floor(diameter / 2), originX = x - Math.floor(diameter / 2);
-    const top = Math.max(0, originY), bottom = Math.min(t.h, originY + diameter);
-    const left = Math.max(0, originX), right = Math.min(t.w, originX + diameter);
-    for (let py = top; py < bottom; py++) for (let px = left; px < right; px++) {
-      const ox = px - x, oy = py - y;
-      const half = Math.max(1, diameter / 2);
-      if ((ox + .5) ** 2 + (oy + .5) ** 2 > half * half + .5) continue;
-      const hash = ((i * 67 + ox * 23 + oy * 41) >>> 0) % 11 - 5;
-      const shade = 1 + variation * hash / 5 - oy / half * .08;
-      const index = (py * t.w + px) * 4, oldAlpha = pixels[index + 3] / 255;
-      if(oldAlpha===0){pixels[index]=colorScratch.r*shade;pixels[index+1]=colorScratch.g*shade;pixels[index+2]=colorScratch.b*shade;pixels[index+3]=alpha*255;continue;}
-      const outAlpha = alpha + oldAlpha * (1 - alpha), oldWeight = oldAlpha * (1 - alpha);
-      pixels[index] = (colorScratch.r * shade * alpha + pixels[index] * oldWeight) / outAlpha;
-      pixels[index + 1] = (colorScratch.g * shade * alpha + pixels[index + 1] * oldWeight) / outAlpha;
-      pixels[index + 2] = (colorScratch.b * shade * alpha + pixels[index + 2] * oldWeight) / outAlpha;
-      pixels[index + 3] = outAlpha * 255;
+    const alpha = .99 * grainWeight, half = Math.max(1, diameter / 2);
+    // A tiny stable colour variation per grain reads as fine sand even in
+    // dense piles. Do not procedurally texture every individual powder texel.
+    const grainShade = .96 + (((Math.imul(i + 1, 2654435761) >>> 24) / 255) - .5) * .12;
+    const grainR = colorScratch.r * grainShade, grainG = colorScratch.g * grainShade, grainB = colorScratch.b * grainShade;
+    const variation = phase === Phase.SOLID ? .07 : .04;
+    for (const row of solidFootprint(diameter)) {
+      const py = y + row.dy;
+      if (py < 0 || py >= t.h) continue;
+      const left = Math.max(0, x + row.left), right = Math.min(t.w, x + row.right);
+      const rowShade = 1 - row.dy / half * .08;
+      for (let px = left; px < right; px++) {
+        // Wet/coherent solids retain their older texture; dry powders take
+        // the fast, flat-colour path instead of hashing each covered pixel.
+        const hash = dry ? 0 : ((i * 67 + (px - x) * 23 + row.dy * 41) >>> 0) % 11 - 5;
+        const shade = rowShade + variation * hash / 5;
+        const r = dry ? grainR : colorScratch.r * shade;
+        const g = dry ? grainG : colorScratch.g * shade;
+        const b = dry ? grainB : colorScratch.b * shade;
+        const index = (py * t.w + px) * 4, oldAlpha = pixels[index + 3] / 255;
+        if (oldAlpha === 0) {
+          pixels[index] = r; pixels[index + 1] = g; pixels[index + 2] = b; pixels[index + 3] = alpha * 255;
+          continue;
+        }
+        const oldWeight = oldAlpha * (1 - alpha), outAlpha = alpha + oldWeight;
+        pixels[index] = (r * alpha + pixels[index] * oldWeight) / outAlpha;
+        pixels[index + 1] = (g * alpha + pixels[index + 1] * oldWeight) / outAlpha;
+        pixels[index + 2] = (b * alpha + pixels[index + 2] * oldWeight) / outAlpha;
+        pixels[index + 3] = outAlpha * 255;
+      }
     }
-    // A single fine grit texel distinguishes touching grains without drawing
-    // a connected solid skin, artificial outlines or large holes in the pile.
-    if (dry && x >= 0 && x < t.w && y >= 0 && y < t.h) {
-      const index = (y * t.w + x) * 4;
-      pixels[index] *= .68; pixels[index + 1] *= .68; pixels[index + 2] *= .68;
-    }
+    // Grain boundaries remain visible through their individual physical
+    // silhouettes and tints, without a costly dark pixel on every grain.
   }
   paintPhaseSurface(ps, t, pixels, particleColor, colorScratch, true);
   return ps.count;

@@ -40,13 +40,17 @@ void main() {
     float iceShade = facet < 2.0 ? 1.08 : facet == 6.0 ? .94 : 1.0;
     out_color = vec4((v_color*(1.0+(iceShade-1.0)*v_grain.x) + v_light*.22)*weight, weight);
   } else {
-    float dry = step(2.5, v_grain.x);
-    float noise = fract(sin(dot(floor(v_local*3.0),vec2(23.0,41.0)) + v_grain.y)*67.0);
-    float shade = .94 + v_local.y*.08 + (noise-.5)*mix(.14,.26,dry);
-    // A dark centre texel keeps sand grainy even in a compact pile.
-    shade *= 1.0 - dry*.32*(1.0-step(.18, max(abs(v_local.x),abs(v_local.y))));
     float alpha = .99*v_grain.z;
-    out_color = vec4(clamp(v_color*shade + v_light*.22,0.0,1.0)*alpha, alpha);
+    if (v_grain.x > 2.5) {
+      // Stable per-grain tone: no trigonometric noise or centre mark per
+      // fragment. The physical circles still overlap and move individually.
+      float shade = .96 + (fract((v_grain.y+1.0)*.61803398875)-.5)*.12;
+      out_color = vec4(clamp(v_color*shade + v_light*.22,0.0,1.0)*alpha, alpha);
+    } else {
+      float noise = fract(sin(dot(floor(v_local*3.0),vec2(23.0,41.0)) + v_grain.y)*67.0);
+      float shade = .94 + v_local.y*.08 + (noise-.5)*.14;
+      out_color = vec4(clamp(v_color*shade + v_light*.22,0.0,1.0)*alpha, alpha);
+    }
   }
 }`;
 const SURFACE_VERTEX = `#version 300 es

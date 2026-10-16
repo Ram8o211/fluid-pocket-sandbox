@@ -238,7 +238,9 @@ test('all potion materials use fine pixel footprints at both graphics resolution
     for(let i=0;i<ps.count;i++){
       const x=Math.round(t.cx+ps.x[i]*scale),y=Math.round(t.cy-ps.y[i]*scale);
       assert.ok(pixels[(y*t.w+x)*4+3]>0,'the parcel centre must be drawn');
-      if(ps.phase[i]===Phase.SOLID) assert.notEqual(pixels[(y*t.w+x-1)*4],pixels[(y*t.w+x)*4], 'grit resolves individual one-pixel texels');
+      // Fine powder keeps a contiguous physical silhouette, but no longer
+      // pays for per-pixel procedural grit inside each tiny grain.
+      if(ps.phase[i]===Phase.SOLID) assert.ok(pixels[(y*t.w+x-1)*4+3]>0, 'the grain still covers adjacent pixel texels');
       if(ps.phase[i]===Phase.GAS) assert.ok(pixels[(y*t.w+x)*4+3]<180, 'the continuous vapour volume stays translucent');
     }
   }
