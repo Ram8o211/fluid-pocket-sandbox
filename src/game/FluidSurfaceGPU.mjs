@@ -71,7 +71,7 @@ void main() {
     // Optical depth joins overlapping steam parcels without an opaque gas skin.
     alpha = min(.76, 1.0-exp(-density*.28));
   } else {
-    alpha = clamp((density-${LIQUID_SURFACE.cutoff})/${LIQUID_SURFACE.edge},0.0,1.0);
+    alpha = ${LIQUID_SURFACE.opacity}*clamp((density-${LIQUID_SURFACE.cutoff})/${LIQUID_SURFACE.edge},0.0,1.0);
     float above = texture(u_field, uv+vec2(0,1.0/u_size.y)).a;
     float contour = 1.0-smoothstep(.35,.8,above);
     color *= .94 + clamp((density-above)*.16,0.0,.18)*contour;
