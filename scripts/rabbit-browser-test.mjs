@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { verifyRabbitEffectArtwork } from './rabbit-artwork-browser-check.mjs';
+import { verifyRabbitAnimation, verifyRabbitViewAnimation } from './rabbit-animation-browser-check.mjs';
 
 // The game uses system fonts. Generated SVG images can keep Chromium's
 // document-wide font readiness pending after the visible text has rendered.
@@ -40,7 +41,11 @@ async function administer(id, volume) {
   if (await button.isDisabled()) await tick(6500);
   assert.equal(await button.isDisabled(), false, `living ${id} can receive a dose`);
   const before = await readState();
-  await button.click(); await tick(1250);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await button.click();
+  // Inspect the 1.3-second replay at a fixed virtual instant. A busy CI worker
+  // must not use wall time to extinguish a short flame before this assertion.
+  await page.clock.fastForward(1250); await page.clock.runFor(50);
   const after = await readState();
   assert.equal(after.experiments.records.length, before.experiments.records.length + 1, 'one action records one dose');
   assert.equal(rabbit(after, id).stats.doseCount, rabbit(before, id).stats.doseCount + 1, 'the selected rabbit retains its dose history');
@@ -128,6 +133,7 @@ try {
   assert.equal(artwork.room, 858, 'the live comparison uses the supplied empty room');
   assert.match(artwork.frame, /card_selected\.png/, 'the selected card uses the gold artwork');
   await verifyRabbitEffectArtwork(page);
+  await verifyRabbitAnimation(page);
   assert.equal(await page.locator('[data-subject]').count(), 4, 'only individual rabbits are selectable');
   const firstId = initial.experiments.rabbits[0].id, secondId = initial.experiments.rabbits[1].id;
   await selectRabbit(firstId); await page.locator('[data-action="move-rabbit"]').click();
@@ -147,6 +153,7 @@ try {
   });
   assert.ok(expiryPaints > 0, 'the actual card repaints when the fire timer expires, without another dose or injury');
   assert.deepEqual(rabbit(await readState(), firstId).exposure, rabbit(once, firstId).exposure);
+  await verifyRabbitViewAnimation(page,firstId);
   const twice = await administer(firstId, 5);
   assert.ok(rabbit(twice, firstId).stats.muscleMass > rabbit(once, firstId).stats.muscleMass, 'muscle growth accumulates');
   assert.ok(rabbit(twice, firstId).stats.scorch > rabbit(once, firstId).stats.scorch, 'burned fur accumulates');

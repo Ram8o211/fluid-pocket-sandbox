@@ -1,6 +1,7 @@
 import { RABBIT_THRESHOLDS } from './rabbits.mjs';
 import { rabbitSprite, rabbitArtwork, rabbitArtworkVersion } from './RabbitAssets.mjs';
 import { rabbitAppearance } from './RabbitAppearance.mjs';
+import { drawRabbitArtwork } from './RabbitArtRenderer.mjs';
 
 const clamp = value => Math.max(0, Math.min(1, Number(value) || 0));
 // A perceptual curve makes the first dilute dose legible. Exposure, damage and
@@ -82,6 +83,7 @@ const sprites = new Map();
  * than hundreds of tiny canvas calls per animal on each phone display frame. */
 export function drawPixelRabbit(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   if (!ctx || !rabbit) return;
+  if (drawRabbitArtwork(ctx,rabbit,x,floor,size,time,options)) return;
   if (typeof OffscreenCanvas === 'undefined') return drawRabbitPixels(ctx, rabbit, x, floor, size, time, options);
   const now = options.now ?? Date.now(), frame = rabbit.stats?.alive === false || options.reference ? 0 : Math.floor(time / 180) % 24;
   const key = JSON.stringify([rabbitArtworkVersion(), rabbit.id, rabbit.age, rabbit.stats?.growth, rabbit.stats?.alive,

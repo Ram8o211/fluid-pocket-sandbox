@@ -533,10 +533,25 @@ function updateRabbitRoom() {
   $('remainsLoot').textContent=rabbit.remainsRecovered?'Ingredients recovered. The body is cleared; its trial history stays in the notebook.':`Recover once: ${loot.map(d=>`${d.quantity} ${reagents[d.ingredientId]}${d.ingredientId===18?' ml':' measures'}`).join(' · ')}. Grind bones before brewing.`;
   const recover=$('sheetContent').querySelector('[data-action="recover-rabbit"]');recover.disabled=rabbit.stats.alive||rabbit.remainsRecovered;recover.textContent=rabbit.remainsRecovered?'Already recovered':'Recover ingredients';
   for(const r of state.experiments.rabbits){const card=$('sheetContent').querySelector(`[data-subject="${r.id}"]`);if(card){card.querySelector('small').textContent=rabbitCondition(r);card.querySelector('span:nth-of-type(2)').textContent=`${r.age} · ${r.sex==='female'?'♀':'♂'} · ${r.location}`;card.classList.toggle('rabbit-dead',!r.stats.alive);
-    const portrait=card.querySelector('canvas'),signature=`${rabbitArtworkVersion()}:${r.age}:${r.stats.growth}:${r.stats.health}:${r.stats.alive}:${r.trials}:${Number(r.activeFireUntil)>Date.now()}:${Object.values(r.exposure).join(',')}`;
-    if(portrait.dataset.signature!==signature){const ctx=portrait.getContext('2d');ctx.clearRect(0,0,80,60);drawRabbit(ctx,r,40,57,48,0);portrait.dataset.signature=signature;}
   }}
+  paintRabbitPortraits(performance.now(),true);
   $('colonyJournal').innerHTML=(state.experiments.events||[]).slice(0,12).map(e=>`<li>${escape(e.message||e.text||e.description||e.type)}</li>`).join('')||'<li>The colony is quiet.</li>';
+}
+let lastRabbitPortraitPaint=-Infinity;
+function paintRabbitPortraits(time,force=false) {
+  if(currentRoom!=='experiments')return;
+  if(!force&&time-lastRabbitPortraitPaint<90)return;
+  lastRabbitPortraitPaint=time;
+  const paused=testingRenderer?.paused,clock=paused?testingRenderer.frozenAt:time;
+  const worldTime=paused?testingRenderer.pausedNow:Date.now();
+  const rack=$('rabbitSelector'),bounds=rack?.getBoundingClientRect();if(!bounds)return;
+  for(const r of state.experiments.rabbits){
+    const portrait=rack.querySelector(`[data-rabbit-portrait="${r.id}"]`);if(!portrait)continue;
+    const box=portrait.getBoundingClientRect();
+    if(box.right<bounds.left||box.left>bounds.right||box.bottom<0||box.top>innerHeight)continue;
+    const signature=`${rabbitArtworkVersion()}:${r.age}:${r.stats.growth}:${r.stats.health}:${r.stats.alive}:${r.trials}:${Number(r.activeFireUntil)>worldTime}:${Object.values(r.exposure).join(',')}:${r.stats.alive?Math.floor(clock/100):0}`;
+    if(portrait.dataset.signature!==signature){const ctx=portrait.getContext('2d');ctx.clearRect(0,0,80,60);drawRabbit(ctx,r,40,57,48,clock,{now:worldTime});portrait.dataset.signature=signature;}
+  }
 }
 function testPotion(subjectId) {
   advanceRabbits(state);
@@ -793,7 +808,7 @@ function loop(now) {
   } else accumulator = 0;
   if(currentRoom==='harvest'&&harvest){const phase=((now-harvest.start)/1500)%2;harvest.position=phase<1?phase:2-phase;$('harvestMarker').style.left=`${harvest.position*100}%`;}
   if(state&&inShop&&!document.hidden&&now-lastRabbitTick>1000){lastRabbitTick=now;const count=state.experiments.rabbits.length,events=advanceRabbits(state);if(events?.length){persist();if(currentRoom==='experiments'&&count!==state.experiments.rabbits.length)showExperiments();}updateRabbitRoom();if(now-lastAutosave>8000)persist();}
-  if(currentRoom==='experiments'&&testingRenderer&&!document.hidden){const subject=selectedRabbit(),report=visibleTrial(subject);testingRenderer.render(subject,report,now,showUntreated);colonyRenderer?.render(state.experiments,subject.id,now,cullMode,testingRenderer.paused);}
+  if(currentRoom==='experiments'&&testingRenderer&&!document.hidden){const subject=selectedRabbit(),report=visibleTrial(subject);testingRenderer.render(subject,report,now,showUntreated);colonyRenderer?.render(state.experiments,subject.id,now,cullMode,testingRenderer.paused);paintRabbitPortraits(now);}
   if(state&&inShop&&!isSandbox()&&now-lastClaims>1000){lastClaims=now;const before=JSON.stringify((state.complaints||[]).map(c=>c.status));const arrived=advanceComplaints(state);if(arrived.length||before!==JSON.stringify((state.complaints||[]).map(c=>c.status))){renderAll();persist();if(!$('sheet').open&&arrived.length)showReturns();else notify('A customer return has reached the counter.');}}
   if (inShop && renderer && !$('sheet').open && now - lastRender >= (renderer.quality === 'eco' ? 32 : 16)) { renderer.render(); lastRender = now; }
   if (inShop && now - lastHUD > 200) { updateHUD(); if (active) advanceTutorial(); lastHUD = now; }

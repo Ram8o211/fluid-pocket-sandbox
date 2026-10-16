@@ -27,11 +27,13 @@ resolve in `assessRabbitEffects` first.
 - Other body effects remain visible: secondary strength broadens the body and
   adds muscle texture; transformation adds pale mutation texture; acid adds
   lesions and green corrosion; fire adds burns and temporary flame decals.
-  These textures come from the supplied sprites and are clipped into the body
-  core; fire-colored pixels can extend outside it while burning. Additional whole
-  animals are never superimposed or silently discarded.
-- Poison and love use their supplied transparent layers in that order. Frost
-  and death retain their existing tint, ice and dark-aura rendering.
+  Surface changes shade the primary animal's own pixels through a feathered
+  torso mask. Heads, eyes, ears, feet and alpha silhouettes are protected; no
+  rectangular crop or pixels from another rabbit are pasted over its anatomy.
+  Secondary flames use only exterior fire-colored pieces of the supplied art.
+- Poison and love use their supplied transparent pieces in that order. Each
+  connected wisp, droplet or heart rises, sways and fades on a staggered loop.
+  Frost and death retain their tint with moving ice and dark-aura motes.
 - Hostile rabbits retain their anger cues instead of romantic hearts. Dead
   bodies collapse, stop emitting overlays, and remain still until recovered.
 - Higher fire frames contain flames in the image. They are used only while
@@ -42,6 +44,21 @@ resolve in `assessRabbitEffects` first.
   no healing effect in the current simulation, so they have no runtime trigger.
   Bubbles and sparkles are not introduced as game effects.
 
-Artwork is decoded once, color variants and animated compositions use bounded
-caches, and canvas rendering disables interpolation. All layers and imports
-are precached for offline use under the GitHub Pages project path.
+## Animation and alignment
+
+Every body tier has native eye, ear and torso landmarks. A rendering-only,
+seeded routine combines breathing, blinking, ear twitches, sniffing and grazing;
+the colony's existing hop gait also moves the paws. Integer-pixel deformations
+keep one continuous body and planted resting feet. Flames and mutation/acid
+edges have a separate animated flow. Animation never advances the simulation,
+administers a dose, or edits saved rabbits.
+
+All views share the same composition and ground pivot. Visible portraits update
+at approximately 10 fps; offscreen cards are skipped. Pause view freezes cards,
+the pen and comparison, while Before dose remains a still historical reference.
+Dead rabbits have a fixed collapsed pose and stop emitting live effects.
+
+Artwork and connected overlay pieces are decoded once. Surface variants are
+limited to 48 cached canvases and native animation frames to 128. Canvas
+rendering disables interpolation. All layers and imports are precached for
+offline use under the GitHub Pages project path.

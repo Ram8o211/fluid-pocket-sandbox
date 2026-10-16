@@ -1,4 +1,5 @@
 import { RABBIT_EFFECT_FILES, rabbitEffectKey } from './RabbitAppearance.mjs';
+import { rabbitRig, rabbitTorsoWeight, shadeRabbitSurface } from './RabbitArtGeometry.mjs';
 
 // Keep the source pack's native pixels; each decoded sprite is shared by the
 // cards, comparison view and colony. Node tests retain the procedural fallback.
@@ -13,7 +14,7 @@ const files = {
 };
 const images = new Map();
 const tinted = new Map();
-const fireDecals = new Map();
+const pieces = new Map();
 let loading = null, revision = 0;
 export const rabbitArtworkVersion = () => revision;
 
@@ -39,20 +40,37 @@ export function rabbitCoat(rabbit) {
   return ['moon', 'clover', 'hazel', 'pepper'][(seed >>> 0) % 4];
 }
 
-// Isolate the supplied fire pixels for simultaneous body effects. This is a
-// four-entry texture cache, not a particle system or a second rabbit silhouette.
-function fireDecal(tier) {
-  if (fireDecals.has(tier)) return fireDecals.get(tier);
-  const image = rabbitArtwork(rabbitEffectKey('fire', tier));
-  if (!image) return null;
-  const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 192;
-  const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
-  const pixels = ctx.getImageData(0, 0, 256, 192);
-  for (let i = 0; i < pixels.data.length; i += 4) {
-    const [r, g, b] = pixels.data.subarray(i, i + 3);
-    if (!(r > 155 && g > 35 && r > b * 1.8 && g > b * 1.2 && g < r * .95)) pixels.data[i + 3] = 0;
+// Isolate connected transparent-art pieces once. Each wisp/heart has its own
+// pixels and home position, so it can rise/curl/fade without moving a whole sheet.
+export function rabbitEffectPieces(key, fireOnly=false) {
+  const cacheKey=`${key}:${fireOnly}`;
+  if(pieces.has(cacheKey))return pieces.get(cacheKey);
+  const image=rabbitArtwork(key);if(!image)return [];
+  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=192;
+  const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+  const pixels=ctx.getImageData(0,0,256,192),data=pixels.data;
+  const mask=new Uint8Array(256*192),rig=rabbitRig(key);
+  for(let y=0;y<192;y++)for(let x=0;x<256;x++) {
+    const p=y*256+x,i=p*4,r=data[i],g=data[i+1],b=data[i+2];
+    const face=x>rig.eyeX-38&&y<rig.eyeY+36;
+    mask[p]=data[i+3]>32&&(!fireOnly||(!face&&rabbitTorsoWeight(x,y,rig)<.01&&y<166&&r>155&&g>35&&r>b*1.8&&g>b*1.2&&g<r*.95))?1:0;
   }
-  ctx.putImageData(pixels, 0, 0); fireDecals.set(tier, canvas); return canvas;
+  const result=[];
+  for(let start=0;start<mask.length;start++)if(mask[start]) {
+    const queue=[start],members=[];mask[start]=0;let left=255,top=191,right=0,bottom=0;
+    while(queue.length) {
+      const p=queue.pop(),x=p%256,y=Math.floor(p/256);members.push(p);
+      left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+      for(const q of [x>0?p-1:-1,x<255?p+1:-1,y>0?p-256:-1,y<191?p+256:-1])if(q>=0&&mask[q]){mask[q]=0;queue.push(q);}
+    }
+    if(members.length<4)continue;
+    const part=document.createElement('canvas');part.width=right-left+1;part.height=bottom-top+1;
+    const pc=part.getContext('2d'),partPixels=pc.createImageData(part.width,part.height);
+    for(const p of members){const to=((Math.floor(p/256)-top)*part.width+p%256-left)*4;for(let k=0;k<4;k++)partPixels.data[to+k]=data[p*4+k];}
+    pc.putImageData(partPixels,0,0);result.push({image:part,x:left,y:top,width:part.width,height:part.height});
+  }
+  result.sort((a,b)=>b.width*b.height-a.width*a.height);
+  pieces.set(cacheKey,result);return result;
 }
 
 // Tint an alpha silhouette once per exposure stage, never the background. The
@@ -65,28 +83,21 @@ export function rabbitSprite(rabbit, poison, frost, death, charred, appearance =
   const secondary = appearance?.secondary || [];
   if (!charred && steps.every(value => !value) && !secondary.length) return base;
   const layers = secondary.map(effect => `${effect}:${appearance.tiers[effect]}`).join(',');
-  const key = `${revision}:${coat}:${steps.join(':')}:${charred}:${layers}:${appearance?.burning}`;
+  const key = `${revision}:${coat}:${steps.join(':')}:${charred}:${layers}:${appearance?.burning}:${secondary.length?Number(rabbit.mutation?.seed)||1:0}`;
   if (tinted.has(key)) return tinted.get(key);
   const canvas = document.createElement('canvas'); canvas.width = base.width; canvas.height = base.height;
   const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.drawImage(base, 0, 0);
   ctx.globalCompositeOperation = 'source-atop';
-  // Lay actual supplied muscle/mutation/corrosion/burn texture into the body
-  // core only. The primary silhouette and head stay legible; no duplicate eyes,
-  // ears or limbs are pasted over them by another whole-animal frame.
-  for (const effect of [...secondary].reverse()) {
-    const tier = effect === 'fire' && !appearance.burning ? 1 : appearance.tiers[effect];
-    const layer = rabbitArtwork(rabbitEffectKey(effect, tier));
-    if (layer) { ctx.globalAlpha = .6 + appearance.tiers[effect] * .08; ctx.drawImage(layer, 36, 102, 136, 78, 36, 102, 136, 78); }
+  if(secondary.length) {
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+    pixels.data.set(shadeRabbitSurface(pixels.data,canvas.width,canvas.height,appearance,Number(rabbit.mutation?.seed)||1));
+    ctx.putImageData(pixels,0,0);
   }
   const colors = ['#94b46e', '#a6dce9', '#746485', '#29242f'];
   for (let i = 0; i < steps.length; i++) if (steps[i]) {
     ctx.globalAlpha = steps[i] / 12 * (i === 3 ? .8 : .5); ctx.fillStyle = colors[i]; ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   if (charred) { ctx.globalAlpha = .88; ctx.fillStyle = '#29242f'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
-  if (appearance?.burning && secondary.includes('fire') && appearance.tiers.fire >= 2) {
-    const fire = fireDecal(appearance.tiers.fire);
-    if (fire) { ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.drawImage(fire, 0, 0); }
-  }
-  if (tinted.size >= 96) tinted.delete(tinted.keys().next().value);
+  if (tinted.size >= 48) tinted.delete(tinted.keys().next().value);
   tinted.set(key, canvas); return canvas;
 }

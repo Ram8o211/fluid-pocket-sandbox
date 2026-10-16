@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { generateWorld, availableIngredients } from '../src/game/world.mjs';
 import { newShop, restock } from '../src/game/economy.mjs';
 import { BrewingSession } from '../src/game/brewing.mjs';
-import { cullRabbit, moveRabbit, recoverRabbitIngredients, rabbitRemains, assessRabbitEffects } from '../src/game/rabbits.mjs';
+import { cullRabbit, moveRabbit, recoverRabbitIngredients, rabbitRemains, assessRabbitEffects, createRabbitColony } from '../src/game/rabbits.mjs';
 import { rabbitMotion, rabbitColonyPoses } from '../src/game/RabbitMotion.mjs';
 import { drawRabbit, RabbitColonyRenderer } from '../src/game/RabbitRenderer.mjs';
 import { encodeSave, decodeSave } from '../src/game/persistence.mjs';
@@ -63,7 +63,9 @@ test('a body stays in its cage until recovered and can never be moved by a cage 
 });
 
 test('each rabbit makes bounded hops with landings, sniffing and grazing instead of drifting in a grid', () => {
-  const { state, rabbit } = setup();rabbit.bornAt=0;
+  // Waypoints depend on the birth-time mutation seed. Keep coverage independent
+  // of the runner's clock while retaining all distance and activity assertions.
+  const state={experiments:createRabbitColony(1000)},rabbit=state.experiments.rabbits[0];rabbit.bornAt=0;
   const activities=new Set(),positions=new Set();let before=null;
   for(let time=0;time<60000;time+=50){
     const pose=rabbitMotion(rabbit,time);

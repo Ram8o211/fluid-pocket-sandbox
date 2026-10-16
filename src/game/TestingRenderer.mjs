@@ -44,7 +44,7 @@ export class TestingRenderer {
   replay() { this.startedAt = null; this.paused = false; this.resume = false; this.dirty = true; }
   togglePause() {
     this.paused = !this.paused;
-    if (this.paused) this.frozenAt = this.lastTime; else this.resume = true;
+    if (this.paused) { this.frozenAt = this.lastTime; this.pausedNow=Date.now(); } else this.resume = true;
     this.dirty = true; return this.paused;
   }
   render(subject, report, time, before = false) {
