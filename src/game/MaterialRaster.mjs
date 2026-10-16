@@ -128,14 +128,16 @@ function solidFootprint(diameter) {
   for (let py = 0; py < diameter; py++) {
     const dy = py - center, remaining = limit - (dy + .5) * (dy + .5);
     if (remaining < 0) continue;
-    let left = -1, right = -1;
+    // Negative offsets are valid disk pixels; do not use -1 as the
+    // uninitialized sentinel (it clips the left edge of even-sized grains).
+    let left = null, right = 0;
     for (let px = 0; px < diameter; px++) {
       const dx = px - center + .5;
       if (dx * dx > remaining) continue;
-      if (left < 0) left = px - center;
+      if (left === null) left = px - center;
       right = px - center + 1;
     }
-    if (left >= 0) rows.push({ dy, left, right });
+    if (left !== null) rows.push({ dy, left, right });
   }
   // Oversized solids are rare. Do not allow unbounded resolution-dependent
   // footprint caching as the user changes graphics quality or device DPR.
