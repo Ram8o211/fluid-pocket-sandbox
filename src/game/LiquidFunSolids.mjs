@@ -57,7 +57,7 @@ export class LiquidFunSolids {
       }
       x /= mass; y /= mass; vx /= mass; vy /= mass;
       // Quantities can shrink without losing an index when a vial is sampled.
-      const signature = indices.map(i => `${i}:${effectiveParticleRadius(ps, i, true).toFixed(5)}:${ps.density[i].toFixed(4)}`).join('|');
+      const signature = indices.map(i => `${i}:${(ps.frozenRadius?.[i] || effectiveParticleRadius(ps, i, true)).toFixed(5)}:${ps.density[i].toFixed(4)}`).join('|');
       let record = this.bodies.get(key);
       if (record?.signature !== signature) {
         if (record) this.remove(record);
@@ -72,7 +72,7 @@ export class LiquidFunSolids {
           offsets.push({ x: ox, y: oy });
           const shape = new this.r.b2CircleShape();
           shape.position = new this.r.b2Vec2(ox, oy);
-          shape.radius = effectiveParticleRadius(ps, i, true);
+          shape.radius = ps.frozenRadius?.[i] || effectiveParticleRadius(ps, i, true);
           const fixture = new this.r.b2FixtureDef();
           fixture.shape = shape; fixture.density = Math.max(.04, ps.density[i]);
           fixture.friction = .6; fixture.restitution = 0;
