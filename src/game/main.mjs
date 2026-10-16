@@ -673,7 +673,7 @@ function bindUI() {
     pointer = { id: event.pointerId, point, time: performance.now(),
       startX: event.clientX, startY: event.clientY, moved: false, pouring: false, streaming: tool === 'pour' };
     if (tool === 'pour') { stopPour(); renderer.spoon = null; return; }
-    if (tool === 'pestle') { brew.crush(point); renderer.tool = tool; renderer.spoon = point; }
+    if (tool === 'pestle') { brew.movePestle(point); renderer.tool = tool; renderer.spoon = point; }
     else if (insideCauldron(point.x, point.y)) {
       stopPour();
       holdTimer = setTimeout(() => {
@@ -695,10 +695,12 @@ function bindUI() {
     // Once a hold starts it remains a pouring gesture. Track the finger, pause
     // outside the vessel, and resume on re-entry without accidentally stirring.
     if (pointer.pouring || pointer.streaming) { pointer.point = point; return; }
-    if (!pointer.moved && distance < 10 && tool !== 'pestle') return;
+    // Begin stirring with a small movement, without requiring a long drag.
+    // Touch gets a little more tap tolerance to preserve tap-to-pour.
+    if (!pointer.moved && distance < (event.pointerType === 'touch' ? 5 : 3) && tool !== 'pestle') return;
     stopPour();
-    const dt = Math.max(.012, Math.min(.1, (now - pointer.time) / 1000));
-    if (tool === 'pestle') brew.crush(point, pointer.point);
+    const dt = Math.max(1 / 120, Math.min(.08, (now - pointer.time) / 1000));
+    if (tool === 'pestle') brew.movePestle(point, pointer.point, dt);
     else brew.stir(point, { x: (point.x - pointer.point.x) / dt, y: (point.y - pointer.point.y) / dt }, dt, pointer.point);
     renderer.tool = tool; renderer.spoon = point;
     pointer = { ...pointer, point, time: now, moved: true }; advanceTutorial();
