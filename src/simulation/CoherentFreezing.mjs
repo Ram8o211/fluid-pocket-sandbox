@@ -61,6 +61,9 @@ export function freezeConnectedLiquids(ps, grid, solid, planar = false) {
       // A crystallized liquid is compact ice, not crushed/granular ingredient.
       ps.setPhase(i, Phase.SOLID);
       ps.solidSubdivision[i] = 0;
+      // Preserve the water footprint in the rigid collider; expanding every
+      // fixture at solidification would squeeze the block against the walls.
+      ps.frozenRadius[i] = ps.nativeLiquidRadius || .039 * Math.sqrt(Math.max(.0001, ps.mixtureAmount[i]) / .25);
       ps.solidBodyId[i] = id;
       ps.solidLocalX[i] = ps.x[i] - cx;
       ps.solidLocalY[i] = ps.y[i] - cy;
