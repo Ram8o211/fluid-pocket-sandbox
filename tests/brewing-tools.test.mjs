@@ -4,6 +4,7 @@ import { BrewingSession } from '../src/game/brewing.mjs';
 import { sanitizeMaterial } from '../src/materials/MaterialDefinition.mjs';
 import { Phase } from '../src/simulation/Phase.mjs';
 import { LaboratoryRenderer } from '../src/game/LaboratoryRenderer.mjs';
+import { initializeIngredientPieces } from '../src/game/IngredientPieces.mjs';
 const make = () => new BrewingSession([{ id: 1, price: 1, material: sanitizeMaterial({ id: 1, density: 1, boilingTemperature: .6, meltingTemperature: .3, combustionTemperature: .9, volatility: 1, solidSubdivision: .9, crystallinity: 1, reactionPotential: 0, reactionHeat: 0 }) }]);
 const add = (b, x, y, phase=Phase.LIQUID, temperature=.4) => b.engine.ps.add({x,y,z:0,mass:.25,temperature}, b.engine.materials.get(1), phase);
 
@@ -13,7 +14,7 @@ test('spoon touches only nearby liquid and pestle crushes only touched solid, pr
   ps.solidSubdivision[3]=ps.solidSubdivision[4]=0;
   b.engine.grid.rebuild(ps,b.engine.env.box);
   b.engine.solid.initializeParticle(ps,3,true,b.engine.grid);b.engine.solid.initializeParticle(ps,4,true,b.engine.grid);
-  const mass=ps.totalMass();assert.equal(b.stir({x:0,y:0},{x:4,y:2}),1);
+  const mass=ps.totalMass();assert.ok(b.stir({x:0,y:0},{x:4,y:2}) >= 1);
   assert.ok(ps.vx[0]>0);assert.equal(ps.vx[1],0);assert.equal(ps.vx[2],0);
   assert.equal(b.crush({x:-.5,y:0}),1);assert.equal(ps.solidBodyId[3],0);assert.equal(ps.solidSubdivision[3],1);assert.equal(ps.solidSubdivision[4],0);assert.equal(ps.totalMass(),mass);
   const restored=make();restored.restore(b.snapshot());assert.equal(restored.engine.ps.solidSubdivision[3],1);assert.equal(restored.engine.ps.solidBodyId[3],0);assert.ok(restored.engine.ps.solidBodyId[4]>0);
@@ -26,12 +27,63 @@ test('wider spoon catches nearby liquid, vapour and powder without pulling dista
   const gas=add(b,0,.1,Phase.GAS),frozen=add(b,0,-.1,Phase.SOLID);
   ps.solidSubdivision[frozen]=0;
   const mass=ps.totalMass();
-  assert.equal(b.stir({x:0,y:0},{x:4,y:0}),6,
-    'one stroke should affect all five nearby grains and the local vapour');
+  assert.equal(b.stir({x:0,y:0},{x:4,y:0}),7,
+    'one stroke should affect all five nearby grains, the local vapour and ice');
   for(const i of indices.slice(0,5))assert.ok(ps.vx[i]>.05,`grain ${i} was missed by stirring`);
   assert.equal(ps.vx[indices[5]],0,'distant liquid must remain unaffected');
   assert.ok(ps.vx[gas]>.05,'vapour must follow the same local spoon stroke');
-  assert.equal(ps.vx[frozen],0,'coherent frozen blocks cannot be stirred');
+  assert.ok(ps.vx[frozen]>.05,'frozen liquid must follow the spoon without breaking apart');
+  assert.equal(ps.solidSubdivision[frozen],0,'stirring must not crush ice');
+  assert.equal(ps.totalMass(),mass);
+});
+
+test('spoon contact moves every parcel of a coherent frozen liquid block without changing its silhouette', () => {
+  const b=make(),e=b.engine,ps=e.ps;
+  e.gravity={x:0,y:0,z:0};e.env.ambientThermalExchange=0;
+  for(let i=0;i<12;i++) {
+    const p=add(b,-1+i*.1,0,Phase.SOLID,.15);
+    ps.solidSubdivision[p]=0;ps.frozenRadius[p]=.04;
+  }
+  const other=add(b,1.5,0,Phase.SOLID,.15);ps.solidSubdivision[other]=0;
+  e.grid.rebuild(ps,e.env.box);
+  for(let i=0;i<ps.count;i++)e.solid.initializeParticle(ps,i,true,e.grid);
+  const id=ps.solidBodyId[0],width=ps.x[11]-ps.x[0],mass=ps.totalMass();
+  assert.ok(id>0);
+  for(let i=1;i<12;i++)assert.equal(ps.solidBodyId[i],id);
+  assert.notEqual(ps.solidBodyId[other],id);
+  const contacts=b.stir({x:-1,y:0},{x:4,y:0});
+  assert.ok(contacts>0&&contacts<12,'only a local part of the block is touched');
+  for(let i=0;i<12;i++) {
+    assert.ok(ps.vx[i]>.05,'every parcel receives the same body impulse');
+    assert.equal(ps.vx[i],ps.vx[0]);
+    assert.equal(ps.solidSubdivision[i],0);
+    assert.equal(ps.phase[i],Phase.SOLID);
+  }
+  assert.equal(ps.vx[other],0);
+  e.step(1/40);
+  assert.ok(Math.abs((ps.x[11]-ps.x[0])-width)<.03,'rigid body remains cohesive after a physics step');
+  assert.equal(ps.totalMass(),mass);
+});
+
+test('intact ingredient pieces can be stirred and pushed by the pestle without automatic crushing', () => {
+  const b=make(),ps=b.engine.ps;
+  const piece=[add(b,-.6,0,Phase.SOLID),add(b,-.52,0,Phase.SOLID),add(b,-.44,0,Phase.SOLID)];
+  const separate=add(b,1.5,0,Phase.SOLID);
+  for(let i=0;i<ps.count;i++)ps.solidSubdivision[i]=0;
+  initializeIngredientPieces(ps,b.engine.solid,[...piece,separate]);
+  const id=ps.solidBodyId[piece[0]],mass=ps.totalMass();
+  assert.ok(id>0);
+  assert.ok(piece.every(i=>ps.solidBodyId[i]===id&&ps.solidArtSize[i]>0));
+  assert.notEqual(ps.solidBodyId[separate],id);
+  b.stir({x:-.6,y:0},{x:4,y:0});
+  assert.ok(piece.every(i=>ps.vx[i]>.05),'all artwork parcels move together');
+  for(const i of piece)ps.vx[i]=ps.vy[i]=0;
+  const contact=b.movePestle({x:-.86,y:0});
+  assert.equal(contact.crushed,0,'the pestle should shove beside its crushing footprint');
+  assert.ok(contact.displaced>0);
+  assert.ok(piece.every(i=>ps.vx[i]>.05),'untouched rigid parcels share the pestle push');
+  assert.ok(piece.every(i=>ps.solidSubdivision[i]===0&&ps.solidArtSize[i]>0));
+  assert.equal(ps.vx[separate],0);
   assert.equal(ps.totalMass(),mass);
 });
 
