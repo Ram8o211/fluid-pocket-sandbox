@@ -88,7 +88,7 @@ try {
         check(pixel(touching, x, 0, resolution)[3] >= 220, 'GPU liquid/solid contact has a visible empty seam');
     }
     // Every phase fades continuously through the exact discrete handoff.
-    ps.count = 0; ps.nativeLiquidRadius = 0;
+    ps.count = 0; ps.nativeLiquidRadius = .039 * Math.sqrt(.5 / .25);
     ps.add({ x: 0, y: 0, z: 0, mass: .5 }, material, Phase.LIQUID);
     for (const [from, to, temperature] of [[Phase.LIQUID, Phase.GAS, 1], [Phase.GAS, Phase.LIQUID, .5],
       [Phase.LIQUID, Phase.SOLID, .05], [Phase.SOLID, Phase.LIQUID, .5]]) {
@@ -107,7 +107,14 @@ try {
         }
         previous = current; final = current;
       }
-      ps.setPhase(0, to); gpu.render(ps, t, color, scratch, [], 0);
+      // The real connected-freeze handoff records the original native water
+      // footprint before switching phase. Simulate that atomic metadata handoff
+      // here too; otherwise this synthetic setPhase() creates an artificial
+      // grain that is never produced by the actual brewing pipeline.
+      if (from === Phase.LIQUID && to === Phase.SOLID) ps.frozenRadius[0] = ps.nativeLiquidRadius;
+      ps.setPhase(0, to);
+      if (from === Phase.SOLID && to === Phase.LIQUID) ps.frozenRadius[0] = 0;
+      gpu.render(ps, t, color, scratch, [], 0);
       const handoff = pixels();
       check(handoff.every((v, n) => Math.abs(v - final[n]) <= 1), 'phase handoff left an opacity or texture pop');
     }
