@@ -1,4 +1,4 @@
-const CACHE = 'alchemist-shop-rabbit-animation-47';
+const CACHE = 'alchemist-shop-rabbit-animation-48';
 const CORE = [
   './',
   './index.html',
@@ -53,6 +53,7 @@ const CORE = [
   './src/rendering/PlanarRenderer.mjs',
   './src/simulation/BuoyancySolver.mjs',
   './src/simulation/CombustionSolver.mjs',
+  './src/simulation/CoherentFreezing.mjs',
   './src/simulation/DensityStratification.mjs',
   './src/simulation/ElectricalSolver.mjs',
   './src/simulation/FluidSolver.mjs',
