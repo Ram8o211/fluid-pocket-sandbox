@@ -62,3 +62,5 @@ Artwork and connected overlay pieces are decoded once. Surface variants are
 limited to 48 cached canvases and native animation frames to 128. Canvas
 rendering disables interpolation. All layers and imports are precached for
 offline use under the GitHub Pages project path.
+Precaching reloads module files from the network, and offline reads use only the
+current release cache so an upgrade cannot combine old and new dependencies.
