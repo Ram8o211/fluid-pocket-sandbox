@@ -5,7 +5,7 @@ import { writeFile } from 'node:fs/promises';
  * rabbits into the shop or change the real colony used by the acceptance run. */
 export async function verifyRabbitEffectArtwork(page) {
   const result = await page.evaluate(async () => {
-    const { rabbitArtwork, loadRabbitArtwork } = await import('./src/game/RabbitAssets.mjs');
+    const { rabbitArtwork, rabbitSprite, loadRabbitArtwork } = await import('./src/game/RabbitAssets.mjs');
     const { RABBIT_EFFECT_FILES, rabbitAppearance } = await import('./src/game/RabbitAppearance.mjs');
     const { createRabbitColony, RABBIT_THRESHOLDS } = await import('./src/game/rabbits.mjs');
     const { drawRabbit } = await import('./src/game/RabbitRenderer.mjs');
@@ -70,7 +70,41 @@ export async function verifyRabbitEffectArtwork(page) {
     const fireExtinguished = draw(active, 4999).toDataURL() !== draw(active, 5000).toDataURL();
     const dead = structuredClone(mixed); dead.stats.alive = false; dead.deathAppearance = 'charred';
     const deadStill = draw(dead, 1000, 0).toDataURL() === draw(dead, 100000, 100000).toDataURL();
-    return { decoded, stages, composed, secondaryVisible, mirrored, fireExtinguished, deadStill,
+    // Compare the exact final transformed stage with its deceased counterpart.
+    // Death may mute fur and close the eyes, but never flatten the anatomy.
+    const sourcePixels = sprite => {
+      const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 192;
+      const context = canvas.getContext('2d'); context.drawImage(sprite, 0, 0);
+      return context.getImageData(0, 0, 256, 192).data;
+    };
+    const bodyBounds = rabbit => {
+      const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 280;
+      drawRabbit(canvas.getContext('2d'), rabbit, 160, 250, 96, 0, { reference: true, now: 1000 });
+      const rgba = canvas.getContext('2d').getImageData(0, 0, 320, 280).data;
+      let minX = 320, maxX = 0, minY = 280, maxY = 0;
+      for (let y = 0; y < 242; y++) for (let x = 0; x < 320; x++) {
+        if (!rgba[(y * 320 + x) * 4 + 3]) continue;
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      }
+      return { width: maxX - minX + 1, height: maxY - minY + 1 };
+    };
+    const corpseShapes = ['strength', 'transformation', 'acidity', 'fire'].map(effect => {
+      const live = create(); live.exposure[effect] = RABBIT_THRESHOLDS[effect] * .875;
+      live.activeFireUntil = 0;
+      const deceased = structuredClone(live);
+      deceased.stats.alive = false;
+      deceased.deathAppearance = effect === 'fire' ? 'charred' : 'collapsed';
+      const aliveArt = sourcePixels(rabbitSprite(live, 0, 0, 0, false, rabbitAppearance(live, 1000)));
+      const deadArt = sourcePixels(rabbitSprite(deceased, 0, 0, 0, effect === 'fire', rabbitAppearance(deceased, 1000)));
+      let alphaErrors = 0, affectedPixels = 0;
+      for (let i = 0; i < aliveArt.length; i += 4) {
+        if (aliveArt[i + 3] !== deadArt[i + 3]) alphaErrors++;
+        if (aliveArt[i + 3] && (aliveArt[i] !== deadArt[i] || aliveArt[i + 1] !== deadArt[i + 1] || aliveArt[i + 2] !== deadArt[i + 2])) affectedPixels++;
+      }
+      return { effect, alphaErrors, affectedPixels, live: bodyBounds(live), dead: bodyBounds(deceased) };
+    });
+    return { decoded, stages, composed, secondaryVisible, mirrored, fireExtinguished, deadStill, corpseShapes,
       unchanged: localStorage.getItem('alchemists-shop-sandbox-save') === original,
       body: rabbitAppearance(mixed, 1000).body,
       tiers: tiers.toDataURL(), combinations: combinations.toDataURL(), mixed: allChannels };
@@ -82,6 +116,14 @@ export async function verifyRabbitEffectArtwork(page) {
   assert.equal(result.body, 'transformation');
   assert.equal(result.mirrored, true); assert.equal(result.fireExtinguished, true);
   assert.equal(result.deadStill, true); assert.equal(result.unchanged, true);
+  for (const shape of result.corpseShapes) {
+    assert.equal(shape.alphaErrors, 0, `${shape.effect}: death must retain its source silhouette alpha`);
+    assert.ok(shape.affectedPixels > 200, `${shape.effect}: corpse fur looks lifeless`);
+    assert.ok(shape.dead.height >= shape.live.height * .78 && shape.dead.height <= shape.live.height * 1.25,
+      `${shape.effect}: corpse must retain its transformed height`);
+    assert.ok(shape.dead.width >= shape.live.width * .78 && shape.dead.width <= shape.live.width * 1.25,
+      `${shape.effect}: corpse must retain its transformed width`);
+  }
   for (const key of ['tiers', 'combinations', 'mixed']) {
     await writeFile(`test-results/rabbit-reference-${key}.png`, Buffer.from(result[key].split(',')[1], 'base64'));
   }
