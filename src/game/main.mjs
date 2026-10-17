@@ -113,7 +113,7 @@ async function openWorld(seed, saved = null, mode = 'shop') {
     if (saved?.brew) session.restore(saved.brew);
     renderer?.dispose(); brew?.dispose();
     state = candidate; advanceComplaints(state); advanceRabbits(state); brew = session; selected = availableIngredients(world, state.equipment)[0].id; experimentReport = null;
-    selectedSubject = state.experiments.rabbits.find(r => r.stats.alive)?.id || state.experiments.rabbits[0].id; cullMode = false;
+    selectedSubject = state.experiments.rabbits.find(r => r.stats.alive)?.id || state.experiments.rabbits.find(r => !r.remainsRecovered)?.id || state.experiments.rabbits[0].id; cullMode = false;
     renderer = new LaboratoryRenderer($('labCanvas'), brew); renderer.setQuality(state.settings.graphics);
     audio.enabled = state.settings.sound;
     $('shop').insertBefore($('toast'), $('shop').querySelector('.shop-navigation'));
@@ -446,7 +446,11 @@ function rabbitCondition(rabbit) {
   if (rabbit.stats.health < 75) return 'Injured';
   return rabbit.trials ? 'Modified' : 'Untreated';
 }
-function selectedRabbit() { return rabbitById(state.experiments,selectedSubject) || state.experiments.rabbits[0]; }
+function selectableRabbits() { return state.experiments.rabbits.filter(r=>!r.remainsRecovered); }
+function selectedRabbit() {
+  const available=selectableRabbits();
+  return available.find(r=>r.id===selectedSubject) || available.find(r=>r.stats.alive) || available[0] || state.experiments.rabbits[0];
+}
 function visibleTrial(rabbit) {
   const report = currentExperimentReport(state,rabbit.id);
   if (!report || rabbit.deathAt && rabbit.deathAt > report.at) return null;
@@ -466,7 +470,7 @@ function showExperiments() {
   const available=state.pendingBottle?.volume || brew.liquidVolume;
   const living=state.experiments.rabbits.filter(r=>r.stats.alive).length,price=isSandbox()?0:state.equipment.densimeter?6:8;
   sheet('Rabbit trials',`<div class="rabbit-room-layout"><section class="rabbit-workbench" aria-label="Selected rabbit and potion trial">
-    <div id="rabbitSelector" class="subject-selector rabbit-selector" aria-label="Choose a rabbit">${state.experiments.rabbits.map(c=>`<button type="button" data-subject="${c.id}" class="${c.id===selectedSubject?'active':''} ${!c.stats.alive?'rabbit-dead':''}" aria-pressed="${c.id===selectedSubject}" aria-label="${cullMode?'Cull':'Select'} ${escape(c.name)}, ${c.age}, ${c.location}, ${escape(rabbitCondition(c))}"><span class="rabbit-card-glyph"><canvas data-rabbit-portrait="${c.id}" width="80" height="60" aria-hidden="true"></canvas></span><strong>${escape(c.name)}</strong><span>${c.age} · ${c.sex==='female'?'♀':'♂'} · ${c.location}</span><small>${escape(rabbitCondition(c))}</small></button>`).join('')}</div>
+    <div id="rabbitSelector" class="subject-selector rabbit-selector" aria-label="Choose a rabbit">${selectableRabbits().map(c=>`<button type="button" data-subject="${c.id}" class="${c.id===selectedSubject?'active':''} ${!c.stats.alive?'rabbit-dead':''}" aria-pressed="${c.id===selectedSubject}" aria-label="${cullMode?'Cull':'Select'} ${escape(c.name)}, ${c.age}, ${c.location}, ${escape(rabbitCondition(c))}"><span class="rabbit-card-glyph"><canvas data-rabbit-portrait="${c.id}" width="80" height="60" aria-hidden="true"></canvas></span><strong>${escape(c.name)}</strong><span>${c.age} · ${c.sex==='female'?'♀':'♂'} · ${c.location}</span><small>${escape(rabbitCondition(c))}</small></button>`).join('') || '<p class="quiet">No rabbits left to test. Buy an adult to continue.</p>'}</div>
     <section class="rabbit-detail-panel" aria-label="Rabbit condition and trial playback">
     <div class="rabbit-detail-heading"><h3 id="rabbitName">${escape(subject.name)}</h3><span id="rabbitCondition"></span></div>
     <p id="rabbitContext" class="quiet"></p>
@@ -525,6 +529,7 @@ function refreshRabbitTrial() {
 function updateRabbitRoom() {
   if(currentRoom!=='experiments')return;
   const rabbit=selectedRabbit(),alive=state.experiments.rabbits.filter(r=>r.stats.alive),available=state.pendingBottle?.volume||brew.liquidVolume;
+  $('sheetContent').querySelector('.rabbit-detail-panel').hidden=selectableRabbits().length===0;
   const resting=rabbit.readyAt>Date.now(),b=$('sheetContent').querySelector('[data-test]');if(b)b.disabled=available<1||!rabbit.stats.alive||resting;
   $('trialRest').textContent=!rabbit.stats.alive?'Select a living rabbit':available<1?'Potion used up':resting?`Resting · ${Math.ceil((rabbit.readyAt-Date.now())/1000)}s`:'Ready';
   $('rabbitCondition').textContent=rabbitCondition(rabbit);
@@ -759,7 +764,7 @@ function bindUI() {
       case 'buy-rabbit': {const rabbit=buyRabbit(state);selectedSubject=rabbit.id;showUntreated=false;renderAll();persist();showExperiments();notify(`${rabbit.name} has joined the pen.`);break;}
       case 'move-rabbit': {const rabbit=selectedRabbit();moveRabbit(state,rabbit.id,rabbit.location==='cage'?'pen':'cage');persist();refreshRabbitTrial();break;}
       case 'cull-rabbit': cullRabbit(state,selectedRabbit().id);showUntreated=false;persist();refreshRabbitTrial();break;
-      case 'recover-rabbit': {const recovered=recoverRabbitIngredients(state,selectedRabbit().id);renderAll();persist();refreshRabbitTrial();notify(`Recovered ${recovered.map(d=>`${d.quantity} ${d.ingredient.name}`).join(', ')}. Ready in your ingredient rack.`);break;}
+      case 'recover-rabbit': {const recovered=recoverRabbitIngredients(state,selectedRabbit().id);const available=selectableRabbits();selectedSubject=available.find(r=>r.stats.alive)?.id || available[0]?.id || selectedSubject;showUntreated=false;renderAll();persist();showExperiments();notify(`Recovered ${recovered.map(d=>`${d.quantity} ${d.ingredient.name}`).join(', ')}. Ready in your ingredient rack.`);break;}
       case 'cull-tool': cullMode=!cullMode;button.textContent=`Cull tool ${cullMode?'ON':'OFF'}`;button.classList.toggle('cull-active',cullMode);button.setAttribute('aria-pressed',String(cullMode));refreshRabbitTrial();break;
       case 'untreated': showUntreated=!showUntreated;button.textContent=showUntreated?'After dose':'Before dose';button.setAttribute('aria-pressed',String(showUntreated));$('trialViewLabel').textContent=showUntreated?'Before dose':'After dose';break;
       case 'replay-trial': testingRenderer?.replay();showUntreated=false;$('trialViewLabel').textContent='After dose';$('sheetContent').querySelector('[data-action="untreated"]').textContent='Before dose';$('sheetContent').querySelector('[data-action="untreated"]').setAttribute('aria-pressed','false');$('sheetContent').querySelector('[data-action="pause-trial"]').textContent='Pause';$('sheetContent').querySelector('[data-action="pause-trial"]').setAttribute('aria-pressed','false');break;
