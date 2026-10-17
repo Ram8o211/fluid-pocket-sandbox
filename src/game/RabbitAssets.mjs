@@ -78,12 +78,13 @@ export function rabbitEffectPieces(key, fireOnly=false) {
 export function rabbitSprite(rabbit, poison, frost, death, charred, appearance = null) {
   const coat = appearance?.bodyKey || rabbitCoat(rabbit), base = rabbitArtwork(coat);
   if (!base) return null;
+  const deceased = rabbit.stats?.alive === false;
   const cooledScorch = appearance?.body === 'fire' && !appearance.burning ? appearance.scorch : 0;
   const steps = [appearance ? 0 : poison, frost, death, cooledScorch].map(value => Math.round(value * 12));
   const secondary = appearance?.secondary || [];
-  if (!charred && steps.every(value => !value) && !secondary.length) return base;
+  if (!charred && !deceased && steps.every(value => !value) && !secondary.length) return base;
   const layers = secondary.map(effect => `${effect}:${appearance.tiers[effect]}`).join(',');
-  const key = `${revision}:${coat}:${steps.join(':')}:${charred}:${layers}:${appearance?.burning}:${secondary.length?Number(rabbit.mutation?.seed)||1:0}`;
+  const key = `${revision}:${coat}:${steps.join(':')}:${charred}:${deceased}:${layers}:${appearance?.burning}:${secondary.length?Number(rabbit.mutation?.seed)||1:0}`;
   if (tinted.has(key)) return tinted.get(key);
   const canvas = document.createElement('canvas'); canvas.width = base.width; canvas.height = base.height;
   const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.drawImage(base, 0, 0);
@@ -98,6 +99,13 @@ export function rabbitSprite(rabbit, poison, frost, death, charred, appearance =
     ctx.globalAlpha = steps[i] / 12 * (i === 3 ? .8 : .5); ctx.fillStyle = colors[i]; ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   if (charred) { ctx.globalAlpha = .88; ctx.fillStyle = '#29242f'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+  // Death is a color-only surface treatment. `source-atop` preserves the final
+  // potion-effect silhouette, fur details, tears, scars and transparency.
+  if (deceased) {
+    ctx.globalAlpha = charred ? .2 : .34;
+    ctx.fillStyle = '#686676';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   if (tinted.size >= 48) tinted.delete(tinted.keys().next().value);
   tinted.set(key, canvas); return canvas;
 }
