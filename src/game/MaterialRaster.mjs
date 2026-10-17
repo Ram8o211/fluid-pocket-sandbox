@@ -2,6 +2,7 @@ import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { isPowder } from '../simulation/PowderSolver.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
+import { isIntactIngredientParcel } from './IngredientPieces.mjs';
 
 // Each ImageData owns reusable density/colour scratch. Resizing replaces the
 // pixel buffer, allowing the old scratch to be collected with it.
@@ -160,7 +161,9 @@ export function paintMaterialParticles(ps, t, pixels, particleColor, colorScratc
     // transparent edge texels. Grains and vapour retain their own texture.
     phaseAppearance(ps, i, appearance);
     const grainWeight = appearance.solid - frozenSurfaceWeight(ps, i, appearance);
-    if (grainWeight <= 0) continue;
+    // Full uncrushed ingredients are drawn as one pixel-art silhouette on the
+    // next layer. Reserve individual grain circles for actual powder/damage.
+    if (grainWeight <= 0 || isIntactIngredientParcel(ps, i, rawSolids)) continue;
     particleColor(ps, i, colorScratch);
     const x = Math.round(t.cx + ps.x[i] * t.scale), y = Math.round(t.cy - ps.y[i] * t.scale);
     const phase = ps.phase[i], dry = isPowder(ps, i) && ps.powderContent[i] > .85;

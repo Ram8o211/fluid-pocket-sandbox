@@ -38,11 +38,17 @@ export function initializeIngredientPieces(ps, solid, indices) {
   }
 }
 
+/** The same intact-body rule drives physics artwork and both fluid backends. */
+export function isIntactIngredientParcel(ps, i, ingredients) {
+  return Boolean(ingredients?.has(ps.materialId[i]) && ps.phase[i] === Phase.SOLID &&
+    ps.frozenRadius[i] <= 0 && ps.solidSubdivision[i] < .55 &&
+    ps.powderContent[i] <= .001 && ps.mixtureProgress[i] <= .001);
+}
+
 export function intactIngredientPieces(ps, ingredients) {
   const pieces = new Map();
   for (let i = 0; i < ps.count; i++) {
-    if (ps.phase[i] !== Phase.SOLID || ps.frozenRadius[i] > 0 || ps.solidSubdivision[i] >= .55 ||
-        ps.powderContent[i] > .001 || ps.mixtureProgress[i] > .001 || !ingredients.has(ps.materialId[i])) continue;
+    if (!isIntactIngredientParcel(ps, i, ingredients)) continue;
     const key = `${ps.materialId[i]}:${ps.solidBodyId[i] || -i - 1}`;
     if (!pieces.has(key)) pieces.set(key, { ingredient: ingredients.get(ps.materialId[i]), indices: [],
       x: ps.x[i] - ps.solidArtX[i], y: ps.y[i] - ps.solidArtY[i], size: ps.solidArtSize[i] || .11 });

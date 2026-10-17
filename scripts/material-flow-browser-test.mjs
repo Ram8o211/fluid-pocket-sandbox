@@ -74,6 +74,8 @@ try {
     const { generateWorld } = await import('./src/game/world.mjs');
     const { Phase } = await import('./src/simulation/Phase.mjs');
     const { intactIngredientPieces } = await import('./src/game/IngredientPieces.mjs');
+    const { paintMaterialParticles } = await import('./src/game/MaterialRaster.mjs');
+    const { solidIngredientCanvas } = await import('./src/game/art.mjs');
     const b = new BrewingSession(generateWorld('material-visual').ingredients, { cauldron: 2 });
     const canvas = document.createElement('canvas'), renderer = new LaboratoryRenderer(canvas, b);
     const captures = {}, check = (ok, message) => { if (!ok) throw Error(message); };
@@ -95,8 +97,25 @@ try {
       b.clean();
       const ingredient = b.ingredients.find(i => i.crushable && i.appearance?.shape === 'crystal') || b.ingredients.find(i => i.crushable);
       b.pour(ingredient.id, 30, { [ingredient.id]: 50 }, { point: { x: 0, y: -.1 } });
-      b.lastPour = null; capture('raw');
+      b.lastPour = null;
       const rawIds = new Map([[ingredient.id, ingredient]]), pieces = intactIngredientPieces(ps, rawIds);
+      // Regression: both backends leave uncrushed whole solids for ONE sprite
+      // per piece, rather than painting underlying per-parcel grain dots.
+      const targetSprite = solidIngredientCanvas(ingredient), drawImage = renderer.ctx.drawImage;
+      let wholeSpriteDraws = 0;
+      renderer.ctx.drawImage = function (...args) {
+        if (args[0] === targetSprite) wholeSpriteDraws++;
+        return drawImage.apply(this, args);
+      };
+      try { capture('raw'); } finally { renderer.ctx.drawImage = drawImage; }
+      check(wholeSpriteDraws === pieces.size,
+        'intact button-poured objects must use exactly one full-size material sprite each');
+      if (renderer.fluidGPU.available)
+        check(renderer.fluidGPU.groups[2].count === 0, 'GPU must not draw whole raw material as grain circles');
+      const raster = new Uint8ClampedArray(160 * 120 * 4);
+      paintMaterialParticles(ps, { w: 160, h: 120, cx: 80, cy: 60, scale: 40 },
+        raster, renderer.materialColor, renderer.colorScratch, rawIds);
+      check(raster.every(v => v === 0), 'canvas fallback must not render intact ingredients as grains');
       const piece = [...pieces.values()].find(p => p.indices.length >= 4);
       const initialSize = piece.size, index = piece.indices[0], original = ps.solidBodyId[index];
       const touched = b.crush({ x: ps.x[index] - .1, y: ps.y[index] });

@@ -1,5 +1,6 @@
 import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { isPowder } from '../simulation/PowderSolver.mjs';
+import { isIntactIngredientParcel } from './IngredientPieces.mjs';
 import { Phase } from '../simulation/Phase.mjs';
 import { phaseAppearance } from '../simulation/PhaseSolver.mjs';
 import { LIQUID_SURFACE, liquidSurfaceRadius, vapourSurfaceRadius, frozenSurfaceWeight, frostSurfaceColor } from './MaterialRaster.mjs';
@@ -221,7 +222,9 @@ export class FluidSurfaceGPU {
       for (let phase = 0; phase < 3; phase++) {
         const weight = phase === 0 ? appearance.liquid + (cohesiveFrozen ? appearance.solid : 0) :
           phase === 1 ? appearance.gas : (cohesiveFrozen ? 0 : appearance.solid);
-        if (weight <= 0) continue;
+        // A raw, uncrushed ingredient is painted once as a complete sprite
+        // by LaboratoryRenderer, not as eight exposed physics grains.
+        if (weight <= 0 || (phase === 2 && isIntactIngredientParcel(ps, i, rawSolids))) continue;
         const group = this.groups[phase], n = group.count++ * STRIDE, data = group.data;
         data[n] = this.width / 2 + ps.x[i] * scale;
         data[n + 1] = this.height / 2 + ps.y[i] * scale;

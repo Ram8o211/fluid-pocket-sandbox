@@ -200,7 +200,7 @@ export class BrewingSession {
     if (continuous && previous?.continuous && previous.ingredientId === ingredientId && previous.crushed === crushed && this.history.elapsed - previous.time < .25) {
       previous.ml += pouredMl; previous.time = this.history.elapsed;
     } else this.portions.push({ ingredientId, ml: pouredMl, time: this.history.elapsed, crushed, continuous });
-    this.lastPour = { x: origin.x, y: origin.y, continuous, color: ingredient.material.color, form: crushed ? 'powder' : ingredient.form, until: this.engine.time + .6 };
+    this.lastPour = { x: origin.x, y: origin.y, continuous, ingredientId, color: ingredient.material.color, form: crushed ? 'powder' : ingredient.form, until: this.engine.time + .6 };
     return pouredMl;
   }
   setThermal(heat, cool = 0) {

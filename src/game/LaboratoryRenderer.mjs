@@ -6,7 +6,7 @@ import { effectiveParticleRadius } from '../simulation/FluidSolver.mjs';
 import { traceCauldron } from './cauldron.mjs';
 import { mixedMagicGlow, particleMagicAuras, paintParticleMagicLights } from './magicLight.mjs';
 import { paintMaterialParticles } from './MaterialRaster.mjs';
-import { intactIngredientPieces } from './IngredientPieces.mjs';
+import { INTACT_PIECE_PARTICLES, intactIngredientPieces } from './IngredientPieces.mjs';
 import { FluidSurfaceGPU } from './FluidSurfaceGPU.mjs';
 
 const MAGIC_GLOW_LIMIT = 160;
@@ -117,8 +117,15 @@ export class LaboratoryRenderer extends PlanarRenderer {
       const nozzleY = this.brew.lastPour.continuous ? 158 - this.brew.lastPour.y * 40 - 17 : 76;
       ctx.save(); ctx.translate(0, nozzleY - 76);
       rect(x - 8, 76, 16, 13, '#c1cfc2'); rect(x - 5, 79, 10, 9, this.brew.lastPour.color);
-      if (this.brew.lastPour.form !== 'liquid' && this.brew.lastPour.form !== 'water' && this.brew.lastPour.form) { for (let n=0;n<5;n++) rect(x - 3 + (n%3)*2, 90 + (n*5+this.frame)%14, 2, 2, this.brew.lastPour.color); }
-      else rect(x - 2, 90, 4, 14, this.brew.lastPour.color);
+      // The pouring tool and Add button use the same whole-ingredient artwork.
+      // Five falling dots made even an intact eight-parcel solid look ground.
+      const incoming = this.brew.ingredients.find(i => i.id === this.brew.lastPour.ingredientId);
+      if (incoming?.crushable && this.brew.lastPour.form !== 'powder') {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(solidIngredientCanvas(incoming), x - 8, 90, 16, 16);
+      } else if (this.brew.lastPour.form !== 'liquid' && this.brew.lastPour.form !== 'water' && this.brew.lastPour.form) {
+        for (let n=0;n<5;n++) rect(x - 3 + (n%3)*2, 90 + (n*5+this.frame)%14, 2, 2, this.brew.lastPour.color);
+      } else rect(x - 2, 90, 4, 14, this.brew.lastPour.color);
       ctx.restore();
     }
     if (this.spoon) {
@@ -254,10 +261,19 @@ export class LaboratoryRenderer extends PlanarRenderer {
       const size = piece.size * t.scale;
       const x = t.cx + piece.x * t.scale - size / 2;
       const y = t.cy - piece.y * t.scale - size / 2;
-      // Stamp only each surviving physical region from the original fixed
-      // sprite. A crushed/melted region exposes its powder/substrate in place;
-      // the untouched half keeps exactly the same texture coordinates.
+      // A full item is ONE recognisable sprite; its internal physics parcels
+      // must never show as granular texture or as a mosaic of sliced tiles.
+      // Small partial doses are also intact objects, not powder.
       const image = solidIngredientCanvas(piece.ingredient);
+      if (piece.indices.length === INTACT_PIECE_PARTICLES || piece.size <= .29) {
+        ctx.globalAlpha = 1;
+        ctx.drawImage(image, x, y, size, size);
+        continue;
+      }
+      // When the pestle breaks only part of a full-sized piece, retain the
+      // original sprite coordinates and clip the surviving local regions.
+      // A single clip/draw avoids overlapping translucent tile boundaries.
+      ctx.save(); ctx.beginPath();
       for (const i of piece.indices) {
         phaseAppearance(ps, i, appearance);
         const r = effectiveParticleRadius(ps, i, true) * t.scale * 1.35;
@@ -265,11 +281,11 @@ export class LaboratoryRenderer extends PlanarRenderer {
         const top = Math.max(y, t.cy - ps.y[i] * t.scale - r);
         const right = Math.min(x + size, t.cx + ps.x[i] * t.scale + r);
         const bottom = Math.min(y + size, t.cy - ps.y[i] * t.scale + r);
-        if (right <= left || bottom <= top) continue;
-        ctx.globalAlpha = appearance.solid;
-        ctx.drawImage(image, (left - x) / size * 16, (top - y) / size * 16,
-          (right - left) / size * 16, (bottom - top) / size * 16, left, top, right - left, bottom - top);
+        if (right > left && bottom > top) ctx.rect(left, top, right - left, bottom - top);
       }
+      ctx.clip(); ctx.globalAlpha = 1;
+      ctx.drawImage(image, x, y, size, size);
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
     this.intactIngredientCount = pieces.size;
