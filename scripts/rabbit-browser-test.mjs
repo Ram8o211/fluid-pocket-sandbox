@@ -180,6 +180,8 @@ try {
   await page.locator('[data-action="recover-rabbit"]').click();
   const recovered = await readState();
   assert.equal(rabbit(recovered,firstId).remainsRecovered,true,'one harvest clears the remains');
+  assert.equal(await page.locator(`[data-subject="${firstId}"]`).count(),0,'recovered rabbits disappear from the selector immediately');
+  assert.equal(await page.locator('[data-test]').getAttribute('data-test'),secondId,'the next available rabbit becomes selected');
   assert.equal(await page.locator('[data-action="recover-rabbit"]').isDisabled(),true,'a body cannot yield duplicate stock');
   assert.equal(recovered.experiments.records.length,beforeRecovery.experiments.records.length,'harvesting preserves trial history');
   assert.ok(recovered.world.ingredients.some(i=>i.recoverOnly&&(recovered.inventory[i.id]||0)>0),'real potion ingredients enter the rack');
@@ -370,7 +372,22 @@ try {
     await mobile.locator('[data-action="recover-rabbit"]').tap();
     const salvaged=await mobile.evaluate(()=>JSON.parse(localStorage.getItem('alchemists-shop-sandbox-save')));
     assert.equal(rabbit(salvaged,mobileId).remainsRecovered,true,'touch recovery persists');
+    assert.equal(await mobile.locator(`[data-subject="${mobileId}"]`).count(),0,'touch recovery hides the harvested rabbit');
     assert.equal(await mobile.locator('[data-action="recover-rabbit"]').isDisabled(),true,'touch cannot recover a body twice');
+    if(viewport.width===320){
+      // The final harvest empties the selector without breaking purchases or saved rabbits.
+      const remaining=salvaged.experiments.rabbits.filter(subject=>subject.stats.alive).map(subject=>subject.id);
+      for(const id of remaining){
+        await mobile.locator(`[data-subject="${id}"]`).tap();
+        await mobile.locator('[data-action="cull-rabbit"]').tap();
+        await mobile.locator('[data-action="recover-rabbit"]').tap();
+        assert.equal(await mobile.locator(`[data-subject="${id}"]`).count(),0,'harvested rabbit is no longer selectable');
+      }
+      assert.equal(await mobile.locator('[data-subject]').count(),0,'an entirely recovered colony has no cards');
+      assert.match(await mobile.locator('#rabbitSelector').innerText(),/No rabbits left to test/);
+      await mobile.locator('[data-action="buy-rabbit"]').tap();
+      assert.equal(await mobile.locator('[data-subject]').count(),1,'buying a rabbit repopulates an empty pen');
+    }
     await session.detach(); await phone.close(); page = null;
   }
   assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
