@@ -13,9 +13,12 @@ composition. The existing room, controls and trials layout are retained.
 ## Dose stages
 
 Artwork uses accumulated exposure, not the most recent potion concentration.
-Each channel uses its existing `RABBIT_THRESHOLDS` limit. T1–T4 correspond to
-the simulation's observation stages: below 25%, 25–50%, 50–75% and at least 75%
-of that limit. Exposure at or below the existing .003 visual dead zone is inert.
+Each channel uses its existing `RABBIT_THRESHOLDS` limit and the same
+`(exposure / limit)^0.36` perceptual response as the procedural renderer.
+T1–T4 divide that visual response into quarters. This makes the supplied stages
+visible for normal doses instead of requiring 25%, 50% and 75% of a lethal load
+before changing texture. Exposure at or below the existing .003 visual dead zone
+is inert. Health, observations, overdose and aggression still use actual loads.
 An 8% potion therefore does **not** directly mean a particular image tier: dose
 volume, repeated exposure, baby sensitivity and fire/frost cancellation still
 resolve in `assessRabbitEffects` first.
@@ -38,7 +41,9 @@ resolve in `assessRabbitEffects` first.
   bodies collapse, stop emitting overlays, and remain still until recovered.
 - Higher fire frames contain flames in the image. They are used only while
   the simulation's fire timer is active; extinguished rabbits retain the
-  flame-free singed frame with permanent scorch shading. Carbonized bodies
+  flame-free singed frame with permanent, tier-specific ash patches and scorch
+  shading. Burn patches spread and darken through all four stages even after
+  the flame timer expires. Carbonized bodies
   remain dark and dissolved bodies retain the existing residue rendering.
 - The pack's healing overlays are included and cached for future use. There is
   no healing effect in the current simulation, so they have no runtime trigger.

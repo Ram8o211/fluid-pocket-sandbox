@@ -1,15 +1,13 @@
 import { RABBIT_THRESHOLDS } from './rabbits.mjs';
 import { rabbitSprite, rabbitArtwork, rabbitArtworkVersion } from './RabbitAssets.mjs';
-import { rabbitAppearance } from './RabbitAppearance.mjs';
+import { rabbitAppearance, rabbitVisualResponse } from './RabbitAppearance.mjs';
 import { drawRabbitArtwork } from './RabbitArtRenderer.mjs';
 
 const clamp = value => Math.max(0, Math.min(1, Number(value) || 0));
 // A perceptual curve makes the first dilute dose legible. Exposure, damage and
 // overdose thresholds remain in the simulation; later doses still grow the art.
 export const visualResponse = value => value <= .003 ? 0 : Math.pow(clamp(value), .36);
-export function rabbitVisualResponse(load, threshold = 1) {
-  return load <= .003 ? 0 : Math.pow(clamp(load / threshold), .36);
-}
+export { rabbitVisualResponse } from './RabbitAppearance.mjs';
 const randomAt = (seed, index) => {
   let value = (seed + Math.imul(index + 1, 0x9e3779b9)) >>> 0;
   value = Math.imul(value ^ value >>> 16, 0x21f0aaad);
