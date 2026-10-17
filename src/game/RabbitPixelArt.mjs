@@ -148,10 +148,14 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
   // Corrosion and terminal collapse change integer geometry rather than scaling
   // the grid, so even dying and dissolving specimens retain crisp pixel edges.
   const erosion = Math.max(.42, 1 - Math.max(0, acid - .4) * .85);
-  const collapse = alive ? 1 : .55;
-  const y = value => Math.round(value * erosion * collapse);
-  const palette = palettes[seed % palettes.length].map(color =>
-    charred ? mixColor(color, '#29242f', .88) : mixColor(mixColor(mixColor(color, '#94b46e', poison * .5), '#a6dce9', frost * .45), '#746485', death * .45));
+  // Death does not resize the final effect silhouette. Lowered posture is a
+  // rigid tilt, while the original fur pixels and anatomical ratios survive.
+  if (!alive) ctx.rotate(.12);
+  const y = value => Math.round(value * erosion);
+  const palette = palettes[seed % palettes.length].map(color => {
+    const affected = charred ? mixColor(color, '#29242f', .88) : mixColor(mixColor(mixColor(color, '#94b46e', poison * .5), '#a6dce9', frost * .45), '#746485', death * .45);
+    return alive ? affected : mixColor(affected, '#686676', charred ? .2 : .34);
+  });
   const back = y(-14 - muscle * 3), headX = Math.round(14 + morph * (rand(1) * 8 - 2));
   const grazing = alive && options.activity === 'graze', sniffing = alive && options.activity === 'sniff';
   const headY = y(-25 - muscle * 3 + poison * 5 + (grazing ? 9 : sniffing ? 2 : 0));
@@ -163,7 +167,7 @@ function drawRabbitPixels(ctx, rabbit, x, floor, size, time = 0, options = {}) {
     if (matched) {
       // All supplied layers share the 256x192 canvas and (128,180) pivot.
       // Preserve that aspect/pivot instead of stretching each animal's bounds.
-      ctx.drawImage(sprite, artX, Math.round(artY * collapse), artWidth, Math.round(artHeight * collapse));
+      ctx.drawImage(sprite, artX, artY, artWidth, artHeight);
     } else {
       const height = Math.max(1, -y(-45 - muscle * 8) - (grazing ? 4 : sniffing ? 1 : 0));
       ctx.drawImage(sprite, Math.round((-27 - muscle * 9) * erosion), -height,
